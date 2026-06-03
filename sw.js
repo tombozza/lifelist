@@ -1,4 +1,4 @@
-const CACHE_NAME = 'life-kanban-v4';
+const CACHE_NAME = 'life-kanban-v5';
 const ASSETS = [
     './',
     './index.html',
@@ -9,7 +9,7 @@ const ASSETS = [
     './icons/icon-512.png',
 ];
 
-// Install — cache all assets
+// Install — cache all assets, take over immediately
 self.addEventListener('install', (e) => {
     e.waitUntil(
         caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
@@ -17,29 +17,24 @@ self.addEventListener('install', (e) => {
     self.skipWaiting();
 });
 
-// Activate — clean old caches
+// Activate — clean old caches, claim all clients immediately
 self.addEventListener('activate', (e) => {
     e.waitUntil(
         caches.keys().then((keys) =>
             Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-        )
+        ).then(() => self.clients.claim())
     );
-    self.clients.claim();
 });
 
-// Fetch — serve from cache, fall back to network
+// Fetch — network first, fall back to cache (so updates always come through)
 self.addEventListener('fetch', (e) => {
     e.respondWith(
-        caches.match(e.request).then((cached) => {
-            if (cached) return cached;
-            return fetch(e.request).then((response) => {
-                // Cache new requests dynamically
-                if (response.status === 200) {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
-                }
-                return response;
-            });
-        }).catch(() => caches.match('./index.html'))
+        fetch(e.request).then((response) => {
+            if (response.status === 200) {
+                const clone = response.clone();
+                caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+            }
+            return response;
+        }).catch(() => caches.match(e.request).then((cached) => cached || caches.match('./index.html')))
     );
 });
