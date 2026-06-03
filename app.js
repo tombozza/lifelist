@@ -1065,7 +1065,7 @@
 
     const SUPABASE_URL = 'https://gctcxgjvnaptywmhnmuf.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjdGN4Z2p2bmFwdHl3bWhubXVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NzE3MTMsImV4cCI6MjA5NTM0NzcxM30.psusSSNMhV62XEj03Pje1TUIc25l46YAUnZgiHeFcvY';
-    const SYNC_CODE = 'tombozza-life-kanban';
+    const SYNC_CODE = 'mpy31l1nrkp69mpy31l1nihblx';
 
     let supabaseClient = null;
     let syncChannel = null;
