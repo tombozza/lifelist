@@ -1061,6 +1061,151 @@
         render();
     }
 
+    // ---- Sync ----
+
+    const SYNC_KEY = 'life-kanban-sync';
+    let supabaseClient = null;
+    let syncChannel = null;
+    let syncPaused = false;
+
+    function loadSyncConfig() {
+        try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || null; } catch { return null; }
+    }
+
+    function saveSyncConfig(cfg) {
+        localStorage.setItem(SYNC_KEY, JSON.stringify(cfg));
+    }
+
+    function clearSyncConfig() {
+        localStorage.removeItem(SYNC_KEY);
+    }
+
+    function setSyncStatus(msg, type) {
+        const el = document.getElementById('sync-status');
+        el.textContent = msg;
+        el.className = 'sync-status ' + (type || '');
+        el.style.display = msg ? 'block' : 'none';
+    }
+
+    async function pushToCloud() {
+        if (!supabaseClient || syncPaused) return;
+        const cfg = loadSyncConfig();
+        if (!cfg) return;
+        try {
+            const payload = { tasks: state.tasks, columns: state.columns, completionLog: state.completionLog };
+            const { error } = await supabaseClient
+                .from('kanban_sync')
+                .upsert({ sync_code: cfg.syncCode, data: payload, updated_at: new Date().toISOString() });
+            if (error) console.error('Sync push error:', error.message);
+        } catch (e) { console.error('Sync push failed:', e); }
+    }
+
+    async function pullFromCloud() {
+        if (!supabaseClient) return false;
+        const cfg = loadSyncConfig();
+        if (!cfg) return false;
+        try {
+            const { data, error } = await supabaseClient
+                .from('kanban_sync')
+                .select('data, updated_at')
+                .eq('sync_code', cfg.syncCode)
+                .maybeSingle();
+            if (error) { console.error('Sync pull error:', error.message); return false; }
+            if (data && data.data) {
+                syncPaused = true;
+                if (data.data.tasks) state.tasks = data.data.tasks;
+                if (data.data.columns) state.columns = data.data.columns;
+                if (data.data.completionLog) state.completionLog = data.data.completionLog;
+                saveState();
+                render();
+                syncPaused = false;
+                return true;
+            }
+        } catch (e) { console.error('Sync pull failed:', e); }
+        return false;
+    }
+
+    function subscribeToChanges() {
+        if (!supabaseClient) return;
+        const cfg = loadSyncConfig();
+        if (!cfg) return;
+        if (syncChannel) { supabaseClient.removeChannel(syncChannel); }
+        syncChannel = supabaseClient
+            .channel('kanban-realtime')
+            .on('postgres_changes',
+                { event: '*', schema: 'public', table: 'kanban_sync', filter: `sync_code=eq.${cfg.syncCode}` },
+                () => { pullFromCloud(); }
+            )
+            .subscribe();
+    }
+
+    let pushTimer = null;
+    const originalSaveState = saveState;
+
+    saveState = function () {
+        originalSaveState();
+        if (supabaseClient && !syncPaused) {
+            clearTimeout(pushTimer);
+            pushTimer = setTimeout(pushToCloud, 500);
+        }
+    };
+
+    async function connectSync(url, key, code) {
+        try {
+            supabaseClient = window.supabase.createClient(url, key);
+            saveSyncConfig({ url, key, syncCode: code });
+            await pushToCloud();
+            await pullFromCloud();
+            subscribeToChanges();
+            setSyncStatus('Connected — syncing across devices', 'connected');
+            document.getElementById('sync-enable').style.display = 'none';
+            document.getElementById('sync-disable').style.display = '';
+            return true;
+        } catch (e) {
+            setSyncStatus('Failed to connect: ' + e.message, 'error');
+            supabaseClient = null;
+            return false;
+        }
+    }
+
+    function disconnectSync() {
+        if (syncChannel) { supabaseClient.removeChannel(syncChannel); syncChannel = null; }
+        supabaseClient = null;
+        clearSyncConfig();
+        setSyncStatus('', '');
+        document.getElementById('sync-enable').style.display = '';
+        document.getElementById('sync-disable').style.display = 'none';
+    }
+
+    // Auto-reconnect on load
+    (function autoReconnect() {
+        const cfg = loadSyncConfig();
+        if (cfg && cfg.url && cfg.key && cfg.syncCode) {
+            document.getElementById('sync-supabase-url').value = cfg.url;
+            document.getElementById('sync-supabase-key').value = cfg.key;
+            document.getElementById('sync-code').value = cfg.syncCode;
+            connectSync(cfg.url, cfg.key, cfg.syncCode);
+        }
+    })();
+
+    // Sync UI bindings
+    document.getElementById('sync-generate-code').addEventListener('click', () => {
+        document.getElementById('sync-code').value = genId() + genId();
+    });
+
+    document.getElementById('sync-enable').addEventListener('click', async () => {
+        const url = document.getElementById('sync-supabase-url').value.trim();
+        const key = document.getElementById('sync-supabase-key').value.trim();
+        const code = document.getElementById('sync-code').value.trim();
+        if (!url || !key || !code) { setSyncStatus('Fill in all fields above', 'error'); return; }
+        setSyncStatus('Connecting...', '');
+        await connectSync(url, key, code);
+    });
+
+    document.getElementById('sync-disable').addEventListener('click', () => {
+        disconnectSync();
+    });
+
     init();
 })();
 

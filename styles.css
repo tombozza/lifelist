@@ -965,6 +965,57 @@ main {
     flex: 1;
 }
 
+.form-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    padding-left: 2px;
+}
+
+.settings-divider {
+    height: 1px;
+    background: var(--border-light);
+    margin: 16px 0;
+}
+
+.settings-section-label {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.sync-status {
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 12px;
+    display: none;
+}
+
+.sync-status.connected {
+    display: block;
+    background: rgba(52, 199, 89, 0.1);
+    color: var(--complete);
+}
+
+.sync-status.error {
+    display: block;
+    background: rgba(255, 59, 48, 0.08);
+    color: var(--danger);
+}
+
+.sync-code-row {
+    display: flex;
+    gap: 8px;
+}
+
+.sync-code-row input {
+    flex: 1;
+}
+
 /* ---- Buttons ---- */
 
 .btn-primary {
