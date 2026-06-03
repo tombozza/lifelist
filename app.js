@@ -1061,54 +1061,34 @@
         render();
     }
 
-    // ---- Sync ----
+    // ---- Sync (auto-connect) ----
 
-    const SYNC_KEY = 'life-kanban-sync';
+    const SUPABASE_URL = 'https://gctcxgjvnaptywmhnmuf.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjdGN4Z2p2bmFwdHl3bWhubXVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NzE3MTMsImV4cCI6MjA5NTM0NzcxM30.psusSSNMhV62XEj03Pje1TUIc25l46YAUnZgiHeFcvY';
+    const SYNC_CODE = 'tombozza-life-kanban';
+
     let supabaseClient = null;
     let syncChannel = null;
     let syncPaused = false;
 
-    function loadSyncConfig() {
-        try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || null; } catch { return null; }
-    }
-
-    function saveSyncConfig(cfg) {
-        localStorage.setItem(SYNC_KEY, JSON.stringify(cfg));
-    }
-
-    function clearSyncConfig() {
-        localStorage.removeItem(SYNC_KEY);
-    }
-
-    function setSyncStatus(msg, type) {
-        const el = document.getElementById('sync-status');
-        el.textContent = msg;
-        el.className = 'sync-status ' + (type || '');
-        el.style.display = msg ? 'block' : 'none';
-    }
-
     async function pushToCloud() {
         if (!supabaseClient || syncPaused) return;
-        const cfg = loadSyncConfig();
-        if (!cfg) return;
         try {
             const payload = { tasks: state.tasks, columns: state.columns, completionLog: state.completionLog };
             const { error } = await supabaseClient
                 .from('kanban_sync')
-                .upsert({ sync_code: cfg.syncCode, data: payload, updated_at: new Date().toISOString() });
+                .upsert({ sync_code: SYNC_CODE, data: payload, updated_at: new Date().toISOString() });
             if (error) console.error('Sync push error:', error.message);
         } catch (e) { console.error('Sync push failed:', e); }
     }
 
     async function pullFromCloud() {
         if (!supabaseClient) return false;
-        const cfg = loadSyncConfig();
-        if (!cfg) return false;
         try {
             const { data, error } = await supabaseClient
                 .from('kanban_sync')
                 .select('data, updated_at')
-                .eq('sync_code', cfg.syncCode)
+                .eq('sync_code', SYNC_CODE)
                 .maybeSingle();
             if (error) { console.error('Sync pull error:', error.message); return false; }
             if (data && data.data) {
@@ -1126,14 +1106,11 @@
     }
 
     function subscribeToChanges() {
-        if (!supabaseClient) return;
-        const cfg = loadSyncConfig();
-        if (!cfg) return;
         if (syncChannel) { supabaseClient.removeChannel(syncChannel); }
         syncChannel = supabaseClient
             .channel('kanban-realtime')
             .on('postgres_changes',
-                { event: '*', schema: 'public', table: 'kanban_sync', filter: `sync_code=eq.${cfg.syncCode}` },
+                { event: '*', schema: 'public', table: 'kanban_sync', filter: `sync_code=eq.${SYNC_CODE}` },
                 () => { pullFromCloud(); }
             )
             .subscribe();
@@ -1150,61 +1127,17 @@
         }
     };
 
-    async function connectSync(url, key, code) {
+    // Auto-connect on load
+    (function autoConnect() {
+        if (!window.supabase) return;
         try {
-            supabaseClient = window.supabase.createClient(url, key);
-            saveSyncConfig({ url, key, syncCode: code });
-            await pushToCloud();
-            await pullFromCloud();
-            subscribeToChanges();
-            setSyncStatus('Connected — syncing across devices', 'connected');
-            document.getElementById('sync-enable').style.display = 'none';
-            document.getElementById('sync-disable').style.display = '';
-            return true;
-        } catch (e) {
-            setSyncStatus('Failed to connect: ' + e.message, 'error');
-            supabaseClient = null;
-            return false;
-        }
-    }
-
-    function disconnectSync() {
-        if (syncChannel) { supabaseClient.removeChannel(syncChannel); syncChannel = null; }
-        supabaseClient = null;
-        clearSyncConfig();
-        setSyncStatus('', '');
-        document.getElementById('sync-enable').style.display = '';
-        document.getElementById('sync-disable').style.display = 'none';
-    }
-
-    // Auto-reconnect on load
-    (function autoReconnect() {
-        const cfg = loadSyncConfig();
-        if (cfg && cfg.url && cfg.key && cfg.syncCode) {
-            document.getElementById('sync-supabase-url').value = cfg.url;
-            document.getElementById('sync-supabase-key').value = cfg.key;
-            document.getElementById('sync-code').value = cfg.syncCode;
-            connectSync(cfg.url, cfg.key, cfg.syncCode);
-        }
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            pullFromCloud().then(() => {
+                pushToCloud();
+                subscribeToChanges();
+            });
+        } catch (e) { console.error('Sync init failed:', e); }
     })();
-
-    // Sync UI bindings
-    document.getElementById('sync-generate-code').addEventListener('click', () => {
-        document.getElementById('sync-code').value = genId() + genId();
-    });
-
-    document.getElementById('sync-enable').addEventListener('click', async () => {
-        const url = document.getElementById('sync-supabase-url').value.trim();
-        const key = document.getElementById('sync-supabase-key').value.trim();
-        const code = document.getElementById('sync-code').value.trim();
-        if (!url || !key || !code) { setSyncStatus('Fill in all fields above', 'error'); return; }
-        setSyncStatus('Connecting...', '');
-        await connectSync(url, key, code);
-    });
-
-    document.getElementById('sync-disable').addEventListener('click', () => {
-        disconnectSync();
-    });
 
     init();
 })();
