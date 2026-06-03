@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#007aff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Life Kanban">
+    <title>Life Kanban</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+    <header id="app-header">
+        <div class="header-left">
+            <h1 class="logo">Life Kanban</h1>
+        </div>
+        <nav class="view-tabs">
+            <button class="tab active" data-view="today">Today</button>
+            <button class="tab" data-view="board">Board</button>
+            <button class="tab" data-view="list">List</button>
+        </nav>
+        <div class="header-right">
+            <div class="context-toggle">
+                <button class="ctx-btn active" data-context="work">Work</button>
+                <button class="ctx-btn" data-context="home">Home</button>
+            </div>
+            <button class="icon-btn" id="settings-btn" title="Settings">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <main id="app-main">
+        <!-- Today View -->
+        <section id="view-today" class="view active">
+            <div class="today-header">
+                <div class="today-date">
+                    <button class="day-nav-btn" id="day-prev" title="Previous day">&lsaquo;</button>
+                    <h2 id="today-date-text"></h2>
+                    <button class="day-nav-btn" id="day-next" title="Next day">&rsaquo;</button>
+                    <button class="btn-today" id="day-today" style="display:none;">Today</button>
+                    <span id="today-streak" class="streak-badge"></span>
+                </div>
+            </div>
+            <div class="today-columns">
+                <div class="today-col" data-col-context="work">
+                    <div class="today-col-header">
+                        <h3>Work</h3>
+                    </div>
+                    <div class="brain-dump">
+                        <input type="text" class="brain-dump-input" data-context="work" placeholder="Add a work task..." autocomplete="off">
+                    </div>
+                    <div class="today-col-overdue today-section"></div>
+                    <div class="today-col-tasks today-section">
+                        <div class="priority-group" data-priority="high"></div>
+                        <div class="priority-group" data-priority="medium"></div>
+                        <div class="priority-group" data-priority="low"></div>
+                        <div class="priority-group" data-priority="none"></div>
+                    </div>
+                    <div class="today-col-empty empty-state" style="display:none;">
+                        <p>No work tasks today.</p>
+                    </div>
+                </div>
+                <div class="today-col" data-col-context="home">
+                    <div class="today-col-header">
+                        <h3>Home</h3>
+                    </div>
+                    <div class="brain-dump">
+                        <input type="text" class="brain-dump-input" data-context="home" placeholder="Add a home task..." autocomplete="off">
+                    </div>
+                    <div class="today-col-overdue today-section"></div>
+                    <div class="today-col-tasks today-section">
+                        <div class="priority-group" data-priority="high"></div>
+                        <div class="priority-group" data-priority="medium"></div>
+                        <div class="priority-group" data-priority="low"></div>
+                        <div class="priority-group" data-priority="none"></div>
+                    </div>
+                    <div class="today-col-empty empty-state" style="display:none;">
+                        <p>No home tasks today.</p>
+                    </div>
+                </div>
+            </div>
+            <div id="upcoming-section" class="upcoming-section">
+                <div class="upcoming-header">
+                    <h3>Upcoming</h3>
+                    <span class="upcoming-hint">Next 14 days</span>
+                </div>
+                <div id="upcoming-days"></div>
+            </div>
+        </section>
+
+        <!-- Board View -->
+        <section id="view-board" class="view">
+            <div class="board-header">
+                <button class="btn-small" id="add-column-btn">+ Column</button>
+            </div>
+            <div id="board-columns" class="board-columns"></div>
+        </section>
+
+        <!-- List View -->
+        <section id="view-list" class="view">
+            <div class="list-header">
+                <div class="list-sort">
+                    <span>Sort by:</span>
+                    <button class="sort-btn active" data-sort="priority">Priority</button>
+                    <button class="sort-btn" data-sort="date">Date</button>
+                    <button class="sort-btn" data-sort="theme">Theme</button>
+                </div>
+            </div>
+            <div id="list-tasks" class="list-tasks"></div>
+        </section>
+    </main>
+
+    <!-- Task Detail Modal -->
+    <div id="task-modal" class="modal-overlay" style="display:none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">Task Details</h3>
+                <button class="icon-btn modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="task-title" placeholder="What needs doing?">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select id="task-priority">
+                            <option value="">None</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Size</label>
+                        <select id="task-timeframe">
+                            <option value="">—</option>
+                            <option value="S">S (quick)</option>
+                            <option value="M">M (30min+)</option>
+                            <option value="L">L (1hr+)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Context</label>
+                        <select id="task-context">
+                            <option value="work">Work</option>
+                            <option value="home">Home</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Column</label>
+                        <select id="task-column"></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Scheduled Date</label>
+                        <input type="date" id="task-scheduled">
+                    </div>
+                    <div class="form-group">
+                        <label>Due Date</label>
+                        <input type="date" id="task-due">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Theme</label>
+                        <input type="text" id="task-theme" placeholder="e.g. Finance, Health" list="theme-list">
+                        <datalist id="theme-list"></datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Sub-theme</label>
+                        <input type="text" id="task-subtheme" placeholder="e.g. Budget, Exercise" list="subtheme-list">
+                        <datalist id="subtheme-list"></datalist>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="task-notes" rows="3" placeholder="Any extra details..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-danger" id="task-delete">Delete</button>
+                <div class="modal-footer-right">
+                    <button class="btn-secondary" id="task-cancel">Cancel</button>
+                    <button class="btn-primary" id="task-save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Column Edit Modal -->
+    <div id="column-modal" class="modal-overlay" style="display:none;">
+        <div class="modal modal-small">
+            <div class="modal-header">
+                <h3 id="column-modal-title">Add Column</h3>
+                <button class="icon-btn modal-close" id="column-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Column Name</label>
+                    <input type="text" id="column-name" placeholder="e.g. In Progress">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-danger" id="column-delete" style="display:none;">Delete</button>
+                <div class="modal-footer-right">
+                    <button class="btn-secondary" id="column-cancel">Cancel</button>
+                    <button class="btn-primary" id="column-save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay" style="display:none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Settings</h3>
+                <button class="icon-btn modal-close" id="settings-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Theme</label>
+                    <select id="settings-theme">
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Export Data</label>
+                    <button class="btn-secondary" id="export-data">Download JSON</button>
+                </div>
+                <div class="form-group">
+                    <label>Import Data</label>
+                    <input type="file" id="import-data" accept=".json">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu (3-dot) -->
+    <div id="context-menu" class="context-menu" style="display:none;">
+        <button data-action="next-day">Move to tomorrow</button>
+        <button data-action="next-friday">Move to Friday</button>
+        <button data-action="next-monday">Move to Monday</button>
+        <button data-action="next-week">Move to next week</button>
+        <button data-action="move-to-date">Move to date...</button>
+        <div class="context-menu-divider"></div>
+        <button data-action="wont-do">Won't do</button>
+        <button data-action="edit">Edit details</button>
+    </div>
+
+    <!-- Move to Date Modal -->
+    <div id="date-picker-modal" class="modal-overlay" style="display:none;">
+        <div class="modal modal-small">
+            <div class="modal-header">
+                <h3>Move to date</h3>
+                <button class="icon-btn modal-close" id="date-picker-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Pick a date</label>
+                    <input type="date" id="move-to-date-input">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div></div>
+                <div class="modal-footer-right">
+                    <button class="btn-secondary" id="date-picker-cancel">Cancel</button>
+                    <button class="btn-primary" id="date-picker-save">Move</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
