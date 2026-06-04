@@ -1209,5 +1209,12 @@ init();
 })();
 
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+        // When a new SW takes over, reload the page to get fresh files
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            window.location.reload();
+        });
+        // Check for updates every time the page loads
+        reg.update();
+    }).catch(() => {});
 }
