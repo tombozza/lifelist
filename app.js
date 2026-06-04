@@ -180,7 +180,7 @@ function renderThemeTabs() {
     allBtn.addEventListener('click', () => { currentThemeTab = 'all'; renderLists(); });
     container.appendChild(allBtn);
 
-    state.themes.forEach(theme => {
+    [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const btn = document.createElement('button');
         btn.className = 'theme-tab' + (currentThemeTab === theme.id ? ' active' : '');
         btn.textContent = theme.name;
@@ -238,7 +238,7 @@ function renderListContent() {
             if (!grouped[key]) grouped[key] = [];
             grouped[key].push(t);
         });
-        const themeOrder = state.themes.map(th => th.id);
+        const themeOrder = [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).map(th => th.id);
         themeOrder.push('__none__');
         themeOrder.forEach(tid => {
             if (!grouped[tid] || !grouped[tid].length) return;
@@ -489,7 +489,7 @@ function renderAdminThemes(container) {
 
     const list = document.createElement('div');
     list.className = 'theme-list';
-    state.themes.forEach(theme => {
+    [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const row = document.createElement('div');
         row.className = 'theme-row';
         const swatch = document.createElement('div');
@@ -497,7 +497,7 @@ function renderAdminThemes(container) {
         swatch.style.background = theme.color;
         const info = document.createElement('div');
         info.style.flex = '1';
-        info.innerHTML = `<div class="theme-row-name">${theme.name}</div><div class="theme-row-subs">${(theme.subThemes||[]).join(', ') || 'No sub-themes'}</div>`;
+        info.innerHTML = `<div class="theme-row-name">${theme.name}</div><div class="theme-row-subs">${[...(theme.subThemes||[])].sort((a,b)=>a.localeCompare(b)).join(', ') || 'No sub-themes'}</div>`;
         const actions = document.createElement('div');
         actions.className = 'theme-row-actions';
         const editBtn = document.createElement('button');
@@ -783,7 +783,7 @@ function closeTaskModal() {
 function renderThemePicker() {
     const container = document.getElementById('theme-picker');
     container.innerHTML = '';
-    state.themes.forEach(theme => {
+    [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'theme-pick-btn' + (modalThemeId === theme.id ? ' active' : '');
@@ -833,7 +833,7 @@ function updateSubThemeSelect() {
     const theme = getTheme(modalThemeId);
     sel.innerHTML = '<option value="">None</option>';
     if (theme && theme.subThemes) {
-        theme.subThemes.forEach(s => {
+        [...theme.subThemes].sort((a,b) => a.localeCompare(b)).forEach(s => {
             const opt = document.createElement('option');
             opt.value = s; opt.textContent = s;
             sel.appendChild(opt);
