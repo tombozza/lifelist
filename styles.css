@@ -185,7 +185,11 @@ main { max-width:1400px; margin:0 auto; padding:20px; }
 .board-col { min-width:270px; max-width:310px; flex-shrink:0; background:var(--bg-col); border-radius:var(--r); display:flex; flex-direction:column; }
 .board-col-header { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 8px; }
 .board-col-name { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-2); }
-.board-col-count { font-size:12px; font-weight:600; color:var(--text-3); background:var(--bg-input); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.board-col-count { font-size:12px; font-weight:600; color:var(--text-3); background:var(--bg-input); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.board-col-header { flex-wrap:wrap; row-gap:2px; }
+.col-week-stat { font-size:11px; font-weight:500; color:var(--text-3); width:100%; padding-left:0; }
+.col-stat-up { color:var(--complete-c); }
+.col-stat-down { color:var(--danger); }
 .board-cards { padding:0 8px 8px; flex:1; min-height:60px; }
 .board-cards.drag-over { background:rgba(0,122,255,0.04); border-radius:0 0 var(--r) var(--r); }
 .board-col-add { width:calc(100% - 16px); margin:0 8px 8px; padding:8px; border:2px dashed var(--border-light); border-radius:var(--r-sm); background:none; color:var(--text-3); font-size:13px; cursor:pointer; transition:all 0.15s; }

@@ -37,7 +37,7 @@ const DEFAULT_THEMES = [
 // ============ STATE ============
 
 let state = loadState();
-let currentView = 'lists';
+let currentView = 'board';
 let currentThemeTab = 'all';
 let currentSort = 'priority';
 let currentFilters = { priority:'', size:'', status:'active', search:'' };
@@ -313,10 +313,6 @@ function createListItem(task) {
         sz.className = 'chip chip-size';
         sz.textContent = task.size.toUpperCase();
         chips.appendChild(sz);
-        const pts = document.createElement('span');
-        pts.className = 'chip chip-points';
-        pts.textContent = (SIZE_POINTS[task.size]||'?') + 'pt';
-        chips.appendChild(pts);
     }
     if (task.kanbanColumn) {
         const kb = document.createElement('span');
@@ -359,9 +355,10 @@ function createListItem(task) {
 // ---- BOARD ----
 
 function renderBoard() {
-    renderBoardStats();
+    document.getElementById('board-stats').innerHTML = '';
     const container = document.getElementById('board-columns');
     container.innerHTML = '';
+    const weekStats = getWeekStats();
 
     KANBAN_COLS.forEach(col => {
         const tasks = state.tasks.filter(t => t.kanbanColumn === col.id && t.status !== 'wont-do');
@@ -371,7 +368,17 @@ function renderBoard() {
 
         const header = document.createElement('div');
         header.className = 'board-col-header';
-        header.innerHTML = `<span class="board-col-name">${col.name}</span><span class="board-col-count">${tasks.length}</span>`;
+        if (col.id === 'complete') {
+            const arrow = weekStats.delta === null ? '' : weekStats.delta > 0 ? ` ↑${Math.abs(weekStats.delta)}%` : weekStats.delta < 0 ? ` ↓${Math.abs(weekStats.delta)}%` : '';
+            const cls = weekStats.delta === null ? '' : weekStats.delta > 0 ? 'col-stat-up' : weekStats.delta < 0 ? 'col-stat-down' : '';
+            header.innerHTML = `
+                <span class="board-col-name">${col.name}</span>
+                <span class="board-col-count">${tasks.length}</span>
+                <span class="col-week-stat ${cls}">${weekStats.count} this week${arrow}</span>
+            `;
+        } else {
+            header.innerHTML = `<span class="board-col-name">${col.name}</span><span class="board-col-count">${tasks.length}</span>`;
+        }
         colEl.appendChild(header);
 
         const cards = document.createElement('div');
@@ -449,44 +456,13 @@ function createBoardCard(task) {
     return card;
 }
 
-function renderBoardStats() {
-    const el = document.getElementById('board-stats');
+function getWeekStats() {
     const thisWeek = getWeekStart(todayStr());
     const lastWeek = getWeekStart(addDays(thisWeek, -1));
-
     const thisCompleted = state.tasks.filter(t => t.status === 'complete' && getWeekStart(t.completedDate||'') === thisWeek);
     const lastCompleted = state.tasks.filter(t => t.status === 'complete' && getWeekStart(t.completedDate||'') === lastWeek);
-
-    const thisPoints = thisCompleted.reduce((s,t) => s + (SIZE_POINTS[t.size]||0), 0);
-    const lastPoints = lastCompleted.reduce((s,t) => s + (SIZE_POINTS[t.size]||0), 0);
-
     const countDelta = lastCompleted.length ? Math.round((thisCompleted.length - lastCompleted.length) / lastCompleted.length * 100) : null;
-    const pointsDelta = lastPoints ? Math.round((thisPoints - lastPoints) / lastPoints * 100) : null;
-
-    function deltaHtml(d) {
-        if (d === null) return '<span class="stat-delta neutral">First week</span>';
-        const cls = d > 0 ? 'up' : d < 0 ? 'down' : 'neutral';
-        const arrow = d > 0 ? '↑' : d < 0 ? '↓' : '→';
-        return `<span class="stat-delta ${cls}">${arrow} ${Math.abs(d)}% vs last week</span>`;
-    }
-
-    el.innerHTML = `
-        <div class="stat-card">
-            <div class="stat-label">Completed this week</div>
-            <div class="stat-value">${thisCompleted.length}</div>
-            ${deltaHtml(countDelta)}
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Story points this week</div>
-            <div class="stat-value">${thisPoints}</div>
-            ${deltaHtml(pointsDelta)}
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">In progress</div>
-            <div class="stat-value">${state.tasks.filter(t=>t.kanbanColumn==='in-progress').length}</div>
-            <span class="stat-delta neutral">${state.tasks.filter(t=>t.kanbanColumn==='backlog').length} in backlog</span>
-        </div>
-    `;
+    return { count: thisCompleted.length, lastCount: lastCompleted.length, delta: countDelta };
 }
 
 // ---- ADMIN ----

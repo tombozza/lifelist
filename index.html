@@ -19,8 +19,8 @@
 <header id="app-header">
     <h1 class="logo">Life Kanban</h1>
     <nav class="view-tabs">
-        <button class="tab active" data-view="lists">Lists</button>
-        <button class="tab" data-view="board">Board</button>
+        <button class="tab active" data-view="board">Board</button>
+        <button class="tab" data-view="lists">Lists</button>
         <button class="tab" data-view="admin">Admin</button>
     </nav>
     <div class="header-right">
@@ -33,7 +33,7 @@
 <main id="app-main">
 
     <!-- ============ LISTS VIEW ============ -->
-    <section id="view-lists" class="view active">
+    <section id="view-lists" class="view">
         <div class="lists-toolbar">
             <div class="lists-toolbar-left">
                 <div class="search-wrap">
@@ -87,7 +87,7 @@
     </section>
 
     <!-- ============ BOARD VIEW ============ -->
-    <section id="view-board" class="view">
+    <section id="view-board" class="view active">
         <div class="board-stats" id="board-stats"></div>
         <div id="board-columns" class="board-columns"></div>
     </section>
