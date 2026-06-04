@@ -438,7 +438,7 @@ function createBoardCard(task) {
     if (task.size) {
         const sz = document.createElement('span');
         sz.className = 'chip chip-size';
-        sz.textContent = task.size.toUpperCase() + ' · ' + (SIZE_POINTS[task.size]||'?') + 'pt';
+        sz.textContent = task.size.toUpperCase();
         footer.appendChild(sz);
     }
     if (task.recurring) {
@@ -544,7 +544,7 @@ function renderAdminArchive(container) {
                 ${th ? `<span class="chip chip-theme" style="background:${th.color}">${th.name}</span>` : ''}
                 <span style="flex:1">${t.title}</span>
                 ${t.size ? `<span class="chip chip-size">${t.size.toUpperCase()}</span>` : ''}
-                ${t.size ? `<span class="chip chip-points">${SIZE_POINTS[t.size]||0}pt</span>` : ''}
+                ${t.size ? `<span class="chip chip-size">${t.size.toUpperCase()}</span>` : ''}
             `;
             taskList.appendChild(tr);
         });
