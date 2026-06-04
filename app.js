@@ -1,1148 +1,1237 @@
-/* =========================================
-   Life Kanban — App Logic
-   ========================================= */
-
+/* =============================================
+   Life Kanban — App v2
+   ============================================= */
 (function () {
-    'use strict';
-
-    const STORAGE_KEY = 'life-kanban';
-    const DEFAULT_COLUMNS = [
-        { id: 'inbox', name: 'Inbox' },
-        { id: 'todo', name: 'To Do' },
-        { id: 'in-progress', name: 'In Progress' },
-        { id: 'ongoing', name: 'Ongoing' },
-        { id: 'blocked', name: 'Blocked' },
-        { id: 'next-week', name: 'Next Week' },
-        { id: 'next-month', name: 'Next Month' },
-        { id: 'complete', name: 'Complete' },
-    ];
-
-    // ---- State ----
-
-    let state = loadState();
-    let currentView = 'today';
-    let currentContext = state.settings?.defaultContext || 'work';
-    let currentSort = 'priority';
-    let selectedDate = null;
-    let editingTaskId = null;
-    let editingColumnId = null;
-    let draggedTaskId = null;
-
-    function defaultState() {
-        return {
-            tasks: [],
-            columns: DEFAULT_COLUMNS.map(c => ({ ...c })),
-            settings: { theme: 'light', defaultContext: 'work' },
-            completionLog: {},
-        };
-    }
-
-    function loadState() {
-        try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (!parsed.columns || parsed.columns.length === 0) {
-                    parsed.columns = DEFAULT_COLUMNS.map(c => ({ ...c }));
-                }
-                DEFAULT_COLUMNS.forEach(dc => {
-                    if (!parsed.columns.find(c => c.id === dc.id)) {
-                        const completeIdx = parsed.columns.findIndex(c => c.id === 'complete');
-                        if (completeIdx >= 0) parsed.columns.splice(completeIdx, 0, { ...dc });
-                        else parsed.columns.push({ ...dc });
-                    }
-                });
-                if (!parsed.completionLog) parsed.completionLog = {};
-                if (!parsed.settings) parsed.settings = { theme: 'light', defaultContext: 'work' };
-                return parsed;
-            }
-        } catch (e) { /* fall through */ }
-        return defaultState();
-    }
-
-    function saveState() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
-
-    // ---- Helpers ----
-
-    function genId() {
-        return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    }
-
-    function toDateStr(d) {
-        return d.getFullYear() + '-' +
-            String(d.getMonth() + 1).padStart(2, '0') + '-' +
-            String(d.getDate()).padStart(2, '0');
-    }
-
-    function todayStr() {
-        return toDateStr(new Date());
-    }
-
-    function formatDate(dateStr) {
-        if (!dateStr) return '';
-        const d = new Date(dateStr + 'T00:00:00');
-        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    }
-
-    function formatDateLong(dateStr) {
-        const d = new Date(dateStr + 'T00:00:00');
-        return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    }
-
-    function addDays(dateStr, days) {
-        const d = new Date(dateStr + 'T00:00:00');
-        d.setDate(d.getDate() + days);
-        return toDateStr(d);
-    }
-
-    function nextMonday(dateStr) {
-        const d = new Date(dateStr + 'T00:00:00');
-        const day = d.getDay();
-        const daysUntilMon = day === 0 ? 1 : (8 - day);
-        d.setDate(d.getDate() + daysUntilMon);
-        return toDateStr(d);
-    }
-
-    function nextDayOfWeek(targetDay) {
-        const d = new Date(todayStr() + 'T00:00:00');
-        const current = d.getDay();
-        let diff = targetDay - current;
-        if (diff <= 0) diff += 7;
-        d.setDate(d.getDate() + diff);
-        return toDateStr(d);
-    }
-
-    function dayName(dateStr) {
-        const d = new Date(dateStr + 'T00:00:00');
-        return d.toLocaleDateString('en-GB', { weekday: 'long' });
-    }
-
-    function isOverdue(task) {
-        if (!task.scheduledDate) return false;
-        return task.scheduledDate < todayStr() && task.column !== 'complete' && task.status !== 'wont-do';
-    }
-
-    function rolloverTasks() {
-        const today = todayStr();
-        let changed = false;
-        state.tasks.forEach(task => {
-            if (task.scheduledDate && task.scheduledDate < today && task.column !== 'complete' && task.status !== 'wont-do') {
-                task.scheduledDate = today;
-                changed = true;
-            }
-        });
-        if (changed) saveState();
-    }
-
-    function getTodayCompletions() {
-        return state.completionLog[todayStr()] || 0;
-    }
-
-    function getUniqueThemes() {
-        const themes = new Set();
-        state.tasks.forEach(t => { if (t.theme) themes.add(t.theme); });
-        return [...themes].sort();
-    }
-
-    function getUniqueSubthemes() {
-        const sub = new Set();
-        state.tasks.forEach(t => { if (t.subTheme) sub.add(t.subTheme); });
-        return [...sub].sort();
-    }
-
-    function priorityOrder(p) {
-        if (p === 'high') return 0;
-        if (p === 'medium') return 1;
-        if (p === 'low') return 2;
-        return 3;
-    }
-
-    // ---- Rendering ----
-
-    function render() {
-        if (currentView === 'today') { renderToday(); renderUpcoming(); }
-        else if (currentView === 'board') renderBoard();
-        else if (currentView === 'list') renderList();
-    }
-
-    function getSelectedDate() {
-        return selectedDate || todayStr();
-    }
-
-    function renderToday() {
-        const viewing = getSelectedDate();
-        const today = todayStr();
-        const isToday = viewing === today;
-
-        document.getElementById('today-date-text').textContent = formatDateLong(viewing);
-        document.getElementById('day-today').style.display = isToday ? 'none' : '';
-
-        const count = getTodayCompletions();
-        const streakEl = document.getElementById('today-streak');
-        if (isToday && count > 0) {
-            streakEl.textContent = `${count} done today`;
-            streakEl.style.display = '';
-        } else {
-            streakEl.style.display = 'none';
-        }
-
-        document.querySelectorAll('.today-col').forEach(col => {
-            const ctx = col.dataset.colContext;
-
-            col.classList.toggle('active-mobile', ctx === currentContext);
-
-            const tasks = state.tasks.filter(t =>
-                t.context === ctx &&
-                t.scheduledDate === viewing &&
-                t.column !== 'complete' &&
-                t.status !== 'wont-do'
-            );
-
-            const overdueTasks = isToday ? state.tasks.filter(t =>
-                t.context === ctx &&
-                t.scheduledDate &&
-                t.scheduledDate < today &&
-                t.column !== 'complete' &&
-                t.status !== 'wont-do'
-            ) : [];
-
-            const overdueContainer = col.querySelector('.today-col-overdue');
-            overdueContainer.innerHTML = '';
-            if (overdueTasks.length > 0) {
-                overdueContainer.innerHTML = '<div class="overdue-label">Rolled over</div>';
-                overdueTasks.forEach(t => overdueContainer.appendChild(createTaskCard(t)));
-            }
-
-            const groups = { high: [], medium: [], low: [], none: [] };
-            tasks.forEach(t => {
-                const p = t.priority || 'none';
-                groups[p].push(t);
-            });
-
-            ['high', 'medium', 'low', 'none'].forEach(p => {
-                const container = col.querySelector(`.priority-group[data-priority="${p}"]`);
-                container.innerHTML = '';
-                if (groups[p].length > 0) {
-                    const labels = { high: 'High Priority', medium: 'Medium Priority', low: 'Low Priority', none: 'No Priority' };
-                    const label = document.createElement('div');
-                    label.className = 'priority-group-label';
-                    label.textContent = labels[p];
-                    container.appendChild(label);
-                    groups[p].forEach(t => container.appendChild(createTaskCard(t)));
-                }
-            });
-
-            const empty = col.querySelector('.today-col-empty');
-            const emptyMsg = col.querySelector('.today-col-empty p');
-            empty.style.display = (tasks.length === 0 && overdueTasks.length === 0) ? '' : 'none';
-            if (emptyMsg) emptyMsg.textContent = `No ${ctx} tasks for ${isToday ? 'today' : dayName(viewing).toLowerCase()}.`;
-        });
-    }
-
-    function renderUpcoming() {
-        const container = document.getElementById('upcoming-days');
-        container.innerHTML = '';
-        const today = getSelectedDate();
-
-        let hasAny = false;
-        for (let i = 1; i <= 14; i++) {
-            const dateStr = addDays(today, i);
-            const tasks = state.tasks.filter(t =>
-                t.scheduledDate === dateStr &&
-                t.column !== 'complete' &&
-                t.status !== 'wont-do'
-            );
-            if (tasks.length === 0) continue;
-            hasAny = true;
-
-            const dayEl = document.createElement('div');
-            dayEl.className = 'upcoming-day';
-
-            const header = document.createElement('div');
-            header.className = 'upcoming-day-header';
-            header.innerHTML = `
-                <span class="upcoming-day-name">${dayName(dateStr)}</span>
-                <span class="upcoming-day-date">${formatDate(dateStr)}</span>
-                <span class="upcoming-day-count">${tasks.length}</span>
-            `;
-            dayEl.appendChild(header);
-
-            tasks
-                .sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority))
-                .forEach(task => {
-                    const row = document.createElement('div');
-                    row.className = 'upcoming-task';
-                    row.addEventListener('click', () => openTaskModal(task.id));
-
-                    if (task.priority) {
-                        const dot = document.createElement('div');
-                        dot.className = `priority-dot ${task.priority}`;
-                        row.appendChild(dot);
-                    }
-
-                    const title = document.createElement('span');
-                    title.className = 'upcoming-task-title';
-                    title.textContent = task.title;
-                    row.appendChild(title);
-
-                    const ctxBadge = document.createElement('span');
-                    ctxBadge.className = `badge-context ${task.context}`;
-                    ctxBadge.textContent = task.context;
-                    row.appendChild(ctxBadge);
-
-                    if (task.timeframe) {
-                        const size = document.createElement('span');
-                        size.className = 'badge badge-size';
-                        size.textContent = task.timeframe;
-                        row.appendChild(size);
-                    }
-
-                    dayEl.appendChild(row);
-                });
-
-            container.appendChild(dayEl);
-        }
-
-        if (!hasAny) {
-            container.innerHTML = '<div class="upcoming-empty">No tasks scheduled for the next 2 weeks.</div>';
-        }
-    }
-
-    function createTaskCard(task) {
-        const card = document.createElement('div');
-        card.className = 'task-card';
-        if (task.column === 'complete') card.classList.add('completed');
-        if (task.status === 'wont-do') card.classList.add('wont-do');
-        card.dataset.taskId = task.id;
-
-        const checkbox = document.createElement('div');
-        checkbox.className = 'task-checkbox' + (task.column === 'complete' ? ' checked' : '');
-        checkbox.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleComplete(task.id);
-        });
-
-        const body = document.createElement('div');
-        body.className = 'task-card-body';
-
-        if (task.priority) {
-            const dot = document.createElement('div');
-            dot.className = `priority-dot ${task.priority}`;
-            body.appendChild(dot);
-        }
-
-        const title = document.createElement('span');
-        title.className = 'task-card-title';
-        title.textContent = task.title;
-        body.appendChild(title);
-
-        const badges = document.createElement('div');
-        badges.className = 'task-badges';
-
-        if (task.timeframe) {
-            const b = document.createElement('span');
-            b.className = 'badge badge-size';
-            b.textContent = task.timeframe;
-            badges.appendChild(b);
-        }
-        if (task.theme) {
-            const b = document.createElement('span');
-            b.className = 'badge badge-theme';
-            b.textContent = task.theme;
-            badges.appendChild(b);
-        }
-        if (task.dueDate) {
-            const isOverdueDate = task.dueDate < todayStr();
-            const b = document.createElement('span');
-            b.className = `badge ${isOverdueDate ? 'badge-overdue' : 'badge-due'}`;
-            b.textContent = `Due ${formatDate(task.dueDate)}`;
-            badges.appendChild(b);
-        }
-        if (isOverdue(task)) {
-            const b = document.createElement('span');
-            b.className = 'badge badge-overdue';
-            b.textContent = `from ${formatDate(task.scheduledDate)}`;
-            badges.appendChild(b);
-        }
-
-        body.appendChild(badges);
-
-        const menuBtn = document.createElement('button');
-        menuBtn.className = 'task-card-menu';
-        menuBtn.innerHTML = '⋯';
-        menuBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showContextMenu(e, task.id);
-        });
-
-        card.appendChild(checkbox);
-        card.appendChild(body);
-        card.appendChild(menuBtn);
-
-        card.addEventListener('click', () => openTaskModal(task.id));
-
-        return card;
-    }
-
-    function renderBoard() {
-        const container = document.getElementById('board-columns');
-        container.innerHTML = '';
-
-        state.columns.forEach(col => {
-            const colTasks = state.tasks.filter(t =>
-                t.column === col.id && t.context === currentContext
-            );
-
-            const colEl = document.createElement('div');
-            colEl.className = 'board-column';
-            colEl.dataset.columnId = col.id;
-
-            const header = document.createElement('div');
-            header.className = 'column-header';
-            header.innerHTML = `<h3>${col.name}</h3><span class="column-count">${colTasks.length}</span>`;
-            header.addEventListener('click', () => openColumnModal(col.id));
-
-            const cards = document.createElement('div');
-            cards.className = 'column-cards';
-            cards.dataset.columnId = col.id;
-
-            cards.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                cards.classList.add('drag-over');
-            });
-            cards.addEventListener('dragleave', () => {
-                cards.classList.remove('drag-over');
-            });
-            cards.addEventListener('drop', (e) => {
-                e.preventDefault();
-                cards.classList.remove('drag-over');
-                if (draggedTaskId) {
-                    moveTaskToColumn(draggedTaskId, col.id);
-                    draggedTaskId = null;
-                }
-            });
-
-            colTasks
-                .sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority))
-                .forEach(task => {
-                    const card = createBoardCard(task);
-                    cards.appendChild(card);
-                });
-
-            const addBtn = document.createElement('button');
-            addBtn.className = 'column-add-btn';
-            addBtn.textContent = '+ Add task';
-            addBtn.addEventListener('click', () => openTaskModal(null, col.id));
-
-            colEl.appendChild(header);
-            colEl.appendChild(cards);
-            colEl.appendChild(addBtn);
-            container.appendChild(colEl);
-        });
-    }
-
-    function createBoardCard(task) {
-        const card = document.createElement('div');
-        card.className = 'board-card';
-        if (task.column === 'complete') card.classList.add('completed');
-        card.draggable = true;
-        card.dataset.taskId = task.id;
-
-        card.addEventListener('dragstart', (e) => {
-            draggedTaskId = task.id;
-            card.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-        });
-        card.addEventListener('dragend', () => {
-            card.classList.remove('dragging');
-        });
-        card.addEventListener('click', () => openTaskModal(task.id));
-
-        if (task.priority) {
-            const bar = document.createElement('div');
-            bar.className = `board-card-priority ${task.priority}`;
-            card.appendChild(bar);
-        }
-
-        const title = document.createElement('div');
-        title.className = 'board-card-title';
-        title.textContent = task.title;
-        card.appendChild(title);
-
-        const meta = document.createElement('div');
-        meta.className = 'board-card-meta';
-
-        if (task.timeframe) {
-            const b = document.createElement('span');
-            b.className = 'badge badge-size';
-            b.textContent = task.timeframe;
-            meta.appendChild(b);
-        }
-        if (task.theme) {
-            const b = document.createElement('span');
-            b.className = 'badge badge-theme';
-            b.textContent = task.theme;
-            meta.appendChild(b);
-        }
-        if (task.dueDate) {
-            const b = document.createElement('span');
-            b.className = `badge ${task.dueDate < todayStr() ? 'badge-overdue' : 'badge-due'}`;
-            b.textContent = `Due ${formatDate(task.dueDate)}`;
-            meta.appendChild(b);
-        }
-
-        if (meta.children.length > 0) card.appendChild(meta);
-
-        return card;
-    }
-
-    function renderList() {
-        const container = document.getElementById('list-tasks');
-        container.innerHTML = '';
-
-        let tasks = state.tasks.filter(t => t.context === currentContext && t.status !== 'wont-do');
-
-        if (currentSort === 'priority') {
-            tasks.sort((a, b) => {
-                const comp = priorityOrder(a.priority) - priorityOrder(b.priority);
-                if (comp !== 0) return comp;
-                return (a.title || '').localeCompare(b.title || '');
-            });
-        } else if (currentSort === 'date') {
-            tasks.sort((a, b) => {
-                const da = a.dueDate || a.scheduledDate || '9999';
-                const db = b.dueDate || b.scheduledDate || '9999';
-                return da.localeCompare(db);
-            });
-        } else if (currentSort === 'theme') {
-            tasks.sort((a, b) => (a.theme || 'zzz').localeCompare(b.theme || 'zzz'));
-        }
-
-        if (tasks.length === 0) {
-            container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No tasks yet.</div>';
-            return;
-        }
-
-        tasks.forEach(task => {
-            const row = document.createElement('div');
-            row.className = 'list-task-row' + (task.column === 'complete' ? ' completed' : '');
-            row.dataset.taskId = task.id;
-
-            const checkbox = document.createElement('div');
-            checkbox.className = 'task-checkbox' + (task.column === 'complete' ? ' checked' : '');
-            checkbox.addEventListener('click', (e) => {
-                e.stopPropagation();
-                toggleComplete(task.id);
-            });
-
-            if (task.priority) {
-                const dot = document.createElement('div');
-                dot.className = `priority-dot ${task.priority}`;
-                row.appendChild(dot);
-            }
-
-            const title = document.createElement('span');
-            title.className = 'list-task-title';
-            title.textContent = task.title;
-
-            const col = document.createElement('span');
-            col.className = 'list-task-col';
-            const colObj = state.columns.find(c => c.id === task.column);
-            col.textContent = colObj ? colObj.name : '';
-
-            const date = document.createElement('span');
-            date.className = 'list-task-col';
-            date.textContent = task.dueDate ? formatDate(task.dueDate) : (task.scheduledDate ? formatDate(task.scheduledDate) : '');
-
-            row.appendChild(checkbox);
-            row.appendChild(title);
-            row.appendChild(col);
-            row.appendChild(date);
-
-            row.addEventListener('click', () => openTaskModal(task.id));
-
-            container.appendChild(row);
-        });
-    }
-
-    // ---- Actions ----
-
-    function addTask(title, overrides = {}) {
-        const task = {
-            id: genId(),
-            title: title.trim(),
-            priority: overrides.priority || '',
-            timeframe: overrides.timeframe || '',
-            theme: overrides.theme || '',
-            subTheme: overrides.subTheme || '',
-            column: overrides.column || 'inbox',
-            context: overrides.context || currentContext,
-            scheduledDate: overrides.scheduledDate || todayStr(),
-            dueDate: overrides.dueDate || '',
-            notes: overrides.notes || '',
-            status: 'active',
-            createdDate: todayStr(),
-            order: state.tasks.length,
-        };
-        state.tasks.push(task);
-        saveState();
-        render();
-        return task;
-    }
-
-    function updateTask(id, updates) {
-        const task = state.tasks.find(t => t.id === id);
-        if (!task) return;
-        Object.assign(task, updates);
-        saveState();
-        render();
-    }
-
-    function deleteTask(id) {
-        state.tasks = state.tasks.filter(t => t.id !== id);
-        saveState();
-        render();
-    }
-
-    function toggleComplete(id) {
-        const task = state.tasks.find(t => t.id === id);
-        if (!task) return;
-        if (task.column === 'complete') {
-            task.column = task._prevColumn || 'todo';
-            task.status = 'active';
-            const today = todayStr();
-            if (state.completionLog[today]) state.completionLog[today]--;
-        } else {
-            task._prevColumn = task.column;
-            task.column = 'complete';
-            task.status = 'complete';
-            const today = todayStr();
-            state.completionLog[today] = (state.completionLog[today] || 0) + 1;
-        }
-        saveState();
-        render();
-    }
-
-    function moveTaskToColumn(id, columnId) {
-        updateTask(id, { column: columnId });
-    }
-
-    function moveToNextDay(id) {
-        const task = state.tasks.find(t => t.id === id);
-        if (!task) return;
-        const base = task.scheduledDate || todayStr();
-        const tomorrow = addDays(base < todayStr() ? todayStr() : base, 1);
-        updateTask(id, { scheduledDate: tomorrow });
-    }
-
-    function moveToNextWeek(id) {
-        const task = state.tasks.find(t => t.id === id);
-        if (!task) return;
-        const base = task.scheduledDate || todayStr();
-        const monday = nextMonday(base < todayStr() ? todayStr() : base);
-        updateTask(id, { scheduledDate: monday });
-    }
-
-    function moveToDay(id, dateStr) {
-        updateTask(id, { scheduledDate: dateStr });
-    }
-
-    function markWontDo(id) {
-        updateTask(id, { status: 'wont-do', column: 'complete' });
-    }
-
-    // ---- Date Picker Modal ----
-
-    let datePickerTaskId = null;
-
-    function openDatePicker(taskId) {
-        datePickerTaskId = taskId;
-        const modal = document.getElementById('date-picker-modal');
-        const input = document.getElementById('move-to-date-input');
-        const task = state.tasks.find(t => t.id === taskId);
-        input.value = task ? (task.scheduledDate || todayStr()) : todayStr();
-        modal.style.display = 'flex';
-        input.focus();
-    }
-
-    function closeDatePicker() {
-        document.getElementById('date-picker-modal').style.display = 'none';
-        datePickerTaskId = null;
-    }
-
-    function saveDatePicker() {
-        const dateVal = document.getElementById('move-to-date-input').value;
-        if (datePickerTaskId && dateVal) {
-            moveToDay(datePickerTaskId, dateVal);
-        }
-        closeDatePicker();
-    }
-
-    // ---- Modals ----
-
-    function openTaskModal(taskId, defaultColumn) {
-        editingTaskId = taskId;
-        const modal = document.getElementById('task-modal');
-        const titleEl = document.getElementById('modal-title');
-        const deleteBtn = document.getElementById('task-delete');
-
-        const colSelect = document.getElementById('task-column');
-        colSelect.innerHTML = '';
-        state.columns.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = c.name;
-            colSelect.appendChild(opt);
-        });
-
-        const themeList = document.getElementById('theme-list');
-        themeList.innerHTML = '';
-        getUniqueThemes().forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = t;
-            themeList.appendChild(opt);
-        });
-
-        const subList = document.getElementById('subtheme-list');
-        subList.innerHTML = '';
-        getUniqueSubthemes().forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = t;
-            subList.appendChild(opt);
-        });
-
-        if (taskId) {
-            const task = state.tasks.find(t => t.id === taskId);
-            if (!task) return;
-            titleEl.textContent = 'Edit Task';
-            deleteBtn.style.display = '';
-            document.getElementById('task-title').value = task.title;
-            document.getElementById('task-priority').value = task.priority || '';
-            document.getElementById('task-timeframe').value = task.timeframe || '';
-            document.getElementById('task-context').value = task.context || 'work';
-            document.getElementById('task-column').value = task.column;
-            document.getElementById('task-scheduled').value = task.scheduledDate || '';
-            document.getElementById('task-due').value = task.dueDate || '';
-            document.getElementById('task-theme').value = task.theme || '';
-            document.getElementById('task-subtheme').value = task.subTheme || '';
-            document.getElementById('task-notes').value = task.notes || '';
-        } else {
-            titleEl.textContent = 'New Task';
-            deleteBtn.style.display = 'none';
-            document.getElementById('task-title').value = '';
-            document.getElementById('task-priority').value = '';
-            document.getElementById('task-timeframe').value = '';
-            document.getElementById('task-context').value = currentContext;
-            document.getElementById('task-column').value = defaultColumn || 'inbox';
-            document.getElementById('task-scheduled').value = getSelectedDate();
-            document.getElementById('task-due').value = '';
-            document.getElementById('task-theme').value = '';
-            document.getElementById('task-subtheme').value = '';
-            document.getElementById('task-notes').value = '';
-        }
-
-        modal.style.display = 'flex';
-        document.getElementById('task-title').focus();
-    }
-
-    function closeTaskModal() {
-        document.getElementById('task-modal').style.display = 'none';
-        editingTaskId = null;
-    }
-
-    function saveTaskModal() {
-        const title = document.getElementById('task-title').value.trim();
-        if (!title) return;
-
-        const data = {
-            title,
-            priority: document.getElementById('task-priority').value,
-            timeframe: document.getElementById('task-timeframe').value,
-            context: document.getElementById('task-context').value,
-            column: document.getElementById('task-column').value,
-            scheduledDate: document.getElementById('task-scheduled').value,
-            dueDate: document.getElementById('task-due').value,
-            theme: document.getElementById('task-theme').value.trim(),
-            subTheme: document.getElementById('task-subtheme').value.trim(),
-            notes: document.getElementById('task-notes').value.trim(),
-        };
-
-        if (editingTaskId) {
-            updateTask(editingTaskId, data);
-        } else {
-            addTask(title, data);
-        }
-        closeTaskModal();
-    }
-
-    function openColumnModal(columnId) {
-        editingColumnId = columnId;
-        const modal = document.getElementById('column-modal');
-        const titleEl = document.getElementById('column-modal-title');
-        const deleteBtn = document.getElementById('column-delete');
-        const nameInput = document.getElementById('column-name');
-
-        if (columnId) {
-            const col = state.columns.find(c => c.id === columnId);
-            if (!col) return;
-            titleEl.textContent = 'Edit Column';
-            nameInput.value = col.name;
-            deleteBtn.style.display = '';
-        } else {
-            titleEl.textContent = 'New Column';
-            nameInput.value = '';
-            deleteBtn.style.display = 'none';
-        }
-
-        modal.style.display = 'flex';
-        nameInput.focus();
-    }
-
-    function closeColumnModal() {
-        document.getElementById('column-modal').style.display = 'none';
-        editingColumnId = null;
-    }
-
-    function saveColumnModal() {
-        const name = document.getElementById('column-name').value.trim();
-        if (!name) return;
-
-        if (editingColumnId) {
-            const col = state.columns.find(c => c.id === editingColumnId);
-            if (col) col.name = name;
-        } else {
-            const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + genId().slice(0, 4);
-            state.columns.push({ id, name });
-        }
-        saveState();
-        render();
-        closeColumnModal();
-    }
-
-    function deleteColumn() {
-        if (!editingColumnId) return;
-        const tasksInCol = state.tasks.filter(t => t.column === editingColumnId);
-        if (tasksInCol.length > 0) {
-            if (!confirm(`This column has ${tasksInCol.length} task(s). They will be moved to Inbox. Continue?`)) return;
-            tasksInCol.forEach(t => t.column = 'inbox');
-        }
-        state.columns = state.columns.filter(c => c.id !== editingColumnId);
-        saveState();
-        render();
-        closeColumnModal();
-    }
-
-    // ---- Context Menu ----
-
-    let activeMenuTaskId = null;
-
-    function showContextMenu(e, taskId) {
-        activeMenuTaskId = taskId;
-        const menu = document.getElementById('context-menu');
-        menu.style.display = 'block';
-
-        const rect = e.target.getBoundingClientRect();
-        let top = rect.bottom + 4;
-        let left = rect.left;
-
-        if (left + 180 > window.innerWidth) left = window.innerWidth - 190;
-        if (top + 160 > window.innerHeight) top = rect.top - 164;
-
-        menu.style.top = top + 'px';
-        menu.style.left = left + 'px';
-    }
-
-    function hideContextMenu() {
-        document.getElementById('context-menu').style.display = 'none';
-        activeMenuTaskId = null;
-    }
-
-    // ---- Settings ----
-
-    function openSettings() {
-        const modal = document.getElementById('settings-modal');
-        document.getElementById('settings-theme').value = state.settings.theme || 'light';
-        modal.style.display = 'flex';
-    }
-
-    function closeSettings() {
-        document.getElementById('settings-modal').style.display = 'none';
-    }
-
-    function applyTheme(theme) {
-        document.documentElement.setAttribute('data-theme', theme);
-        state.settings.theme = theme;
-        saveState();
-    }
-
-    function exportData() {
-        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `life-kanban-backup-${todayStr()}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    function importData(file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const data = JSON.parse(e.target.result);
-                if (data.tasks && data.columns) {
-                    state = data;
-                    if (!state.completionLog) state.completionLog = {};
-                    if (!state.settings) state.settings = { theme: 'light', defaultContext: 'work' };
-                    saveState();
-                    applyTheme(state.settings.theme);
-                    render();
-                    closeSettings();
-                }
-            } catch (err) {
-                alert('Invalid JSON file');
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    // ---- Event Binding ----
-
-    function init() {
-        applyTheme(state.settings.theme || 'light');
-        rolloverTasks();
-
-        // View tabs
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                currentView = tab.dataset.view;
-                document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-                document.getElementById(`view-${currentView}`).classList.add('active');
-                render();
-            });
-        });
-
-        // Context toggle
-        document.querySelectorAll('.ctx-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.ctx-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentContext = btn.dataset.context;
-                render();
-            });
-        });
-
-        // Day navigation
-        document.getElementById('day-prev').addEventListener('click', () => {
-            selectedDate = addDays(getSelectedDate(), -1);
-            render();
-        });
-        document.getElementById('day-next').addEventListener('click', () => {
-            selectedDate = addDays(getSelectedDate(), 1);
-            render();
-        });
-        document.getElementById('day-today').addEventListener('click', () => {
-            selectedDate = null;
-            render();
-        });
-
-        // Brain dump (one per context column)
-        document.querySelectorAll('.brain-dump-input').forEach(input => {
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    const val = e.target.value.trim();
-                    const ctx = e.target.dataset.context || currentContext;
-                    if (val) {
-                        addTask(val, { column: 'inbox', context: ctx, scheduledDate: getSelectedDate() });
-                        e.target.value = '';
-                    }
-                }
-            });
-        });
-
-        // Task modal
-        document.getElementById('task-save').addEventListener('click', saveTaskModal);
-        document.getElementById('task-cancel').addEventListener('click', closeTaskModal);
-        document.getElementById('modal-close').addEventListener('click', closeTaskModal);
-        document.getElementById('task-delete').addEventListener('click', () => {
-            if (editingTaskId && confirm('Delete this task?')) {
-                deleteTask(editingTaskId);
-                closeTaskModal();
-            }
-        });
-        document.getElementById('task-modal').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) closeTaskModal();
-        });
-
-        // Column modal
-        document.getElementById('add-column-btn').addEventListener('click', () => openColumnModal(null));
-        document.getElementById('column-save').addEventListener('click', saveColumnModal);
-        document.getElementById('column-cancel').addEventListener('click', closeColumnModal);
-        document.getElementById('column-modal-close').addEventListener('click', closeColumnModal);
-        document.getElementById('column-delete').addEventListener('click', deleteColumn);
-        document.getElementById('column-modal').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) closeColumnModal();
-        });
-
-        // Context menu
-        document.getElementById('context-menu').addEventListener('click', (e) => {
-            const action = e.target.dataset.action;
-            if (!action || !activeMenuTaskId) return;
-            if (action === 'next-day') moveToNextDay(activeMenuTaskId);
-            else if (action === 'next-friday') moveToDay(activeMenuTaskId, nextDayOfWeek(5));
-            else if (action === 'next-monday') moveToDay(activeMenuTaskId, nextDayOfWeek(1));
-            else if (action === 'next-week') moveToNextWeek(activeMenuTaskId);
-            else if (action === 'move-to-date') openDatePicker(activeMenuTaskId);
-            else if (action === 'wont-do') markWontDo(activeMenuTaskId);
-            else if (action === 'edit') openTaskModal(activeMenuTaskId);
-            hideContextMenu();
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.context-menu') && !e.target.closest('.task-card-menu')) {
-                hideContextMenu();
-            }
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                hideContextMenu();
-                closeTaskModal();
-                closeColumnModal();
-                closeSettings();
-                closeDatePicker();
-            }
-        });
-
-        // Sort buttons
-        document.querySelectorAll('.sort-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentSort = btn.dataset.sort;
-                render();
-            });
-        });
-
-        // Settings
-        document.getElementById('settings-btn').addEventListener('click', openSettings);
-        document.getElementById('settings-close').addEventListener('click', closeSettings);
-        document.getElementById('settings-modal').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) closeSettings();
-        });
-        document.getElementById('settings-theme').addEventListener('change', (e) => {
-            applyTheme(e.target.value);
-        });
-        document.getElementById('export-data').addEventListener('click', exportData);
-        document.getElementById('import-data').addEventListener('change', (e) => {
-            if (e.target.files[0]) importData(e.target.files[0]);
-        });
-
-        // Date picker modal
-        document.getElementById('date-picker-save').addEventListener('click', saveDatePicker);
-        document.getElementById('date-picker-cancel').addEventListener('click', closeDatePicker);
-        document.getElementById('date-picker-close').addEventListener('click', closeDatePicker);
-        document.getElementById('date-picker-modal').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) closeDatePicker();
-        });
-        document.getElementById('move-to-date-input').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') saveDatePicker();
-        });
-
-        // Enter key in modals
-        document.getElementById('column-name').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') saveColumnModal();
-        });
-
-        render();
-    }
-
-    // ---- Sync (auto-connect) ----
-
-    const SUPABASE_URL = 'https://gctcxgjvnaptywmhnmuf.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjdGN4Z2p2bmFwdHl3bWhubXVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NzE3MTMsImV4cCI6MjA5NTM0NzcxM30.psusSSNMhV62XEj03Pje1TUIc25l46YAUnZgiHeFcvY';
-    const SYNC_CODE = 'mpy31l1nrkp69mpy31l1nihblx';
-
-    let supabaseClient = null;
-    let syncChannel = null;
-    let syncPaused = false;
-
-    async function pushToCloud() {
-        if (!supabaseClient || syncPaused) return;
-        try {
-            const payload = { tasks: state.tasks, columns: state.columns, completionLog: state.completionLog };
-            const { error } = await supabaseClient
-                .from('kanban_sync')
-                .upsert({ sync_code: SYNC_CODE, data: payload, updated_at: new Date().toISOString() });
-            if (error) console.error('Sync push error:', error.message);
-        } catch (e) { console.error('Sync push failed:', e); }
-    }
-
-    async function pullFromCloud() {
-        if (!supabaseClient) return false;
-        try {
-            const { data, error } = await supabaseClient
-                .from('kanban_sync')
-                .select('data, updated_at')
-                .eq('sync_code', SYNC_CODE)
-                .maybeSingle();
-            if (error) { console.error('Sync pull error:', error.message); return false; }
-            if (data && data.data) {
-                syncPaused = true;
-                if (data.data.tasks) state.tasks = data.data.tasks;
-                if (data.data.columns) state.columns = data.data.columns;
-                if (data.data.completionLog) state.completionLog = data.data.completionLog;
-                saveState();
-                render();
-                syncPaused = false;
-                return true;
-            }
-        } catch (e) { console.error('Sync pull failed:', e); }
-        return false;
-    }
-
-    function subscribeToChanges() {
-        if (syncChannel) { supabaseClient.removeChannel(syncChannel); }
-        syncChannel = supabaseClient
-            .channel('kanban-realtime')
-            .on('postgres_changes',
-                { event: '*', schema: 'public', table: 'kanban_sync', filter: `sync_code=eq.${SYNC_CODE}` },
-                () => { pullFromCloud(); }
-            )
-            .subscribe();
-    }
-
-    let pushTimer = null;
-    const originalSaveState = saveState;
-
-    saveState = function () {
-        originalSaveState();
-        if (supabaseClient && !syncPaused) {
-            clearTimeout(pushTimer);
-            pushTimer = setTimeout(pushToCloud, 500);
-        }
+'use strict';
+
+// ============ CONSTANTS ============
+
+const STORAGE_KEY = 'life-kanban-v2';
+const SUPABASE_URL = 'https://gctcxgjvnaptywmhnmuf.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjdGN4Z2p2bmFwdHl3bWhubXVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NzE3MTMsImV4cCI6MjA5NTM0NzcxM30.psusSSNMhV62XEj03Pje1TUIc25l46YAUnZgiHeFcvY';
+const SYNC_CODE = 'mpy31l1nrkp69mpy31l1nihblx';
+
+const KANBAN_COLS = [
+    { id: 'backlog',     name: 'Backlog' },
+    { id: 'next',        name: 'Next' },
+    { id: 'in-progress', name: 'In Progress' },
+    { id: 'ongoing',     name: 'Ongoing' },
+    { id: 'blocked',     name: 'Blocked' },
+    { id: 'complete',    name: 'Complete' },
+];
+
+const SIZE_POINTS = { xs:1, s:2, m:3, l:5, xl:8, xxl:13 };
+const SIZE_ORDER   = { xs:0, s:1, m:2, l:3, xl:4, xxl:5 };
+const PRIORITY_ORDER = { high:0, medium:1, low:2, '':3 };
+
+const DEFAULT_THEMES = [
+    { id:'work',   name:'Work',   color:'#007AFF', subThemes:['Meetings','Proposals','Reports','Strategy','Calls'] },
+    { id:'admin',  name:'Admin',  color:'#5856D6', subThemes:['Email','Finance','HR','Planning','Accounts'] },
+    { id:'garden', name:'Garden', color:'#34C759', subThemes:['Lawn','Planting','Maintenance','Tools'] },
+    { id:'diy',    name:'DIY',    color:'#FF9500', subThemes:['Painting','Building','Repairs','Electrics','Plumbing'] },
+    { id:'harry',  name:'Harry',  color:'#FF2D55', subThemes:['School','Activities','Health','Shopping'] },
+    { id:'house',  name:'House',  color:'#32ADE6', subThemes:['Cleaning','Organising','Maintenance','Decorating'] },
+    { id:'shop',   name:'Shop',   color:'#FF9F0A', subThemes:['Groceries','Clothing','Home','Tech'] },
+];
+
+// ============ STATE ============
+
+let state = loadState();
+let currentView = 'lists';
+let currentThemeTab = 'all';
+let currentSort = 'priority';
+let currentFilters = { priority:'', size:'', status:'active', search:'' };
+let currentAdminTab = 'themes';
+let bulkMode = false;
+let selectedIds = new Set();
+let editingTaskId = null;
+let editingThemeId = null;
+let ctxTaskId = null;
+let draggedId = null;
+
+// Modal field state
+let modalThemeId = '';
+let modalPriority = '';
+let modalSize = 'm';
+let modalRecurType = 'daily';
+let modalRecurDow = new Set();
+let modalMonthlyMode = 'date';
+
+function defaultState() {
+    return {
+        tasks: [],
+        themes: DEFAULT_THEMES.map(t => ({...t, subThemes:[...t.subThemes]})),
+        archive: [],
+        completionLog: {},
+        settings: { theme: 'light' },
     };
+}
 
-    // Auto-connect on load
-    (function autoConnect() {
-        if (!window.supabase) return;
+function loadState() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+            const p = JSON.parse(raw);
+            if (!p.themes || !p.themes.length) p.themes = DEFAULT_THEMES.map(t=>({...t,subThemes:[...t.subThemes]}));
+            if (!p.archive) p.archive = [];
+            if (!p.completionLog) p.completionLog = {};
+            if (!p.settings) p.settings = { theme:'light' };
+            return p;
+        }
+    } catch(e) {}
+    return defaultState();
+}
+
+function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+// ============ HELPERS ============
+
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function toDateStr(d) {
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function todayStr() { return toDateStr(new Date()); }
+
+function formatDateShort(s) {
+    if (!s) return '';
+    const d = new Date(s + 'T00:00:00');
+    return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+}
+function formatDateFull(s) {
+    if (!s) return '';
+    const d = new Date(s + 'T00:00:00');
+    return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+
+function addDays(s, n) {
+    const d = new Date(s + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return toDateStr(d);
+}
+
+function getWeekStart(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return toDateStr(d);
+}
+
+function getWeekKey(dateStr) { return getWeekStart(dateStr || todayStr()); }
+
+function getTheme(id) { return state.themes.find(t => t.id === id) || null; }
+
+function themeColor(id) { const t = getTheme(id); return t ? t.color : '#8e8e93'; }
+
+function calcNextRecurring(recurring, fromDate) {
+    const d = new Date(fromDate + 'T00:00:00');
+    if (recurring.type === 'daily') {
+        d.setDate(d.getDate() + (recurring.interval || 1));
+    } else if (recurring.type === 'weekly') {
+        const target = recurring.dayOfWeek !== undefined ? recurring.dayOfWeek : d.getDay();
+        const interval = recurring.interval || 1;
+        let diff = target - d.getDay();
+        if (diff <= 0) diff += 7 * interval;
+        d.setDate(d.getDate() + diff);
+    } else if (recurring.type === 'monthly') {
+        if (recurring.monthlyMode === 'date') {
+            d.setMonth(d.getMonth() + (recurring.interval || 1));
+            d.setDate(recurring.dayOfMonth || 1);
+        } else {
+            d.setMonth(d.getMonth() + (recurring.interval || 1));
+            d.setDate(1);
+            const targetDow = recurring.dayOfWeek || 1;
+            const weekNum = recurring.weekOfMonth || 1;
+            let count = 0;
+            while (count < weekNum) {
+                if (d.getDay() === targetDow) count++;
+                if (count < weekNum) d.setDate(d.getDate() + 1);
+            }
+        }
+    }
+    return toDateStr(d);
+}
+
+// ============ RENDERING ============
+
+function render() {
+    if (currentView === 'lists') renderLists();
+    else if (currentView === 'board') renderBoard();
+    else if (currentView === 'admin') renderAdmin();
+}
+
+// ---- LISTS ----
+
+function renderLists() {
+    renderThemeTabs();
+    renderListContent();
+}
+
+function renderThemeTabs() {
+    const container = document.getElementById('lists-theme-tabs');
+    container.innerHTML = '';
+    const allBtn = document.createElement('button');
+    allBtn.className = 'theme-tab' + (currentThemeTab === 'all' ? ' active' : '');
+    allBtn.textContent = 'All';
+    if (currentThemeTab === 'all') allBtn.style.background = '#1d1d1f';
+    allBtn.addEventListener('click', () => { currentThemeTab = 'all'; renderLists(); });
+    container.appendChild(allBtn);
+
+    state.themes.forEach(theme => {
+        const btn = document.createElement('button');
+        btn.className = 'theme-tab' + (currentThemeTab === theme.id ? ' active' : '');
+        btn.textContent = theme.name;
+        if (currentThemeTab === theme.id) btn.style.background = theme.color;
+        btn.addEventListener('click', () => { currentThemeTab = theme.id; renderLists(); });
+        container.appendChild(btn);
+    });
+}
+
+function getFilteredTasks() {
+    const today = todayStr();
+    return state.tasks.filter(t => {
+        if (currentFilters.status === 'active' && (t.status === 'complete' || t.status === 'wont-do')) return false;
+        if (currentFilters.status === 'complete' && t.status !== 'complete') return false;
+        if (currentFilters.priority && t.priority !== currentFilters.priority) return false;
+        if (currentFilters.size && t.size !== currentFilters.size) return false;
+        if (currentThemeTab !== 'all' && t.themeId !== currentThemeTab) return false;
+        if (currentFilters.search) {
+            const q = currentFilters.search.toLowerCase();
+            if (!t.title.toLowerCase().includes(q) && !(t.subTheme||'').toLowerCase().includes(q)) return false;
+        }
+        return true;
+    });
+}
+
+function sortTasks(tasks) {
+    return [...tasks].sort((a, b) => {
+        if (currentSort === 'priority') {
+            const pd = (PRIORITY_ORDER[a.priority]||3) - (PRIORITY_ORDER[b.priority]||3);
+            if (pd !== 0) return pd;
+            return (a.title||'').localeCompare(b.title||'');
+        }
+        if (currentSort === 'size') return (SIZE_ORDER[b.size]||0) - (SIZE_ORDER[a.size]||0);
+        if (currentSort === 'points') return (SIZE_POINTS[b.size]||0) - (SIZE_POINTS[a.size]||0);
+        if (currentSort === 'date') return (b.createdDate||'').localeCompare(a.createdDate||'');
+        return 0;
+    });
+}
+
+function renderListContent() {
+    const container = document.getElementById('lists-content');
+    container.innerHTML = '';
+    const tasks = sortTasks(getFilteredTasks());
+
+    if (!tasks.length) {
+        container.innerHTML = '<div class="empty-state"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg><p>No tasks here yet</p></div>';
+        return;
+    }
+
+    // Group by theme if "all" tab
+    if (currentThemeTab === 'all') {
+        const grouped = {};
+        tasks.forEach(t => {
+            const key = t.themeId || '__none__';
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(t);
+        });
+        const themeOrder = state.themes.map(th => th.id);
+        themeOrder.push('__none__');
+        themeOrder.forEach(tid => {
+            if (!grouped[tid] || !grouped[tid].length) return;
+            const theme = getTheme(tid);
+            const label = document.createElement('div');
+            label.className = 'list-group-label';
+            label.textContent = theme ? theme.name : 'No Theme';
+            container.appendChild(label);
+            grouped[tid].forEach(t => container.appendChild(createListItem(t)));
+        });
+    } else {
+        tasks.forEach(t => container.appendChild(createListItem(t)));
+    }
+}
+
+function createListItem(task) {
+    const row = document.createElement('div');
+    row.className = 'list-item';
+    if (task.priority) row.classList.add('priority-' + task.priority);
+    if (task.status === 'complete') row.classList.add('completed');
+    if (task.status === 'wont-do') row.classList.add('wont-do');
+    row.dataset.taskId = task.id;
+
+    // Bulk checkbox
+    if (bulkMode) {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'list-select-cb';
+        cb.checked = selectedIds.has(task.id);
+        cb.addEventListener('change', () => {
+            if (cb.checked) selectedIds.add(task.id); else selectedIds.delete(task.id);
+            document.getElementById('bulk-count').textContent = selectedIds.size + ' selected';
+        });
+        row.appendChild(cb);
+    }
+
+    // Complete checkbox
+    const check = document.createElement('div');
+    check.className = 'list-check' + (task.status === 'complete' ? ' checked' : '');
+    check.addEventListener('click', e => { e.stopPropagation(); completeTask(task.id); });
+    row.appendChild(check);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'list-item-body';
+    body.addEventListener('click', () => openTaskModal(task.id));
+
+    const title = document.createElement('span');
+    title.className = 'list-item-title';
+    title.textContent = task.title;
+    body.appendChild(title);
+
+    const chips = document.createElement('div');
+    chips.className = 'list-item-chips';
+
+    const theme = getTheme(task.themeId);
+    if (theme) {
+        const tc = document.createElement('span');
+        tc.className = 'chip chip-theme';
+        tc.style.background = theme.color;
+        tc.textContent = theme.name;
+        chips.appendChild(tc);
+    }
+    if (task.subTheme) {
+        const sc = document.createElement('span');
+        sc.className = 'chip chip-sub';
+        sc.textContent = task.subTheme;
+        chips.appendChild(sc);
+    }
+    if (task.size) {
+        const sz = document.createElement('span');
+        sz.className = 'chip chip-size';
+        sz.textContent = task.size.toUpperCase();
+        chips.appendChild(sz);
+        const pts = document.createElement('span');
+        pts.className = 'chip chip-points';
+        pts.textContent = (SIZE_POINTS[task.size]||'?') + 'pt';
+        chips.appendChild(pts);
+    }
+    if (task.kanbanColumn) {
+        const kb = document.createElement('span');
+        kb.className = 'chip chip-kanban';
+        kb.textContent = '⊞ ' + (KANBAN_COLS.find(c=>c.id===task.kanbanColumn)||{name:task.kanbanColumn}).name;
+        chips.appendChild(kb);
+    }
+    if (task.recurring) {
+        const rc = document.createElement('span');
+        rc.className = 'chip chip-recurring';
+        rc.textContent = '↻' + (task.runCount > 0 ? ' ×'+task.runCount : '');
+        chips.appendChild(rc);
+    }
+    const today = todayStr();
+    if (task.dueDate) {
+        const due = document.createElement('span');
+        due.className = 'chip ' + (task.dueDate < today ? 'chip-overdue' : 'chip-due');
+        due.textContent = 'Due ' + formatDateShort(task.dueDate);
+        chips.appendChild(due);
+    }
+    body.appendChild(chips);
+    row.appendChild(body);
+
+    // Date
+    const dateEl = document.createElement('span');
+    dateEl.className = 'list-item-date';
+    dateEl.textContent = formatDateShort(task.createdDate);
+    row.appendChild(dateEl);
+
+    // 3-dot menu
+    const menu = document.createElement('button');
+    menu.className = 'list-item-menu';
+    menu.innerHTML = '⋯';
+    menu.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
+    row.appendChild(menu);
+
+    return row;
+}
+
+// ---- BOARD ----
+
+function renderBoard() {
+    renderBoardStats();
+    const container = document.getElementById('board-columns');
+    container.innerHTML = '';
+
+    KANBAN_COLS.forEach(col => {
+        const tasks = state.tasks.filter(t => t.kanbanColumn === col.id && t.status !== 'wont-do');
+        const colEl = document.createElement('div');
+        colEl.className = 'board-col';
+        colEl.dataset.col = col.id;
+
+        const header = document.createElement('div');
+        header.className = 'board-col-header';
+        header.innerHTML = `<span class="board-col-name">${col.name}</span><span class="board-col-count">${tasks.length}</span>`;
+        colEl.appendChild(header);
+
+        const cards = document.createElement('div');
+        cards.className = 'board-cards';
+        cards.dataset.col = col.id;
+        cards.addEventListener('dragover', e => { e.preventDefault(); cards.classList.add('drag-over'); });
+        cards.addEventListener('dragleave', () => cards.classList.remove('drag-over'));
+        cards.addEventListener('drop', e => {
+            e.preventDefault(); cards.classList.remove('drag-over');
+            if (draggedId) { moveToColumn(draggedId, col.id); draggedId = null; }
+        });
+
+        tasks
+            .sort((a,b) => (PRIORITY_ORDER[a.priority]||3) - (PRIORITY_ORDER[b.priority]||3))
+            .forEach(t => cards.appendChild(createBoardCard(t)));
+        colEl.appendChild(cards);
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'board-col-add';
+        addBtn.textContent = '+ Add task';
+        addBtn.addEventListener('click', () => openTaskModal(null, col.id));
+        colEl.appendChild(addBtn);
+        container.appendChild(colEl);
+    });
+}
+
+function createBoardCard(task) {
+    const card = document.createElement('div');
+    card.className = 'board-card';
+    if (task.status === 'complete') card.classList.add('completed');
+    card.draggable = true;
+    card.dataset.taskId = task.id;
+    card.addEventListener('dragstart', e => { draggedId = task.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('click', () => openTaskModal(task.id));
+
+    if (task.priority) {
+        const bar = document.createElement('div');
+        bar.className = 'board-card-priority ' + task.priority;
+        card.appendChild(bar);
+    }
+    const title = document.createElement('div');
+    title.className = 'board-card-title';
+    title.textContent = task.title;
+    card.appendChild(title);
+
+    const footer = document.createElement('div');
+    footer.className = 'board-card-footer';
+    const theme = getTheme(task.themeId);
+    if (theme) {
+        const tc = document.createElement('span');
+        tc.className = 'chip chip-theme';
+        tc.style.background = theme.color;
+        tc.textContent = theme.name;
+        footer.appendChild(tc);
+    }
+    if (task.size) {
+        const sz = document.createElement('span');
+        sz.className = 'chip chip-size';
+        sz.textContent = task.size.toUpperCase() + ' · ' + (SIZE_POINTS[task.size]||'?') + 'pt';
+        footer.appendChild(sz);
+    }
+    if (task.recurring) {
+        const rc = document.createElement('span');
+        rc.className = 'chip chip-recurring';
+        rc.textContent = '↻' + (task.runCount > 0 ? ' ×'+task.runCount : '');
+        footer.appendChild(rc);
+    }
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'board-card-menu';
+    menuBtn.innerHTML = '⋯';
+    menuBtn.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
+    footer.appendChild(menuBtn);
+    card.appendChild(footer);
+    return card;
+}
+
+function renderBoardStats() {
+    const el = document.getElementById('board-stats');
+    const thisWeek = getWeekStart(todayStr());
+    const lastWeek = getWeekStart(addDays(thisWeek, -1));
+
+    const thisCompleted = state.tasks.filter(t => t.status === 'complete' && getWeekStart(t.completedDate||'') === thisWeek);
+    const lastCompleted = state.tasks.filter(t => t.status === 'complete' && getWeekStart(t.completedDate||'') === lastWeek);
+
+    const thisPoints = thisCompleted.reduce((s,t) => s + (SIZE_POINTS[t.size]||0), 0);
+    const lastPoints = lastCompleted.reduce((s,t) => s + (SIZE_POINTS[t.size]||0), 0);
+
+    const countDelta = lastCompleted.length ? Math.round((thisCompleted.length - lastCompleted.length) / lastCompleted.length * 100) : null;
+    const pointsDelta = lastPoints ? Math.round((thisPoints - lastPoints) / lastPoints * 100) : null;
+
+    function deltaHtml(d) {
+        if (d === null) return '<span class="stat-delta neutral">First week</span>';
+        const cls = d > 0 ? 'up' : d < 0 ? 'down' : 'neutral';
+        const arrow = d > 0 ? '↑' : d < 0 ? '↓' : '→';
+        return `<span class="stat-delta ${cls}">${arrow} ${Math.abs(d)}% vs last week</span>`;
+    }
+
+    el.innerHTML = `
+        <div class="stat-card">
+            <div class="stat-label">Completed this week</div>
+            <div class="stat-value">${thisCompleted.length}</div>
+            ${deltaHtml(countDelta)}
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Story points this week</div>
+            <div class="stat-value">${thisPoints}</div>
+            ${deltaHtml(pointsDelta)}
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">In progress</div>
+            <div class="stat-value">${state.tasks.filter(t=>t.kanbanColumn==='in-progress').length}</div>
+            <span class="stat-delta neutral">${state.tasks.filter(t=>t.kanbanColumn==='backlog').length} in backlog</span>
+        </div>
+    `;
+}
+
+// ---- ADMIN ----
+
+function renderAdmin() {
+    document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('active', t.dataset.admin === currentAdminTab));
+    const container = document.getElementById('admin-content');
+    if (currentAdminTab === 'themes') renderAdminThemes(container);
+    else if (currentAdminTab === 'archive') renderAdminArchive(container);
+    else renderAdminData(container);
+}
+
+function renderAdminThemes(container) {
+    container.innerHTML = '';
+    const hdr = document.createElement('div');
+    hdr.className = 'admin-section-header';
+    hdr.innerHTML = '<h3>Themes & Sub-themes</h3>';
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn-primary';
+    addBtn.textContent = '+ Add Theme';
+    addBtn.addEventListener('click', () => openThemeModal(null));
+    hdr.appendChild(addBtn);
+    container.appendChild(hdr);
+
+    const list = document.createElement('div');
+    list.className = 'theme-list';
+    state.themes.forEach(theme => {
+        const row = document.createElement('div');
+        row.className = 'theme-row';
+        const swatch = document.createElement('div');
+        swatch.className = 'theme-swatch';
+        swatch.style.background = theme.color;
+        const info = document.createElement('div');
+        info.style.flex = '1';
+        info.innerHTML = `<div class="theme-row-name">${theme.name}</div><div class="theme-row-subs">${(theme.subThemes||[]).join(', ') || 'No sub-themes'}</div>`;
+        const actions = document.createElement('div');
+        actions.className = 'theme-row-actions';
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn-ghost';
+        editBtn.textContent = 'Edit';
+        editBtn.style.padding = '5px 12px';
+        editBtn.style.fontSize = '12px';
+        editBtn.addEventListener('click', () => openThemeModal(theme.id));
+        actions.appendChild(editBtn);
+        row.appendChild(swatch); row.appendChild(info); row.appendChild(actions);
+        list.appendChild(row);
+    });
+    container.appendChild(list);
+}
+
+function renderAdminArchive(container) {
+    container.innerHTML = '';
+    const hdr = document.createElement('div');
+    hdr.className = 'admin-section-header';
+    hdr.innerHTML = '<h3>Archive</h3>';
+    const archiveBtn = document.createElement('button');
+    archiveBtn.className = 'btn-outline';
+    archiveBtn.textContent = 'Archive completed now';
+    archiveBtn.addEventListener('click', () => { archiveCompleted(); renderAdmin(); });
+    hdr.appendChild(archiveBtn);
+    container.appendChild(hdr);
+
+    if (!state.archive.length) {
+        container.innerHTML += '<div class="empty-state"><p>No archived tasks yet. Tasks in the Complete column are archived at week end.</p></div>';
+        return;
+    }
+    [...state.archive].reverse().forEach(week => {
+        const weekEl = document.createElement('div');
+        weekEl.className = 'archive-week';
+        const pts = week.tasks.reduce((s,t) => s+(SIZE_POINTS[t.size]||0),0);
+        weekEl.innerHTML = `<div class="archive-week-header"><span class="archive-week-label">Week of ${formatDateFull(week.weekStart)}</span><span class="archive-week-stats">${week.tasks.length} tasks · ${pts} pts</span></div>`;
+        const taskList = document.createElement('div');
+        taskList.className = 'archive-task-list';
+        week.tasks.forEach(t => {
+            const th = getTheme(t.themeId);
+            const tr = document.createElement('div');
+            tr.className = 'archive-task-row';
+            tr.innerHTML = `
+                ${th ? `<span class="chip chip-theme" style="background:${th.color}">${th.name}</span>` : ''}
+                <span style="flex:1">${t.title}</span>
+                ${t.size ? `<span class="chip chip-size">${t.size.toUpperCase()}</span>` : ''}
+                ${t.size ? `<span class="chip chip-points">${SIZE_POINTS[t.size]||0}pt</span>` : ''}
+            `;
+            taskList.appendChild(tr);
+        });
+        weekEl.appendChild(taskList);
+        container.appendChild(weekEl);
+    });
+}
+
+function renderAdminData(container) {
+    container.innerHTML = '';
+    const hdr = document.createElement('div');
+    hdr.className = 'admin-section-header';
+    hdr.innerHTML = '<h3>Import / Export</h3>';
+    container.appendChild(hdr);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'data-actions';
+
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'btn-ghost';
+    exportBtn.textContent = 'Download JSON backup';
+    exportBtn.addEventListener('click', exportData);
+
+    const importLabel = document.createElement('label');
+    importLabel.className = 'btn-ghost';
+    importLabel.textContent = 'Import JSON backup';
+    importLabel.style.display = 'block'; importLabel.style.cursor = 'pointer'; importLabel.style.textAlign='center';
+    const importInput = document.createElement('input');
+    importInput.type = 'file'; importInput.accept = '.json'; importInput.style.display = 'none';
+    importInput.addEventListener('change', e => { if (e.target.files[0]) importData(e.target.files[0]); });
+    importLabel.appendChild(importInput);
+
+    wrap.appendChild(exportBtn);
+    wrap.appendChild(importLabel);
+    container.appendChild(wrap);
+}
+
+// ============ ACTIONS ============
+
+function createTask(data) {
+    return {
+        id: genId(),
+        title: data.title || '',
+        themeId: data.themeId || '',
+        subTheme: data.subTheme || '',
+        priority: data.priority || '',
+        size: data.size || 'm',
+        kanbanColumn: data.kanbanColumn || null,
+        status: 'active',
+        dueDate: data.dueDate || '',
+        notes: data.notes || '',
+        createdDate: todayStr(),
+        completedDate: null,
+        recurring: data.recurring || null,
+        runCount: data.runCount || 0,
+    };
+}
+
+function addTask(data) {
+    const task = createTask(data);
+    state.tasks.push(task);
+    saveState();
+    render();
+    return task;
+}
+
+function updateTask(id, data) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    Object.assign(task, data);
+    saveState();
+    render();
+}
+
+function deleteTask(id) {
+    state.tasks = state.tasks.filter(t => t.id !== id);
+    saveState();
+    render();
+}
+
+function completeTask(id) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    if (task.status === 'complete') {
+        task.status = 'active';
+        task.kanbanColumn = task._prevKanban || null;
+        task.completedDate = null;
+        delete task._prevKanban;
+    } else {
+        task._prevKanban = task.kanbanColumn;
+        task.status = 'complete';
+        task.kanbanColumn = 'complete';
+        task.completedDate = todayStr();
+        if (task.recurring) spawnRecurring(task);
+    }
+    saveState();
+    render();
+}
+
+function spawnRecurring(completedTask) {
+    const nextDate = calcNextRecurring(completedTask.recurring, todayStr());
+    const newTask = createTask({
+        ...completedTask,
+        id: undefined,
+        status: 'active',
+        kanbanColumn: null,
+        completedDate: null,
+        createdDate: nextDate,
+        runCount: (completedTask.runCount || 0) + 1,
+    });
+    newTask.createdDate = nextDate;
+    state.tasks.push(newTask);
+}
+
+function moveToColumn(id, col) {
+    updateTask(id, { kanbanColumn: col });
+}
+
+function moveToKanban(id) {
+    updateTask(id, { kanbanColumn: 'backlog' });
+}
+
+function backToList(id) {
+    updateTask(id, { kanbanColumn: null });
+}
+
+function markWontDo(id) {
+    updateTask(id, { status: 'wont-do', kanbanColumn: null });
+}
+
+function archiveCompleted() {
+    const completed = state.tasks.filter(t => t.kanbanColumn === 'complete' || (t.status === 'complete' && !t.kanbanColumn));
+    if (!completed.length) return;
+    const weekStart = getWeekStart(todayStr());
+    const existing = state.archive.find(a => a.weekStart === weekStart);
+    if (existing) {
+        existing.tasks.push(...completed.map(t => ({...t})));
+    } else {
+        state.archive.push({ weekStart, tasks: completed.map(t => ({...t})) });
+    }
+    state.tasks = state.tasks.filter(t => t.kanbanColumn !== 'complete' || t.status !== 'complete');
+    state.tasks = state.tasks.filter(t => !(t.status === 'complete' && !t.kanbanColumn));
+    saveState();
+    render();
+}
+
+function autoArchive() {
+    const today = new Date();
+    if (today.getDay() !== 1) return; // Only on Monday
+    const lastArchive = state.archive.length ? state.archive[state.archive.length-1] : null;
+    const thisWeek = getWeekStart(todayStr());
+    if (lastArchive && lastArchive.weekStart === thisWeek) return;
+    archiveCompleted();
+}
+
+function checkRecurring() {
+    const today = todayStr();
+    state.tasks.forEach(t => {
+        if (!t.recurring || t.status !== 'complete') return;
+        const next = calcNextRecurring(t.recurring, t.completedDate || today);
+        if (next <= today) spawnRecurring(t);
+    });
+    saveState();
+}
+
+// ============ TASK MODAL ============
+
+function openTaskModal(taskId, defaultKanbanCol) {
+    editingTaskId = taskId;
+    const modal = document.getElementById('task-modal');
+    document.getElementById('task-modal-title').textContent = taskId ? 'Edit Task' : 'New Task';
+    document.getElementById('task-modal-delete').style.display = taskId ? '' : 'none';
+
+    // Reset fields
+    modalThemeId = '';
+    modalPriority = '';
+    modalSize = 'm';
+    modalRecurType = 'daily';
+    modalRecurDow = new Set();
+    modalMonthlyMode = 'date';
+
+    if (taskId) {
+        const t = state.tasks.find(x => x.id === taskId);
+        if (!t) return;
+        document.getElementById('task-title').value = t.title;
+        modalThemeId = t.themeId || '';
+        modalPriority = t.priority || '';
+        modalSize = t.size || 'm';
+        document.getElementById('task-due').value = t.dueDate || '';
+        document.getElementById('task-notes').value = t.notes || '';
+        document.getElementById('task-add-to-kanban').checked = !!t.kanbanColumn;
+        const ri = !!t.recurring;
+        document.getElementById('task-recurring-toggle').checked = ri;
+        document.getElementById('recurring-config').style.display = ri ? '' : 'none';
+        if (t.recurring) {
+            modalRecurType = t.recurring.type || 'daily';
+            if (t.recurring.type === 'weekly' && t.recurring.dayOfWeek !== undefined) {
+                modalRecurDow = new Set([t.recurring.dayOfWeek]);
+            }
+            modalMonthlyMode = t.recurring.monthlyMode || 'date';
+            document.getElementById('recur-daily-interval').value = t.recurring.interval || 1;
+            document.getElementById('recur-weekly-interval').value = t.recurring.interval || 1;
+            document.getElementById('recur-monthly-day').value = t.recurring.dayOfMonth || 1;
+            document.getElementById('recur-monthly-week').value = t.recurring.weekOfMonth || 1;
+            document.getElementById('recur-monthly-dow').value = t.recurring.dayOfWeek || 1;
+            document.querySelectorAll('input[name="monthly-mode"]').forEach(r => { r.checked = r.value === modalMonthlyMode; });
+        }
+    } else {
+        document.getElementById('task-title').value = '';
+        document.getElementById('task-due').value = '';
+        document.getElementById('task-notes').value = '';
+        document.getElementById('task-recurring-toggle').checked = false;
+        document.getElementById('recurring-config').style.display = 'none';
+        document.getElementById('task-add-to-kanban').checked = !!defaultKanbanCol;
+        document.getElementById('recur-daily-interval').value = 1;
+        document.getElementById('recur-weekly-interval').value = 1;
+    }
+
+    renderThemePicker();
+    renderPriorityPicker();
+    renderSizePicker();
+    renderRecurTypeBtns();
+    renderRecurOpts();
+    renderDowPicker();
+    updateSubThemeSelect();
+
+    modal.style.display = 'flex';
+    setTimeout(() => document.getElementById('task-title').focus(), 50);
+}
+
+function closeTaskModal() {
+    document.getElementById('task-modal').style.display = 'none';
+    editingTaskId = null;
+}
+
+function renderThemePicker() {
+    const container = document.getElementById('theme-picker');
+    container.innerHTML = '';
+    state.themes.forEach(theme => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'theme-pick-btn' + (modalThemeId === theme.id ? ' active' : '');
+        btn.style.background = theme.color;
+        btn.textContent = theme.name;
+        btn.addEventListener('click', () => {
+            modalThemeId = theme.id;
+            renderThemePicker();
+            updateSubThemeSelect();
+        });
+        container.appendChild(btn);
+    });
+}
+
+function renderPriorityPicker() {
+    document.querySelectorAll('#priority-picker .group-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.value === modalPriority);
+    });
+}
+
+function renderSizePicker() {
+    document.querySelectorAll('#size-picker .size-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.value === modalSize);
+    });
+}
+
+function renderRecurTypeBtns() {
+    document.querySelectorAll('.recur-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.type === modalRecurType);
+    });
+}
+
+function renderRecurOpts() {
+    document.getElementById('recur-daily').style.display  = modalRecurType === 'daily'   ? '' : 'none';
+    document.getElementById('recur-weekly').style.display = modalRecurType === 'weekly'  ? '' : 'none';
+    document.getElementById('recur-monthly').style.display= modalRecurType === 'monthly' ? '' : 'none';
+}
+
+function renderDowPicker() {
+    document.querySelectorAll('.dow-btn').forEach(btn => {
+        btn.classList.toggle('active', modalRecurDow.has(parseInt(btn.dataset.day)));
+    });
+}
+
+function updateSubThemeSelect() {
+    const sel = document.getElementById('task-subtheme');
+    const theme = getTheme(modalThemeId);
+    sel.innerHTML = '<option value="">None</option>';
+    if (theme && theme.subThemes) {
+        theme.subThemes.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s; opt.textContent = s;
+            sel.appendChild(opt);
+        });
+    }
+    // Preserve existing selection if editing
+    if (editingTaskId) {
+        const t = state.tasks.find(x=>x.id===editingTaskId);
+        if (t && t.subTheme) sel.value = t.subTheme;
+    }
+}
+
+function getRecurringFromModal() {
+    if (!document.getElementById('task-recurring-toggle').checked) return null;
+    const type = modalRecurType;
+    if (type === 'daily') {
+        return { type:'daily', interval: parseInt(document.getElementById('recur-daily-interval').value)||1 };
+    }
+    if (type === 'weekly') {
+        const dow = modalRecurDow.size ? [...modalRecurDow][0] : 1;
+        return { type:'weekly', interval: parseInt(document.getElementById('recur-weekly-interval').value)||1, dayOfWeek: dow };
+    }
+    if (type === 'monthly') {
+        const mode = document.querySelector('input[name="monthly-mode"]:checked')?.value || 'date';
+        if (mode === 'date') {
+            return { type:'monthly', interval:1, monthlyMode:'date', dayOfMonth: parseInt(document.getElementById('recur-monthly-day').value)||1 };
+        } else {
+            return { type:'monthly', interval:1, monthlyMode:'weekday', weekOfMonth: parseInt(document.getElementById('recur-monthly-week').value)||1, dayOfWeek: parseInt(document.getElementById('recur-monthly-dow').value)||1 };
+        }
+    }
+    return null;
+}
+
+function saveTaskModal() {
+    const title = document.getElementById('task-title').value.trim();
+    if (!title) { document.getElementById('task-title').focus(); return; }
+    const addToKanban = document.getElementById('task-add-to-kanban').checked;
+    const data = {
+        title,
+        themeId: modalThemeId,
+        subTheme: document.getElementById('task-subtheme').value,
+        priority: modalPriority,
+        size: modalSize,
+        dueDate: document.getElementById('task-due').value,
+        notes: document.getElementById('task-notes').value.trim(),
+        recurring: getRecurringFromModal(),
+        kanbanColumn: addToKanban ? 'backlog' : (editingTaskId ? (state.tasks.find(t=>t.id===editingTaskId)?.kanbanColumn || null) : null),
+    };
+    if (editingTaskId) {
+        updateTask(editingTaskId, data);
+    } else {
+        addTask(data);
+    }
+    closeTaskModal();
+}
+
+// ============ THEME MODAL ============
+
+function openThemeModal(themeId) {
+    editingThemeId = themeId;
+    const modal = document.getElementById('theme-edit-modal');
+    document.getElementById('theme-edit-title').textContent = themeId ? 'Edit Theme' : 'Add Theme';
+    document.getElementById('theme-edit-delete').style.display = themeId ? '' : 'none';
+    if (themeId) {
+        const theme = getTheme(themeId);
+        document.getElementById('theme-edit-name').value = theme.name;
+        document.getElementById('theme-edit-color').value = theme.color;
+        document.getElementById('theme-edit-color-hex').textContent = theme.color;
+        document.getElementById('theme-edit-subthemes').value = (theme.subThemes||[]).join('\n');
+    } else {
+        document.getElementById('theme-edit-name').value = '';
+        document.getElementById('theme-edit-color').value = '#007AFF';
+        document.getElementById('theme-edit-color-hex').textContent = '#007AFF';
+        document.getElementById('theme-edit-subthemes').value = '';
+    }
+    modal.style.display = 'flex';
+}
+
+function closeThemeModal() {
+    document.getElementById('theme-edit-modal').style.display = 'none';
+    editingThemeId = null;
+}
+
+function saveThemeModal() {
+    const name = document.getElementById('theme-edit-name').value.trim();
+    if (!name) return;
+    const color = document.getElementById('theme-edit-color').value;
+    const subThemes = document.getElementById('theme-edit-subthemes').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if (editingThemeId) {
+        const theme = getTheme(editingThemeId);
+        if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; }
+    } else {
+        const id = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') + '-' + genId().slice(0,4);
+        state.themes.push({ id, name, color, subThemes });
+    }
+    saveState();
+    renderAdmin();
+    closeThemeModal();
+}
+
+function deleteTheme() {
+    if (!editingThemeId) return;
+    const count = state.tasks.filter(t => t.themeId === editingThemeId).length;
+    if (count && !confirm(`${count} task(s) use this theme. Delete anyway? (Tasks keep their data.)`)) return;
+    state.themes = state.themes.filter(t => t.id !== editingThemeId);
+    saveState();
+    renderAdmin();
+    closeThemeModal();
+}
+
+// ============ CONTEXT MENU ============
+
+function openContextMenu(e, taskId) {
+    ctxTaskId = taskId;
+    const task = state.tasks.find(t => t.id === taskId);
+    const menu = document.getElementById('context-menu');
+    const toKanban = menu.querySelector('[data-action="to-kanban"]');
+    const fromKanban = menu.querySelector('[data-action="from-kanban"]');
+    if (task.kanbanColumn) {
+        toKanban.style.display = 'none';
+        fromKanban.style.display = '';
+    } else {
+        toKanban.style.display = '';
+        fromKanban.style.display = 'none';
+    }
+    menu.style.display = 'block';
+    let top = e.clientY + 4, left = e.clientX;
+    if (left + 190 > window.innerWidth) left = window.innerWidth - 195;
+    if (top + 200 > window.innerHeight) top = e.clientY - 204;
+    menu.style.top = top + 'px'; menu.style.left = left + 'px';
+}
+
+function hideContextMenu() {
+    document.getElementById('context-menu').style.display = 'none';
+    ctxTaskId = null;
+}
+
+// ============ DATA ============
+
+function exportData() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'life-kanban-' + todayStr() + '.json';
+    a.click(); URL.revokeObjectURL(url);
+}
+
+function importData(file) {
+    const reader = new FileReader();
+    reader.onload = e => {
         try {
-            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            pullFromCloud().then(() => {
-                pushToCloud();
-                subscribeToChanges();
-            });
-        } catch (e) { console.error('Sync init failed:', e); }
-    })();
+            const d = JSON.parse(e.target.result);
+            if (d.tasks) { state = d; if(!state.archive)state.archive=[]; if(!state.settings)state.settings={theme:'light'}; saveState(); applyTheme(); render(); }
+        } catch { alert('Invalid file'); }
+    };
+    reader.readAsText(file);
+}
 
-    init();
+// ============ SETTINGS ============
+
+function applyTheme() {
+    document.documentElement.setAttribute('data-theme', state.settings.theme || 'light');
+}
+
+// ============ INIT ============
+
+function init() {
+    applyTheme();
+    autoArchive();
+    checkRecurring();
+
+    // View tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+            tab.classList.add('active');
+            currentView = tab.dataset.view;
+            document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+            document.getElementById('view-'+currentView).classList.add('active');
+            render();
+        });
+    });
+
+    // Admin tabs
+    document.querySelectorAll('.admin-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            currentAdminTab = tab.dataset.admin;
+            renderAdmin();
+        });
+    });
+
+    // FAB
+    document.getElementById('fab').addEventListener('click', () => openTaskModal(null));
+
+    // Task modal
+    document.getElementById('task-modal-save').addEventListener('click', saveTaskModal);
+    document.getElementById('task-modal-cancel').addEventListener('click', closeTaskModal);
+    document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
+    document.getElementById('task-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeTaskModal(); });
+    document.getElementById('task-modal-delete').addEventListener('click', () => {
+        if (editingTaskId && confirm('Delete this task?')) { deleteTask(editingTaskId); closeTaskModal(); }
+    });
+    document.getElementById('task-title').addEventListener('keydown', e => { if(e.key==='Enter') saveTaskModal(); });
+
+    // Priority picker
+    document.querySelectorAll('#priority-picker .group-btn').forEach(btn => {
+        btn.addEventListener('click', () => { modalPriority = btn.dataset.value; renderPriorityPicker(); });
+    });
+
+    // Size picker
+    document.querySelectorAll('#size-picker .size-btn').forEach(btn => {
+        btn.addEventListener('click', () => { modalSize = btn.dataset.value; renderSizePicker(); });
+    });
+
+    // Recurring toggle
+    document.getElementById('task-recurring-toggle').addEventListener('change', e => {
+        document.getElementById('recurring-config').style.display = e.target.checked ? '' : 'none';
+    });
+
+    // Recurring type
+    document.querySelectorAll('.recur-btn').forEach(btn => {
+        btn.addEventListener('click', () => { modalRecurType = btn.dataset.type; renderRecurTypeBtns(); renderRecurOpts(); });
+    });
+
+    // Day of week picker
+    document.querySelectorAll('.dow-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const day = parseInt(btn.dataset.day);
+            if (modalRecurDow.has(day)) modalRecurDow.delete(day); else modalRecurDow.add(day);
+            renderDowPicker();
+        });
+    });
+
+    // Theme modal
+    document.getElementById('theme-edit-save').addEventListener('click', saveThemeModal);
+    document.getElementById('theme-edit-cancel').addEventListener('click', closeThemeModal);
+    document.getElementById('theme-edit-close').addEventListener('click', closeThemeModal);
+    document.getElementById('theme-edit-delete').addEventListener('click', deleteTheme);
+    document.getElementById('theme-edit-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeThemeModal(); });
+    document.getElementById('theme-edit-color').addEventListener('input', e => {
+        document.getElementById('theme-edit-color-hex').textContent = e.target.value;
+    });
+
+    // Context menu
+    document.getElementById('context-menu').addEventListener('click', e => {
+        const action = e.target.dataset.action;
+        if (!action || !ctxTaskId) return;
+        if (action === 'edit') openTaskModal(ctxTaskId);
+        else if (action === 'to-kanban') moveToKanban(ctxTaskId);
+        else if (action === 'from-kanban') backToList(ctxTaskId);
+        else if (action === 'complete') completeTask(ctxTaskId);
+        else if (action === 'wont-do') markWontDo(ctxTaskId);
+        else if (action === 'delete') { if(confirm('Delete this task?')) deleteTask(ctxTaskId); }
+        hideContextMenu();
+    });
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.context-menu') && !e.target.closest('.list-item-menu') && !e.target.closest('.board-card-menu')) hideContextMenu();
+    });
+
+    // Filters
+    document.getElementById('list-search').addEventListener('input', e => { currentFilters.search = e.target.value; renderLists(); });
+    document.getElementById('list-filter-priority').addEventListener('change', e => { currentFilters.priority = e.target.value; renderLists(); });
+    document.getElementById('list-filter-size').addEventListener('change', e => { currentFilters.size = e.target.value; renderLists(); });
+    document.getElementById('list-filter-status').addEventListener('change', e => { currentFilters.status = e.target.value; renderLists(); });
+    document.getElementById('list-sort').addEventListener('change', e => { currentSort = e.target.value; renderLists(); });
+
+    // Bulk select
+    document.getElementById('bulk-select-btn').addEventListener('click', () => {
+        bulkMode = !bulkMode;
+        selectedIds.clear();
+        document.getElementById('bulk-select-btn').textContent = bulkMode ? 'Done' : 'Select';
+        document.getElementById('bulk-action-bar').style.display = bulkMode ? 'flex' : 'none';
+        renderLists();
+    });
+    document.getElementById('bulk-cancel').addEventListener('click', () => {
+        bulkMode = false; selectedIds.clear();
+        document.getElementById('bulk-select-btn').textContent = 'Select';
+        document.getElementById('bulk-action-bar').style.display = 'none';
+        renderLists();
+    });
+    document.getElementById('bulk-to-kanban').addEventListener('click', () => {
+        selectedIds.forEach(id => moveToKanban(id));
+        selectedIds.clear(); document.getElementById('bulk-count').textContent = '0 selected';
+        renderLists();
+    });
+    document.getElementById('bulk-from-kanban').addEventListener('click', () => {
+        selectedIds.forEach(id => backToList(id));
+        selectedIds.clear(); document.getElementById('bulk-count').textContent = '0 selected';
+        renderLists();
+    });
+
+    // Settings
+    document.getElementById('settings-btn').addEventListener('click', () => {
+        document.getElementById('settings-theme').value = state.settings.theme || 'light';
+        document.getElementById('settings-modal').style.display = 'flex';
+    });
+    document.getElementById('settings-close').addEventListener('click', () => document.getElementById('settings-modal').style.display = 'none');
+    document.getElementById('settings-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
+    document.getElementById('settings-theme').addEventListener('change', e => {
+        state.settings.theme = e.target.value; applyTheme(); saveState();
+    });
+
+    // Escape key
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            closeTaskModal(); closeThemeModal(); hideContextMenu();
+            document.getElementById('settings-modal').style.display = 'none';
+            document.getElementById('theme-edit-modal').style.display = 'none';
+        }
+    });
+
+    // Board add buttons (handled dynamically in renderBoard)
+
+    render();
+}
+
+// ============ SUPABASE SYNC ============
+
+let supabaseClient = null;
+let syncChannel = null;
+let syncPaused = false;
+let pushTimer = null;
+const _baseSave = saveState;
+
+saveState = function() {
+    _baseSave();
+    if (supabaseClient && !syncPaused) {
+        clearTimeout(pushTimer);
+        pushTimer = setTimeout(pushToCloud, 600);
+    }
+};
+
+async function pushToCloud() {
+    if (!supabaseClient || syncPaused) return;
+    try {
+        const payload = { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog };
+        const { error } = await supabaseClient.from('kanban_sync').upsert({ sync_code: SYNC_CODE, data: payload, updated_at: new Date().toISOString() });
+        if (error) console.error('Sync push:', error.message);
+    } catch(e) { console.error('Sync push failed:', e); }
+}
+
+async function pullFromCloud() {
+    if (!supabaseClient) return;
+    try {
+        const { data, error } = await supabaseClient.from('kanban_sync').select('data').eq('sync_code', SYNC_CODE).maybeSingle();
+        if (error || !data) return;
+        const d = data.data;
+        if (!d) return;
+        syncPaused = true;
+        if (d.tasks) state.tasks = d.tasks;
+        if (d.themes) state.themes = d.themes;
+        if (d.archive) state.archive = d.archive;
+        if (d.completionLog) state.completionLog = d.completionLog;
+        _baseSave();
+        render();
+        syncPaused = false;
+    } catch(e) { console.error('Sync pull:', e); }
+}
+
+(function initSync() {
+    if (!window.supabase) return;
+    try {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        pullFromCloud().then(() => {
+            syncChannel = supabaseClient.channel('kanban-rt')
+                .on('postgres_changes', { event:'*', schema:'public', table:'kanban_sync', filter:`sync_code=eq.${SYNC_CODE}` }, () => pullFromCloud())
+                .subscribe();
+        });
+    } catch(e) { console.error('Sync init:', e); }
 })();
 
-// Register service worker for PWA
+init();
+})();
+
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
