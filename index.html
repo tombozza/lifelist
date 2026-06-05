@@ -295,6 +295,7 @@
 <div id="context-menu" class="context-menu" style="display:none;">
     <button data-action="edit">Edit</button>
     <button data-action="to-kanban">Add to Kanban</button>
+    <button data-action="move-to" style="display:none;">Move to…</button>
     <button data-action="from-kanban" style="display:none;">Back to List</button>
     <div class="ctx-divider"></div>
     <button data-action="complete">Mark complete</button>
@@ -323,6 +324,17 @@
                 Syncing across devices
             </div>
         </div>
+    </div>
+</div>
+
+<!-- ============ MOVE TO MODAL ============ -->
+<div id="move-to-modal" class="modal-overlay" style="display:none;">
+    <div class="modal modal-small">
+        <div class="modal-header">
+            <h3>Move to…</h3>
+            <button class="icon-btn modal-close" id="move-to-close">&times;</button>
+        </div>
+        <div class="modal-body" id="move-to-list"></div>
     </div>
 </div>
 

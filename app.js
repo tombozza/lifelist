@@ -314,12 +314,6 @@ function createListItem(task) {
         sz.textContent = task.size.toUpperCase();
         chips.appendChild(sz);
     }
-    if (task.kanbanColumn) {
-        const kb = document.createElement('span');
-        kb.className = 'chip chip-kanban';
-        kb.textContent = '⊞ ' + (KANBAN_COLS.find(c=>c.id===task.kanbanColumn)||{name:task.kanbanColumn}).name;
-        chips.appendChild(kb);
-    }
     if (task.recurring) {
         const rc = document.createElement('span');
         rc.className = 'chip chip-recurring';
@@ -336,19 +330,45 @@ function createListItem(task) {
     body.appendChild(chips);
     row.appendChild(body);
 
-    // Date
+    // Right side group
+    const right = document.createElement('div');
+    right.className = 'list-item-right';
+
+    if (task.kanbanColumn) {
+        const kb = document.createElement('span');
+        kb.className = 'chip chip-kanban';
+        kb.textContent = (KANBAN_COLS.find(c=>c.id===task.kanbanColumn)||{name:task.kanbanColumn}).name;
+        right.appendChild(kb);
+    }
+
+    // To kanban / remove from kanban button
+    const kanbanBtn = document.createElement('button');
+    kanbanBtn.className = 'list-item-to-kanban' + (task.kanbanColumn ? ' on-kanban' : '');
+    kanbanBtn.title = task.kanbanColumn ? 'Remove from Kanban' : 'Add to Kanban';
+    if (task.kanbanColumn) {
+        kanbanBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+    } else {
+        kanbanBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+    }
+    kanbanBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (task.kanbanColumn) backToList(task.id);
+        else moveToKanban(task.id);
+    });
+    right.appendChild(kanbanBtn);
+
     const dateEl = document.createElement('span');
     dateEl.className = 'list-item-date';
     dateEl.textContent = formatDateShort(task.createdDate);
-    row.appendChild(dateEl);
+    right.appendChild(dateEl);
 
-    // 3-dot menu
     const menu = document.createElement('button');
     menu.className = 'list-item-menu';
     menu.innerHTML = '⋯';
     menu.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
-    row.appendChild(menu);
+    right.appendChild(menu);
 
+    row.appendChild(right);
     return row;
 }
 
@@ -951,12 +971,15 @@ function openContextMenu(e, taskId) {
     const task = state.tasks.find(t => t.id === taskId);
     const menu = document.getElementById('context-menu');
     const toKanban = menu.querySelector('[data-action="to-kanban"]');
+    const moveTo = menu.querySelector('[data-action="move-to"]');
     const fromKanban = menu.querySelector('[data-action="from-kanban"]');
     if (task.kanbanColumn) {
         toKanban.style.display = 'none';
+        moveTo.style.display = '';
         fromKanban.style.display = '';
     } else {
         toKanban.style.display = '';
+        moveTo.style.display = 'none';
         fromKanban.style.display = 'none';
     }
     menu.style.display = 'block';
@@ -969,6 +992,29 @@ function openContextMenu(e, taskId) {
 function hideContextMenu() {
     document.getElementById('context-menu').style.display = 'none';
     ctxTaskId = null;
+}
+
+function openMoveToModal(taskId) {
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const modal = document.getElementById('move-to-modal');
+    const list = document.getElementById('move-to-list');
+    list.innerHTML = '';
+    KANBAN_COLS.forEach(col => {
+        const btn = document.createElement('button');
+        btn.className = 'move-to-option' + (task.kanbanColumn === col.id ? ' current' : '');
+        btn.textContent = col.name;
+        if (task.kanbanColumn === col.id) {
+            btn.disabled = true;
+            btn.textContent = col.name + ' (current)';
+        }
+        btn.addEventListener('click', () => {
+            moveToColumn(taskId, col.id);
+            modal.style.display = 'none';
+        });
+        list.appendChild(btn);
+    });
+    modal.style.display = 'flex';
 }
 
 // ============ DATA ============
@@ -1083,6 +1129,7 @@ function init() {
         if (!action || !ctxTaskId) return;
         if (action === 'edit') openTaskModal(ctxTaskId);
         else if (action === 'to-kanban') moveToKanban(ctxTaskId);
+        else if (action === 'move-to') { openMoveToModal(ctxTaskId); }
         else if (action === 'from-kanban') backToList(ctxTaskId);
         else if (action === 'complete') completeTask(ctxTaskId);
         else if (action === 'wont-do') markWontDo(ctxTaskId);
@@ -1136,16 +1183,82 @@ function init() {
         state.settings.theme = e.target.value; applyTheme(); saveState();
     });
 
+    // Move-to modal
+    document.getElementById('move-to-close').addEventListener('click', () => document.getElementById('move-to-modal').style.display = 'none');
+    document.getElementById('move-to-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
+
     // Escape key
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
             closeTaskModal(); closeThemeModal(); hideContextMenu();
             document.getElementById('settings-modal').style.display = 'none';
             document.getElementById('theme-edit-modal').style.display = 'none';
+            document.getElementById('move-to-modal').style.display = 'none';
         }
     });
 
-    // Board add buttons (handled dynamically in renderBoard)
+    // Touch drag for kanban cards on mobile
+    let touchDragId = null;
+    let touchGhost = null;
+    let touchStartX = 0, touchStartY = 0;
+    let touchDragging = false;
+    const TOUCH_THRESHOLD = 10;
+
+    document.addEventListener('touchstart', e => {
+        const card = e.target.closest('.board-card');
+        if (!card || !card.dataset.taskId) return;
+        touchDragId = card.dataset.taskId;
+        touchDragging = false;
+        const touch = e.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+        if (!touchDragId) return;
+        const touch = e.touches[0];
+        if (!touchDragging) {
+            const dx = Math.abs(touch.clientX - touchStartX);
+            const dy = Math.abs(touch.clientY - touchStartY);
+            if (dx < TOUCH_THRESHOLD && dy < TOUCH_THRESHOLD) return;
+            touchDragging = true;
+            const origCard = document.querySelector(`.board-card[data-task-id="${touchDragId}"]`);
+            if (!origCard) return;
+            touchGhost = origCard.cloneNode(true);
+            touchGhost.classList.add('touch-dragging');
+            touchGhost.style.setProperty('--drag-width', origCard.offsetWidth + 'px');
+            touchGhost.style.width = origCard.offsetWidth + 'px';
+            document.body.appendChild(touchGhost);
+            origCard.style.opacity = '0.3';
+        }
+        e.preventDefault();
+        if (touchGhost) {
+            touchGhost.style.left = (touch.clientX - 30) + 'px';
+            touchGhost.style.top = (touch.clientY - 20) + 'px';
+        }
+        document.querySelectorAll('.board-cards').forEach(c => c.classList.remove('drag-over'));
+        const el = document.elementFromPoint(touch.clientX, touch.clientY);
+        const dropZone = el && el.closest('.board-cards');
+        if (dropZone) dropZone.classList.add('drag-over');
+    }, { passive: false });
+
+    document.addEventListener('touchend', e => {
+        if (!touchDragId) return;
+        if (touchDragging) {
+            const touch = e.changedTouches[0];
+            if (touchGhost) { touchGhost.remove(); touchGhost = null; }
+            const origCard = document.querySelector(`.board-card[data-task-id="${touchDragId}"]`);
+            if (origCard) origCard.style.opacity = '';
+            document.querySelectorAll('.board-cards').forEach(c => c.classList.remove('drag-over'));
+            const el = document.elementFromPoint(touch.clientX, touch.clientY);
+            const dropZone = el && el.closest('.board-cards');
+            if (dropZone && dropZone.dataset.col) {
+                moveToColumn(touchDragId, dropZone.dataset.col);
+            }
+        }
+        touchDragId = null;
+        touchDragging = false;
+    });
 
     render();
 }
