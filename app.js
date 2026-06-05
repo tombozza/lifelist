@@ -220,10 +220,25 @@ function sortTasks(tasks) {
     });
 }
 
+function sortKanbanFirst(tasks) {
+    const colIndex = {};
+    KANBAN_COLS.forEach((c, i) => colIndex[c.id] = i);
+    return [...tasks].sort((a, b) => {
+        const aOnBoard = a.kanbanColumn ? 0 : 1;
+        const bOnBoard = b.kanbanColumn ? 0 : 1;
+        if (aOnBoard !== bOnBoard) return aOnBoard - bOnBoard;
+        if (aOnBoard === 0 && bOnBoard === 0) {
+            const colDiff = (colIndex[a.kanbanColumn] ?? 99) - (colIndex[b.kanbanColumn] ?? 99);
+            if (colDiff !== 0) return colDiff;
+        }
+        return (a.title || '').localeCompare(b.title || '');
+    });
+}
+
 function renderListContent() {
     const container = document.getElementById('lists-content');
     container.innerHTML = '';
-    const tasks = sortTasks(getFilteredTasks());
+    const tasks = getFilteredTasks();
 
     if (!tasks.length) {
         container.innerHTML = '<div class="empty-state"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg><p>No tasks here yet</p></div>';
@@ -247,10 +262,10 @@ function renderListContent() {
             label.className = 'list-group-label';
             label.textContent = theme ? theme.name : 'No Theme';
             container.appendChild(label);
-            grouped[tid].forEach(t => container.appendChild(createListItem(t)));
+            sortKanbanFirst(grouped[tid]).forEach(t => container.appendChild(createListItem(t)));
         });
     } else {
-        tasks.forEach(t => container.appendChild(createListItem(t)));
+        sortKanbanFirst(tasks).forEach(t => container.appendChild(createListItem(t)));
     }
 }
 
