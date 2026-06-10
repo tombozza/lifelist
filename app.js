@@ -170,12 +170,13 @@ function render() {
 // ---- LISTS ----
 
 function hiddenThemeIds() {
+    if (state.settings.showHidden) return new Set();
     return new Set(state.themes.filter(t => t.hidden).map(t => t.id));
 }
 
 function renderLists() {
     const cur = getTheme(currentThemeTab);
-    if (currentThemeTab !== 'all' && (!cur || cur.hidden)) currentThemeTab = 'all';
+    if (currentThemeTab !== 'all' && (!cur || (cur.hidden && !state.settings.showHidden))) currentThemeTab = 'all';
     renderThemeTabs();
     renderListContent();
 }
@@ -190,7 +191,7 @@ function renderThemeTabs() {
     allBtn.addEventListener('click', () => { currentThemeTab = 'all'; renderLists(); });
     container.appendChild(allBtn);
 
-    [...state.themes].filter(t => !t.hidden).sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
+    [...state.themes].filter(t => !t.hidden || state.settings.showHidden).sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const btn = document.createElement('button');
         btn.className = 'theme-tab' + (currentThemeTab === theme.id ? ' active' : '');
         btn.textContent = theme.name;
@@ -1259,13 +1260,17 @@ function init() {
 
     // Settings
     document.getElementById('settings-btn').addEventListener('click', () => {
-        document.getElementById('settings-theme').value = state.settings.theme || 'light';
+        document.getElementById('settings-dark').checked = state.settings.theme === 'dark';
+        document.getElementById('settings-show-hidden').checked = !!state.settings.showHidden;
         document.getElementById('settings-modal').style.display = 'flex';
     });
     document.getElementById('settings-close').addEventListener('click', () => document.getElementById('settings-modal').style.display = 'none');
     document.getElementById('settings-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
-    document.getElementById('settings-theme').addEventListener('change', e => {
-        state.settings.theme = e.target.value; applyTheme(); saveState();
+    document.getElementById('settings-dark').addEventListener('change', e => {
+        state.settings.theme = e.target.checked ? 'dark' : 'light'; applyTheme(); saveState();
+    });
+    document.getElementById('settings-show-hidden').addEventListener('change', e => {
+        state.settings.showHidden = e.target.checked; saveState(); render();
     });
 
     // Move-to modal
