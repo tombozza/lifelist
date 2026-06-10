@@ -161,6 +161,7 @@ main { margin:0 auto; padding:20px; }
 [data-theme="dark"] .chip-recurring { color:#9d9bf0; }
 .chip-due { background:rgba(255,149,0,0.1); color:#b86800; }
 .chip-overdue { background:rgba(255,59,48,0.1); color:var(--danger); }
+.chip-do { background:rgba(0,122,255,0.1); color:var(--accent); }
 
 .list-item-right { display:flex; align-items:center; gap:4px; flex-shrink:0; margin-left:auto; padding-left:8px; }
 .list-item-date { font-size:11px; color:var(--text-3); flex-shrink:0; }
@@ -243,6 +244,8 @@ main { margin:0 auto; padding:20px; }
     background:var(--bg-card); border:1px solid var(--border-light); border-radius:var(--r-sm); padding:12px 14px;
 }
 .theme-swatch { width:24px; height:24px; border-radius:50%; flex-shrink:0; }
+.theme-row-hidden { opacity:0.55; }
+.hidden-badge { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; background:var(--bg-input); color:var(--text-3); padding:2px 7px; border-radius:8px; margin-left:6px; vertical-align:middle; }
 .theme-row-name { font-size:14px; font-weight:600; flex:1; }
 .theme-row-subs { font-size:12px; color:var(--text-2); }
 .theme-row-actions { display:flex; gap:6px; }

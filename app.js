@@ -64,6 +64,8 @@ function defaultState() {
         archive: [],
         completionLog: {},
         settings: { theme: 'light' },
+        deletedIds: [],
+        themesUpdatedAt: 0,
     };
 }
 
@@ -76,6 +78,8 @@ function loadState() {
             if (!p.archive) p.archive = [];
             if (!p.completionLog) p.completionLog = {};
             if (!p.settings) p.settings = { theme:'light' };
+            if (!p.deletedIds) p.deletedIds = [];
+            if (!p.themesUpdatedAt) p.themesUpdatedAt = 0;
             return p;
         }
     } catch(e) {}
@@ -165,7 +169,13 @@ function render() {
 
 // ---- LISTS ----
 
+function hiddenThemeIds() {
+    return new Set(state.themes.filter(t => t.hidden).map(t => t.id));
+}
+
 function renderLists() {
+    const cur = getTheme(currentThemeTab);
+    if (currentThemeTab !== 'all' && (!cur || cur.hidden)) currentThemeTab = 'all';
     renderThemeTabs();
     renderListContent();
 }
@@ -180,7 +190,7 @@ function renderThemeTabs() {
     allBtn.addEventListener('click', () => { currentThemeTab = 'all'; renderLists(); });
     container.appendChild(allBtn);
 
-    [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
+    [...state.themes].filter(t => !t.hidden).sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const btn = document.createElement('button');
         btn.className = 'theme-tab' + (currentThemeTab === theme.id ? ' active' : '');
         btn.textContent = theme.name;
@@ -192,7 +202,9 @@ function renderThemeTabs() {
 
 function getFilteredTasks() {
     const today = todayStr();
+    const hidden = hiddenThemeIds();
     return state.tasks.filter(t => {
+        if (hidden.has(t.themeId)) return false;
         if (currentFilters.status === 'active' && (t.status === 'complete' || t.status === 'wont-do')) return false;
         if (currentFilters.status === 'complete' && t.status !== 'complete') return false;
         if (currentFilters.priority && t.priority !== currentFilters.priority) return false;
@@ -342,6 +354,12 @@ function createListItem(task) {
         due.textContent = 'Due ' + formatDateShort(task.dueDate);
         chips.appendChild(due);
     }
+    if (task.doDate && !task.kanbanColumn && task.status === 'active') {
+        const dd = document.createElement('span');
+        dd.className = 'chip chip-do';
+        dd.textContent = 'Do ' + formatDateShort(task.doDate);
+        chips.appendChild(dd);
+    }
     body.appendChild(chips);
     row.appendChild(body);
 
@@ -394,9 +412,10 @@ function renderBoard() {
     const container = document.getElementById('board-columns');
     container.innerHTML = '';
     const weekStats = getWeekStats();
+    const hidden = hiddenThemeIds();
 
     KANBAN_COLS.forEach(col => {
-        const tasks = state.tasks.filter(t => t.kanbanColumn === col.id && t.status !== 'wont-do');
+        const tasks = state.tasks.filter(t => t.kanbanColumn === col.id && t.status !== 'wont-do' && !hidden.has(t.themeId));
         const colEl = document.createElement('div');
         colEl.className = 'board-col';
         colEl.dataset.col = col.id;
@@ -527,14 +546,27 @@ function renderAdminThemes(container) {
     [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const row = document.createElement('div');
         row.className = 'theme-row';
+        if (theme.hidden) row.classList.add('theme-row-hidden');
         const swatch = document.createElement('div');
         swatch.className = 'theme-swatch';
         swatch.style.background = theme.color;
         const info = document.createElement('div');
         info.style.flex = '1';
-        info.innerHTML = `<div class="theme-row-name">${theme.name}</div><div class="theme-row-subs">${[...(theme.subThemes||[])].sort((a,b)=>a.localeCompare(b)).join(', ') || 'No sub-themes'}</div>`;
+        info.innerHTML = `<div class="theme-row-name">${theme.name}${theme.hidden ? ' <span class="hidden-badge">Hidden</span>' : ''}</div><div class="theme-row-subs">${[...(theme.subThemes||[])].sort((a,b)=>a.localeCompare(b)).join(', ') || 'No sub-themes'}</div>`;
         const actions = document.createElement('div');
         actions.className = 'theme-row-actions';
+        const hideBtn = document.createElement('button');
+        hideBtn.className = 'btn-ghost';
+        hideBtn.textContent = theme.hidden ? 'Show' : 'Hide';
+        hideBtn.style.padding = '5px 12px';
+        hideBtn.style.fontSize = '12px';
+        hideBtn.addEventListener('click', () => {
+            theme.hidden = !theme.hidden;
+            state.themesUpdatedAt = Date.now();
+            saveState();
+            renderAdmin();
+        });
+        actions.appendChild(hideBtn);
         const editBtn = document.createElement('button');
         editBtn.className = 'btn-ghost';
         editBtn.textContent = 'Edit';
@@ -630,11 +662,13 @@ function createTask(data) {
         kanbanColumn: data.kanbanColumn || null,
         status: 'active',
         dueDate: data.dueDate || '',
+        doDate: data.doDate || '',
         notes: data.notes || '',
         createdDate: todayStr(),
         completedDate: null,
         recurring: data.recurring || null,
         runCount: data.runCount || 0,
+        updatedAt: Date.now(),
     };
 }
 
@@ -650,12 +684,14 @@ function updateTask(id, data) {
     const task = state.tasks.find(t => t.id === id);
     if (!task) return;
     Object.assign(task, data);
+    task.updatedAt = Date.now();
     saveState();
     render();
 }
 
 function deleteTask(id) {
     state.tasks = state.tasks.filter(t => t.id !== id);
+    state.deletedIds.push({ id, ts: Date.now() });
     saveState();
     render();
 }
@@ -675,6 +711,7 @@ function completeTask(id) {
         task.completedDate = todayStr();
         if (task.recurring) spawnRecurring(task);
     }
+    task.updatedAt = Date.now();
     saveState();
     render();
 }
@@ -688,6 +725,7 @@ function spawnRecurring(completedTask) {
         kanbanColumn: null,
         completedDate: null,
         createdDate: nextDate,
+        doDate: '',
         runCount: (completedTask.runCount || 0) + 1,
     });
     newTask.createdDate = nextDate;
@@ -745,6 +783,23 @@ function checkRecurring() {
     saveState();
 }
 
+function checkAutoKanban() {
+    const today = todayStr();
+    let changed = false;
+    state.tasks.forEach(t => {
+        if (t.status !== 'active' || t.kanbanColumn || t.autoKanbaned) return;
+        const doDue = t.doDate && t.doDate <= today;
+        const deadlineNear = t.dueDate && addDays(t.dueDate, -3) <= today;
+        if (doDue || deadlineNear) {
+            t.kanbanColumn = 'backlog';
+            t.autoKanbaned = true;
+            t.updatedAt = Date.now();
+            changed = true;
+        }
+    });
+    if (changed) { saveState(); render(); }
+}
+
 // ============ TASK MODAL ============
 
 function openTaskModal(taskId, defaultKanbanCol) {
@@ -769,6 +824,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
         modalPriority = t.priority || '';
         modalSize = t.size || 'm';
         document.getElementById('task-due').value = t.dueDate || '';
+        document.getElementById('task-do').value = t.doDate || '';
         document.getElementById('task-notes').value = t.notes || '';
         document.getElementById('task-add-to-kanban').checked = !!t.kanbanColumn;
         const ri = !!t.recurring;
@@ -790,6 +846,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
     } else {
         document.getElementById('task-title').value = '';
         document.getElementById('task-due').value = '';
+        document.getElementById('task-do').value = '';
         document.getElementById('task-notes').value = '';
         document.getElementById('task-recurring-toggle').checked = false;
         document.getElementById('recurring-config').style.display = 'none';
@@ -823,7 +880,7 @@ function renderThemePicker() {
         btn.type = 'button';
         btn.className = 'theme-pick-btn' + (modalThemeId === theme.id ? ' active' : '');
         btn.style.background = theme.color;
-        btn.textContent = theme.name;
+        btn.textContent = theme.name + (theme.hidden ? ' 🕶' : '');
         btn.addEventListener('click', () => {
             modalThemeId = theme.id;
             renderThemePicker();
@@ -913,15 +970,22 @@ function saveTaskModal() {
         priority: modalPriority,
         size: modalSize,
         dueDate: document.getElementById('task-due').value,
+        doDate: document.getElementById('task-do').value,
         notes: document.getElementById('task-notes').value.trim(),
         recurring: getRecurringFromModal(),
         kanbanColumn: addToKanban ? 'backlog' : (editingTaskId ? (state.tasks.find(t=>t.id===editingTaskId)?.kanbanColumn || null) : null),
     };
     if (editingTaskId) {
+        // Re-arm auto-kanban if the dates changed
+        const existing = state.tasks.find(t=>t.id===editingTaskId);
+        if (existing && (existing.doDate !== data.doDate || existing.dueDate !== data.dueDate)) {
+            data.autoKanbaned = false;
+        }
         updateTask(editingTaskId, data);
     } else {
         addTask(data);
     }
+    checkAutoKanban();
     closeTaskModal();
 }
 
@@ -938,11 +1002,13 @@ function openThemeModal(themeId) {
         document.getElementById('theme-edit-color').value = theme.color;
         document.getElementById('theme-edit-color-hex').textContent = theme.color;
         document.getElementById('theme-edit-subthemes').value = (theme.subThemes||[]).join('\n');
+        document.getElementById('theme-edit-hidden').checked = !!theme.hidden;
     } else {
         document.getElementById('theme-edit-name').value = '';
         document.getElementById('theme-edit-color').value = '#007AFF';
         document.getElementById('theme-edit-color-hex').textContent = '#007AFF';
         document.getElementById('theme-edit-subthemes').value = '';
+        document.getElementById('theme-edit-hidden').checked = false;
     }
     modal.style.display = 'flex';
 }
@@ -957,13 +1023,15 @@ function saveThemeModal() {
     if (!name) return;
     const color = document.getElementById('theme-edit-color').value;
     const subThemes = document.getElementById('theme-edit-subthemes').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const hidden = document.getElementById('theme-edit-hidden').checked;
     if (editingThemeId) {
         const theme = getTheme(editingThemeId);
-        if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; }
+        if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; theme.hidden = hidden; }
     } else {
         const id = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') + '-' + genId().slice(0,4);
-        state.themes.push({ id, name, color, subThemes });
+        state.themes.push({ id, name, color, subThemes, hidden });
     }
+    state.themesUpdatedAt = Date.now();
     saveState();
     renderAdmin();
     closeThemeModal();
@@ -974,6 +1042,7 @@ function deleteTheme() {
     const count = state.tasks.filter(t => t.themeId === editingThemeId).length;
     if (count && !confirm(`${count} task(s) use this theme. Delete anyway? (Tasks keep their data.)`)) return;
     state.themes = state.themes.filter(t => t.id !== editingThemeId);
+    state.themesUpdatedAt = Date.now();
     saveState();
     renderAdmin();
     closeThemeModal();
@@ -1065,6 +1134,7 @@ function init() {
     applyTheme();
     autoArchive();
     checkRecurring();
+    checkAutoKanban();
 
     // View tabs
     document.querySelectorAll('.tab').forEach(tab => {
@@ -1297,7 +1367,7 @@ saveState = function() {
 async function pushToCloud() {
     if (!supabaseClient || syncPaused) return;
     try {
-        const payload = { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog };
+        const payload = { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt };
         const { error } = await supabaseClient.from('kanban_sync').upsert({ sync_code: SYNC_CODE, data: payload, updated_at: new Date().toISOString() });
         if (error) console.error('Sync push:', error.message);
     } catch(e) { console.error('Sync push failed:', e); }
@@ -1311,14 +1381,67 @@ async function pullFromCloud() {
         const d = data.data;
         if (!d) return;
         syncPaused = true;
-        if (d.tasks) state.tasks = d.tasks;
-        if (d.themes) state.themes = d.themes;
-        if (d.archive) state.archive = d.archive;
-        if (d.completionLog) state.completionLog = d.completionLog;
+
+        // --- Merge deletions (union, pruned after 60 days) ---
+        const delMap = new Map();
+        [...(state.deletedIds||[]), ...(d.deletedIds||[])].forEach(x => {
+            const prev = delMap.get(x.id);
+            if (!prev || x.ts > prev.ts) delMap.set(x.id, x);
+        });
+        const cutoff = Date.now() - 60*24*3600*1000;
+        state.deletedIds = [...delMap.values()].filter(x => x.ts > cutoff);
+        const delSet = new Set(state.deletedIds.map(x => x.id));
+
+        // --- Detect whether local has anything the cloud lacks (decides if we push back) ---
+        const remoteTasks = new Map((d.tasks||[]).map(t => [t.id, t]));
+        let localContrib = false;
+        (state.tasks||[]).forEach(t => {
+            if (delSet.has(t.id)) return;
+            const rt = remoteTasks.get(t.id);
+            if (!rt || (t.updatedAt||0) > (rt.updatedAt||0)) localContrib = true;
+        });
+        (state.deletedIds||[]).forEach(x => {
+            if (!(d.deletedIds||[]).some(r => r.id === x.id)) localContrib = true;
+        });
+        if ((state.themesUpdatedAt||0) > (d.themesUpdatedAt||0)) localContrib = true;
+
+        // --- Merge tasks: newest updatedAt wins per task ---
+        const merged = new Map();
+        (state.tasks||[]).forEach(t => merged.set(t.id, t));
+        (d.tasks||[]).forEach(rt => {
+            const lt = merged.get(rt.id);
+            if (!lt || (rt.updatedAt||0) > (lt.updatedAt||0)) merged.set(rt.id, rt);
+        });
+        state.tasks = [...merged.values()].filter(t => !delSet.has(t.id));
+
+        // --- Themes: newest wholesale ---
+        if ((d.themesUpdatedAt||0) > (state.themesUpdatedAt||0) && d.themes) {
+            state.themes = d.themes;
+            state.themesUpdatedAt = d.themesUpdatedAt;
+        }
+
+        // --- Archive: merge weeks, union tasks within each week ---
+        const weeks = new Map();
+        (state.archive||[]).forEach(w => weeks.set(w.weekStart, w));
+        (d.archive||[]).forEach(rw => {
+            const lw = weeks.get(rw.weekStart);
+            if (!lw) { weeks.set(rw.weekStart, rw); return; }
+            const ids = new Set(lw.tasks.map(t => t.id));
+            rw.tasks.forEach(t => { if (!ids.has(t.id)) lw.tasks.push(t); });
+        });
+        state.archive = [...weeks.values()].sort((a,b) => a.weekStart.localeCompare(b.weekStart));
+
+        if (d.completionLog) state.completionLog = Object.assign({}, d.completionLog, state.completionLog);
+
         _baseSave();
         render();
         syncPaused = false;
-    } catch(e) { console.error('Sync pull:', e); }
+
+        // Push merged state back only if local contributed something the cloud didn't have
+        if (localContrib) pushToCloud();
+
+        checkAutoKanban();
+    } catch(e) { console.error('Sync pull:', e); syncPaused = false; }
 }
 
 (function initSync() {
@@ -1330,6 +1453,11 @@ async function pullFromCloud() {
                 .on('postgres_changes', { event:'*', schema:'public', table:'kanban_sync', filter:`sync_code=eq.${SYNC_CODE}` }, () => pullFromCloud())
                 .subscribe();
         });
+        // Re-pull whenever the app comes back to the foreground (PWAs lose the
+        // realtime connection while backgrounded, which is why devices went stale)
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) pullFromCloud(); });
+        window.addEventListener('focus', () => pullFromCloud());
+        window.addEventListener('online', () => pullFromCloud());
     } catch(e) { console.error('Sync init:', e); }
 })();
 
