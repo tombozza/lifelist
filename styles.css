@@ -162,6 +162,18 @@ main { margin:0 auto; padding:20px; }
 .chip-due { background:rgba(255,149,0,0.1); color:#b86800; }
 .chip-overdue { background:rgba(255,59,48,0.1); color:var(--danger); }
 .chip-do { background:rgba(0,122,255,0.1); color:var(--accent); }
+.chip-snoozed { background:rgba(142,142,147,0.15); color:var(--text-2); }
+
+.list-item.snoozed { opacity:0.55; }
+.snoozed-toggle {
+    display:flex; align-items:center; gap:6px;
+    width:100%; padding:7px 14px; margin-bottom:4px;
+    border:1px dashed var(--border); border-radius:var(--r-sm);
+    background:none; color:var(--text-3); font-size:12px; font-weight:500;
+    cursor:pointer; transition:all 0.15s; justify-content:center;
+}
+.snoozed-toggle:hover { color:var(--text-2); border-color:var(--text-3); background:var(--bg-hover); }
+.snooze-date-hint { float:right; color:inherit; opacity:0.55; font-size:12px; }
 
 .list-item-right { display:flex; align-items:center; gap:4px; flex-shrink:0; margin-left:auto; padding-left:8px; }
 .list-item-date { font-size:11px; color:var(--text-3); flex-shrink:0; }

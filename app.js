@@ -48,6 +48,9 @@ let editingTaskId = null;
 let editingThemeId = null;
 let ctxTaskId = null;
 let draggedId = null;
+let boardThemeFilter = new Set();
+let snoozedExpanded = new Set();
+let snoozeTaskId = null;
 
 // Modal field state
 let modalThemeId = '';
@@ -127,6 +130,13 @@ function getWeekStart(dateStr) {
 function getWeekKey(dateStr) { return getWeekStart(dateStr || todayStr()); }
 
 function getTheme(id) { return state.themes.find(t => t.id === id) || null; }
+
+function prioRank(t) {
+    const v = PRIORITY_ORDER[t.priority];
+    return v === undefined ? 3 : v;
+}
+
+function isSnoozed(t) { return !!(t.snoozedUntil && t.snoozedUntil > todayStr()); }
 
 function themeColor(id) { const t = getTheme(id); return t ? t.color : '#8e8e93'; }
 
@@ -222,7 +232,7 @@ function getFilteredTasks() {
 function sortTasks(tasks) {
     return [...tasks].sort((a, b) => {
         if (currentSort === 'priority') {
-            const pd = (PRIORITY_ORDER[a.priority]||3) - (PRIORITY_ORDER[b.priority]||3);
+            const pd = prioRank(a) - prioRank(b);
             if (pd !== 0) return pd;
             return (a.title||'').localeCompare(b.title||'');
         }
@@ -244,6 +254,8 @@ function sortKanbanFirst(tasks) {
             const colDiff = (colIndex[a.kanbanColumn] ?? 99) - (colIndex[b.kanbanColumn] ?? 99);
             if (colDiff !== 0) return colDiff;
         }
+        const pd = prioRank(a) - prioRank(b);
+        if (pd !== 0) return pd;
         return (a.title || '').localeCompare(b.title || '');
     });
 }
@@ -251,17 +263,37 @@ function sortKanbanFirst(tasks) {
 function renderListContent() {
     const container = document.getElementById('lists-content');
     container.innerHTML = '';
-    const tasks = getFilteredTasks();
+    const all = getFilteredTasks();
 
-    if (!tasks.length) {
+    if (!all.length) {
         container.innerHTML = '<div class="empty-state"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg><p>No tasks here yet</p></div>';
         return;
     }
 
+    const appendGroup = (groupKey, groupTasks) => {
+        const active = groupTasks.filter(t => !isSnoozed(t));
+        const snoozed = groupTasks.filter(isSnoozed);
+        sortKanbanFirst(active).forEach(t => container.appendChild(createListItem(t)));
+        if (snoozed.length) {
+            const open = snoozedExpanded.has(groupKey);
+            const toggle = document.createElement('button');
+            toggle.className = 'snoozed-toggle';
+            toggle.innerHTML = open
+                ? 'Hide snoozed'
+                : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> Show ${snoozed.length} snoozed`;
+            toggle.addEventListener('click', () => {
+                if (open) snoozedExpanded.delete(groupKey); else snoozedExpanded.add(groupKey);
+                renderLists();
+            });
+            container.appendChild(toggle);
+            if (open) sortKanbanFirst(snoozed).forEach(t => container.appendChild(createListItem(t)));
+        }
+    };
+
     // Group by theme if "all" tab
     if (currentThemeTab === 'all') {
         const grouped = {};
-        tasks.forEach(t => {
+        all.forEach(t => {
             const key = t.themeId || '__none__';
             if (!grouped[key]) grouped[key] = [];
             grouped[key].push(t);
@@ -275,10 +307,10 @@ function renderListContent() {
             label.className = 'list-group-label';
             label.textContent = theme ? theme.name : 'No Theme';
             container.appendChild(label);
-            sortKanbanFirst(grouped[tid]).forEach(t => container.appendChild(createListItem(t)));
+            appendGroup(tid, grouped[tid]);
         });
     } else {
-        sortKanbanFirst(tasks).forEach(t => container.appendChild(createListItem(t)));
+        appendGroup(currentThemeTab, all);
     }
 }
 
@@ -361,6 +393,13 @@ function createListItem(task) {
         dd.textContent = 'Do ' + formatDateShort(task.doDate);
         chips.appendChild(dd);
     }
+    if (isSnoozed(task)) {
+        row.classList.add('snoozed');
+        const sn = document.createElement('span');
+        sn.className = 'chip chip-snoozed';
+        sn.textContent = 'Snoozed until ' + formatDateShort(task.snoozedUntil);
+        chips.appendChild(sn);
+    }
     body.appendChild(chips);
     row.appendChild(body);
 
@@ -408,15 +447,47 @@ function createListItem(task) {
 
 // ---- BOARD ----
 
+function renderBoardFilter() {
+    const container = document.getElementById('board-filter');
+    container.innerHTML = '';
+    // Drop filters for themes that no longer exist or got hidden
+    const valid = new Set(state.themes.filter(t => !t.hidden || state.settings.showHidden).map(t => t.id));
+    boardThemeFilter.forEach(id => { if (!valid.has(id)) boardThemeFilter.delete(id); });
+
+    const allBtn = document.createElement('button');
+    allBtn.className = 'theme-tab' + (boardThemeFilter.size === 0 ? ' active' : '');
+    allBtn.textContent = 'All';
+    if (boardThemeFilter.size === 0) allBtn.style.background = '#1d1d1f';
+    allBtn.addEventListener('click', () => { boardThemeFilter.clear(); renderBoard(); });
+    container.appendChild(allBtn);
+
+    [...state.themes].filter(t => !t.hidden || state.settings.showHidden).sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
+        const btn = document.createElement('button');
+        const active = boardThemeFilter.has(theme.id);
+        btn.className = 'theme-tab' + (active ? ' active' : '');
+        btn.textContent = theme.name;
+        if (active) btn.style.background = theme.color;
+        btn.addEventListener('click', () => {
+            if (boardThemeFilter.has(theme.id)) boardThemeFilter.delete(theme.id);
+            else boardThemeFilter.add(theme.id);
+            renderBoard();
+        });
+        container.appendChild(btn);
+    });
+}
+
 function renderBoard() {
     document.getElementById('board-stats').innerHTML = '';
+    renderBoardFilter();
     const container = document.getElementById('board-columns');
     container.innerHTML = '';
     const weekStats = getWeekStats();
     const hidden = hiddenThemeIds();
 
     KANBAN_COLS.forEach(col => {
-        const tasks = state.tasks.filter(t => t.kanbanColumn === col.id && t.status !== 'wont-do' && !hidden.has(t.themeId));
+        const tasks = state.tasks.filter(t =>
+            t.kanbanColumn === col.id && t.status !== 'wont-do' && !hidden.has(t.themeId)
+            && (boardThemeFilter.size === 0 || boardThemeFilter.has(t.themeId)));
         const colEl = document.createElement('div');
         colEl.className = 'board-col';
         colEl.dataset.col = col.id;
@@ -447,7 +518,7 @@ function renderBoard() {
         });
 
         tasks
-            .sort((a,b) => (PRIORITY_ORDER[a.priority]||3) - (PRIORITY_ORDER[b.priority]||3))
+            .sort((a,b) => { const pd = prioRank(a) - prioRank(b); return pd !== 0 ? pd : (a.title||'').localeCompare(b.title||''); })
             .forEach(t => cards.appendChild(createBoardCard(t)));
         colEl.appendChild(cards);
 
@@ -788,7 +859,7 @@ function checkAutoKanban() {
     const today = todayStr();
     let changed = false;
     state.tasks.forEach(t => {
-        if (t.status !== 'active' || t.kanbanColumn || t.autoKanbaned) return;
+        if (t.status !== 'active' || t.kanbanColumn || t.autoKanbaned || isSnoozed(t)) return;
         const doDue = t.doDate && t.doDate <= today;
         const deadlineNear = t.dueDate && addDays(t.dueDate, -3) <= today;
         if (doDue || deadlineNear) {
@@ -1067,6 +1138,8 @@ function openContextMenu(e, taskId) {
         moveTo.style.display = 'none';
         fromKanban.style.display = 'none';
     }
+    menu.querySelector('[data-action="snooze"]').style.display = isSnoozed(task) ? 'none' : '';
+    menu.querySelector('[data-action="unsnooze"]').style.display = isSnoozed(task) ? '' : 'none';
     menu.style.display = 'block';
     let top = e.clientY + 4, left = e.clientX;
     if (left + 190 > window.innerWidth) left = window.innerWidth - 195;
@@ -1077,6 +1150,32 @@ function openContextMenu(e, taskId) {
 function hideContextMenu() {
     document.getElementById('context-menu').style.display = 'none';
     ctxTaskId = null;
+}
+
+function snoozeTask(id, until) {
+    updateTask(id, { snoozedUntil: until, kanbanColumn: null });
+}
+
+function closeSnoozeModal() {
+    document.getElementById('snooze-modal').style.display = 'none';
+    snoozeTaskId = null;
+}
+
+function openSnoozeModal(taskId) {
+    snoozeTaskId = taskId;
+    const list = document.getElementById('snooze-options');
+    list.innerHTML = '';
+    const today = todayStr();
+    [['Tomorrow', 1], ['3 days', 3], ['1 week', 7], ['2 weeks', 14], ['1 month', 30]].forEach(([label, days]) => {
+        const until = addDays(today, days);
+        const btn = document.createElement('button');
+        btn.className = 'move-to-option';
+        btn.innerHTML = `${label} <span class="snooze-date-hint">${formatDateShort(until)}</span>`;
+        btn.addEventListener('click', () => { snoozeTask(snoozeTaskId, until); closeSnoozeModal(); });
+        list.appendChild(btn);
+    });
+    document.getElementById('snooze-date').value = '';
+    document.getElementById('snooze-modal').style.display = 'flex';
 }
 
 function openMoveToModal(taskId) {
@@ -1216,6 +1315,8 @@ function init() {
         if (action === 'edit') openTaskModal(ctxTaskId);
         else if (action === 'to-kanban') moveToKanban(ctxTaskId);
         else if (action === 'move-to') { openMoveToModal(ctxTaskId); }
+        else if (action === 'snooze') { openSnoozeModal(ctxTaskId); }
+        else if (action === 'unsnooze') updateTask(ctxTaskId, { snoozedUntil: '' });
         else if (action === 'from-kanban') backToList(ctxTaskId);
         else if (action === 'complete') completeTask(ctxTaskId);
         else if (action === 'wont-do') markWontDo(ctxTaskId);
@@ -1277,15 +1378,31 @@ function init() {
     document.getElementById('move-to-close').addEventListener('click', () => document.getElementById('move-to-modal').style.display = 'none');
     document.getElementById('move-to-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
 
+    // Snooze modal
+    document.getElementById('snooze-close').addEventListener('click', closeSnoozeModal);
+    document.getElementById('snooze-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeSnoozeModal(); });
+    document.getElementById('snooze-date').addEventListener('change', e => {
+        const v = e.target.value;
+        if (v && v > todayStr() && snoozeTaskId) { snoozeTask(snoozeTaskId, v); closeSnoozeModal(); }
+    });
+
     // Escape key
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
-            closeTaskModal(); closeThemeModal(); hideContextMenu();
+            closeTaskModal(); closeThemeModal(); hideContextMenu(); closeSnoozeModal();
             document.getElementById('settings-modal').style.display = 'none';
             document.getElementById('theme-edit-modal').style.display = 'none';
             document.getElementById('move-to-modal').style.display = 'none';
         }
     });
+
+    // Quick-add via URL (?add=Task+title) — used by iOS Shortcuts / Siri
+    const urlParams = new URLSearchParams(location.search);
+    const quickAdd = urlParams.get('add');
+    if (quickAdd && quickAdd.trim()) {
+        addTask({ title: quickAdd.trim() });
+        history.replaceState(null, '', location.pathname);
+    }
 
     // Touch drag for kanban cards on mobile
     let touchDragId = null;

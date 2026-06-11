@@ -89,6 +89,9 @@
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" class="view active">
         <div class="board-stats" id="board-stats"></div>
+        <div class="theme-tabs-scroll">
+            <div class="theme-tabs" id="board-filter"></div>
+        </div>
         <div id="board-columns" class="board-columns"></div>
     </section>
 
@@ -313,6 +316,8 @@
     <button data-action="to-kanban">Add to Kanban</button>
     <button data-action="move-to" style="display:none;">Move to…</button>
     <button data-action="from-kanban" style="display:none;">Back to List</button>
+    <button data-action="snooze">Snooze…</button>
+    <button data-action="unsnooze" style="display:none;">Unsnooze</button>
     <div class="ctx-divider"></div>
     <button data-action="complete">Mark complete</button>
     <button data-action="wont-do">Won't do</button>
@@ -350,6 +355,23 @@
             <div class="sync-info-box">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                 Syncing across devices
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ SNOOZE MODAL ============ -->
+<div id="snooze-modal" class="modal-overlay" style="display:none;">
+    <div class="modal modal-small">
+        <div class="modal-header">
+            <h3>Snooze until…</h3>
+            <button class="icon-btn modal-close" id="snooze-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="snooze-options"></div>
+            <div class="form-group" style="margin-top:12px; margin-bottom:0;">
+                <label class="form-label">Or pick a date</label>
+                <input type="date" id="snooze-date" class="form-input">
             </div>
         </div>
     </div>
