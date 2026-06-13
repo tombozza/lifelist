@@ -60,6 +60,13 @@
                     <option value="all">All incl. done</option>
                     <option value="complete">Completed</option>
                 </select>
+                <select id="list-filter-age" class="filter-select">
+                    <option value="">Any age</option>
+                    <option value="7">In list 1+ week</option>
+                    <option value="14">In list 2+ weeks</option>
+                    <option value="30">In list 1+ month</option>
+                    <option value="90">In list 3+ months</option>
+                </select>
                 <select id="list-sort" class="filter-select">
                     <option value="priority">Sort: Priority</option>
                     <option value="size">Sort: Size</option>
@@ -76,8 +83,11 @@
             <span id="bulk-count">0 selected</span>
             <button class="btn-small" id="bulk-to-kanban">Add to Kanban</button>
             <button class="btn-small btn-ghost" id="bulk-from-kanban">Remove from Kanban</button>
+            <button class="btn-small" id="bulk-snooze">Snooze</button>
             <button class="btn-ghost" id="bulk-cancel">Cancel</button>
         </div>
+
+        <div id="stale-banner" class="stale-banner" style="display:none;"></div>
 
         <div class="theme-tabs-scroll">
             <div class="theme-tabs" id="lists-theme-tabs"></div>
@@ -298,6 +308,16 @@
                     </label>
                 </label>
                 <div class="form-hint">Hidden themes and their tasks don't appear in Lists or on the Board</div>
+            </div>
+            <div class="form-group">
+                <label class="toggle-row">
+                    <span class="form-label" style="margin:0">Hide on weekends</span>
+                    <label class="switch">
+                        <input type="checkbox" id="theme-edit-hide-weekend">
+                        <span class="switch-track"></span>
+                    </label>
+                </label>
+                <div class="form-hint">This theme's cards are hidden from the Board on Saturdays and Sundays</div>
             </div>
         </div>
         <div class="modal-footer">
