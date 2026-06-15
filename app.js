@@ -12,13 +12,32 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const SYNC_CODE = 'mpy31l1nrkp69mpy31l1nihblx';
 
 const KANBAN_COLS = [
-    { id: 'backlog',     name: 'Backlog' },
-    { id: 'next',        name: 'Next' },
-    { id: 'in-progress', name: 'In Progress' },
-    { id: 'ongoing',     name: 'Ongoing' },
-    { id: 'blocked',     name: 'Blocked' },
-    { id: 'complete',    name: 'Complete' },
+    { id: 'backlog-day',     name: 'Day',         backlog: true },
+    { id: 'backlog-evening', name: 'Evening',     backlog: true },
+    { id: 'next',            name: 'Next' },
+    { id: 'in-progress',     name: 'In Progress' },
+    { id: 'ongoing',         name: 'Ongoing' },
+    { id: 'blocked',         name: 'Blocked' },
+    { id: 'complete',        name: 'Complete' },
 ];
+
+const EVENING_HOUR = 17; // 5pm
+
+function isEvening() { return new Date().getHours() >= EVENING_HOUR; }
+
+// The default backlog for newly added items: the one that's "active" right
+// now (Day during the day, Evening after 5pm).
+function defaultBacklogCol() { return isEvening() ? 'backlog-evening' : 'backlog-day'; }
+
+// Board column order. The two backlog columns swap so the time-relevant one
+// always sits immediately left of "Next": Day during the day, Evening after 5pm.
+function boardColumns() {
+    const day = KANBAN_COLS.find(c => c.id === 'backlog-day');
+    const evening = KANBAN_COLS.find(c => c.id === 'backlog-evening');
+    const rest = KANBAN_COLS.filter(c => !c.backlog);
+    const backlogs = isEvening() ? [day, evening] : [evening, day];
+    return [...backlogs, ...rest];
+}
 
 const SIZE_POINTS = { xs:1, s:2, m:3, l:5, xl:8, xxl:13 };
 const SIZE_ORDER   = { xs:0, s:1, m:2, l:3, xl:4, xxl:5 };
@@ -74,6 +93,12 @@ function defaultState() {
     };
 }
 
+// Legacy single "backlog" column was split into Day/Evening; map old tasks
+// (and any arriving via sync from an un-updated device) onto the Day backlog.
+function migrateColumns(tasks) {
+    (tasks || []).forEach(t => { if (t.kanbanColumn === 'backlog') t.kanbanColumn = 'backlog-day'; });
+}
+
 function loadState() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -85,6 +110,7 @@ function loadState() {
             if (!p.settings) p.settings = { theme:'light' };
             if (!p.deletedIds) p.deletedIds = [];
             if (!p.themesUpdatedAt) p.themesUpdatedAt = 0;
+            migrateColumns(p.tasks);
             return p;
         }
     } catch(e) {}
@@ -311,7 +337,7 @@ function sortTasks(tasks) {
 
 function sortKanbanFirst(tasks) {
     const colIndex = {};
-    KANBAN_COLS.forEach((c, i) => colIndex[c.id] = i);
+    boardColumns().forEach((c, i) => colIndex[c.id] = i);
     return [...tasks].sort((a, b) => {
         const aOnBoard = a.kanbanColumn ? 0 : 1;
         const bOnBoard = b.kanbanColumn ? 0 : 1;
@@ -559,7 +585,7 @@ function renderBoard() {
     const hidden = hiddenThemeIds();
     const weekendHidden = weekendHiddenThemeIds();
 
-    KANBAN_COLS.forEach(col => {
+    boardColumns().forEach(col => {
         const tasks = state.tasks.filter(t =>
             t.kanbanColumn === col.id && t.status !== 'wont-do'
             && !hidden.has(t.themeId) && !weekendHidden.has(t.themeId)
@@ -852,12 +878,25 @@ function completeTask(id) {
         task.kanbanColumn = task._prevKanban || null;
         task.completedDate = null;
         delete task._prevKanban;
+        // Reverse the recurring spawn if its successor is still untouched
+        if (task.spawnedChildId) {
+            const child = state.tasks.find(t => t.id === task.spawnedChildId);
+            if (child && child.status === 'active' && !child.kanbanColumn) deleteTask(child.id);
+            delete task.spawnedChildId;
+            task.recurringSpawned = false;
+        }
     } else {
         task._prevKanban = task.kanbanColumn;
         task.status = 'complete';
         task.kanbanColumn = 'complete';
         task.completedDate = todayStr();
-        if (task.recurring) spawnRecurring(task);
+        // Spawn the next occurrence exactly once (guard against re-spawn on
+        // every reload/sync, which is what duplicated recurring tasks before)
+        if (task.recurring && !task.recurringSpawned) {
+            const child = spawnRecurring(task);
+            task.recurringSpawned = true;
+            task.spawnedChildId = child.id;
+        }
     }
     task.updatedAt = Date.now();
     saveState();
@@ -877,7 +916,10 @@ function spawnRecurring(completedTask) {
         runCount: (completedTask.runCount || 0) + 1,
     });
     newTask.createdDate = nextDate;
+    newTask.recurringSpawned = false;
+    delete newTask.spawnedChildId;
     state.tasks.push(newTask);
+    return newTask;
 }
 
 function moveToColumn(id, col) {
@@ -885,7 +927,7 @@ function moveToColumn(id, col) {
 }
 
 function moveToKanban(id) {
-    updateTask(id, { kanbanColumn: 'backlog' });
+    updateTask(id, { kanbanColumn: defaultBacklogCol() });
 }
 
 function backToList(id) {
@@ -923,12 +965,20 @@ function autoArchive() {
 
 function checkRecurring() {
     const today = todayStr();
+    let changed = false;
     state.tasks.forEach(t => {
-        if (!t.recurring || t.status !== 'complete') return;
+        // Only ever spawn once per completed recurring task — the guard is
+        // what stops this catch-up pass from duplicating on every load/sync
+        if (!t.recurring || t.status !== 'complete' || t.recurringSpawned) return;
         const next = calcNextRecurring(t.recurring, t.completedDate || today);
-        if (next <= today) spawnRecurring(t);
+        if (next <= today) {
+            const child = spawnRecurring(t);
+            t.recurringSpawned = true;
+            t.spawnedChildId = child.id;
+            changed = true;
+        }
     });
-    saveState();
+    if (changed) saveState();
 }
 
 function checkAutoKanban() {
@@ -939,7 +989,7 @@ function checkAutoKanban() {
         const doDue = t.doDate && t.doDate <= today;
         const deadlineNear = t.dueDate && addDays(t.dueDate, -3) <= today;
         if (doDue || deadlineNear) {
-            t.kanbanColumn = 'backlog';
+            t.kanbanColumn = defaultBacklogCol();
             t.autoKanbaned = true;
             t.updatedAt = Date.now();
             changed = true;
@@ -955,6 +1005,13 @@ function openTaskModal(taskId, defaultKanbanCol) {
     const modal = document.getElementById('task-modal');
     document.getElementById('task-modal-title').textContent = taskId ? 'Edit Task' : 'New Task';
     document.getElementById('task-modal-delete').style.display = taskId ? '' : 'none';
+
+    // Multi-add is only available for brand-new tasks; always reset to single
+    document.getElementById('task-multi-toggle').checked = false;
+    document.getElementById('multi-add-row').style.display = taskId ? 'none' : '';
+    document.getElementById('task-title-multi').value = '';
+    document.getElementById('task-title-multi').style.display = 'none';
+    document.getElementById('task-title').style.display = '';
 
     // Reset fields
     modalThemeId = '';
@@ -1108,11 +1165,9 @@ function getRecurringFromModal() {
 }
 
 function saveTaskModal() {
-    const title = document.getElementById('task-title').value.trim();
-    if (!title) { document.getElementById('task-title').focus(); return; }
+    const multiMode = !editingTaskId && document.getElementById('task-multi-toggle').checked;
     const addToKanban = document.getElementById('task-add-to-kanban').checked;
-    const data = {
-        title,
+    const shared = {
         themeId: modalThemeId,
         subTheme: document.getElementById('task-subtheme').value,
         priority: modalPriority,
@@ -1121,7 +1176,26 @@ function saveTaskModal() {
         doDate: document.getElementById('task-do').value,
         notes: document.getElementById('task-notes').value.trim(),
         recurring: getRecurringFromModal(),
-        kanbanColumn: addToKanban ? 'backlog' : (editingTaskId ? (state.tasks.find(t=>t.id===editingTaskId)?.kanbanColumn || null) : null),
+    };
+
+    if (multiMode) {
+        const titles = document.getElementById('task-title-multi').value
+            .split('\n').map(s => s.trim()).filter(Boolean);
+        if (!titles.length) { document.getElementById('task-title-multi').focus(); return; }
+        titles.forEach(title => addTask({
+            ...shared, title,
+            kanbanColumn: addToKanban ? defaultBacklogCol() : null,
+        }));
+        checkAutoKanban();
+        closeTaskModal();
+        return;
+    }
+
+    const title = document.getElementById('task-title').value.trim();
+    if (!title) { document.getElementById('task-title').focus(); return; }
+    const data = {
+        ...shared, title,
+        kanbanColumn: addToKanban ? defaultBacklogCol() : (editingTaskId ? (state.tasks.find(t=>t.id===editingTaskId)?.kanbanColumn || null) : null),
     };
     if (editingTaskId) {
         // Re-arm auto-kanban if the dates changed
@@ -1280,7 +1354,7 @@ function openMoveToModal(taskId) {
     const modal = document.getElementById('move-to-modal');
     const list = document.getElementById('move-to-list');
     list.innerHTML = '';
-    KANBAN_COLS.forEach(col => {
+    boardColumns().forEach(col => {
         const btn = document.createElement('button');
         btn.className = 'move-to-option' + (task.kanbanColumn === col.id ? ' current' : '');
         btn.textContent = col.name;
@@ -1364,6 +1438,18 @@ function init() {
         if (editingTaskId && confirm('Delete this task?')) { deleteTask(editingTaskId); closeTaskModal(); }
     });
     document.getElementById('task-title').addEventListener('keydown', e => { if(e.key==='Enter') saveTaskModal(); });
+
+    // Multi-add toggle: swap single title input for a multi-line textarea
+    document.getElementById('task-multi-toggle').addEventListener('change', e => {
+        const multi = e.target.checked;
+        const single = document.getElementById('task-title');
+        const area = document.getElementById('task-title-multi');
+        document.getElementById('task-modal-title').textContent = multi ? 'New Tasks' : 'New Task';
+        single.style.display = multi ? 'none' : '';
+        area.style.display = multi ? '' : 'none';
+        if (multi) { if (single.value.trim()) area.value = single.value.trim() + '\n'; area.focus(); }
+        else { single.focus(); }
+    });
 
     // Priority picker
     document.querySelectorAll('#priority-picker .group-btn').forEach(btn => {
@@ -1636,6 +1722,7 @@ async function pullFromCloud() {
             if (!lt || (rt.updatedAt||0) > (lt.updatedAt||0)) merged.set(rt.id, rt);
         });
         state.tasks = [...merged.values()].filter(t => !delSet.has(t.id));
+        migrateColumns(state.tasks);
 
         // --- Themes: newest wholesale ---
         if ((d.themesUpdatedAt||0) > (state.themesUpdatedAt||0) && d.themes) {
