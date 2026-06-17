@@ -102,6 +102,11 @@ function migrateColumns(tasks) {
     (tasks || []).forEach(t => {
         if (t.kanbanColumn === 'backlog') t.kanbanColumn = 'backlog-day';
         if (t.reviewed === undefined) t.reviewed = true;
+        // A completed task must never recur again — the live schedule lives on
+        // its active successor. Stripping recurring from completed records
+        // stops any device (even one on old cached code) from re-spawning them,
+        // which is what kept duplicating recurring tasks.
+        if (t.status === 'complete' && t.recurring) { t.recurring = null; t.recurringSpawned = true; }
     });
 }
 
@@ -440,18 +445,22 @@ function getFilteredTasks() {
     });
 }
 
-function sortTasks(tasks) {
-    return [...tasks].sort((a, b) => {
-        if (currentSort === 'priority') {
-            const pd = prioRank(a) - prioRank(b);
-            if (pd !== 0) return pd;
-            return (a.title||'').localeCompare(b.title||'');
-        }
-        if (currentSort === 'size') return (SIZE_ORDER[b.size]||0) - (SIZE_ORDER[a.size]||0);
-        if (currentSort === 'points') return (SIZE_POINTS[b.size]||0) - (SIZE_POINTS[a.size]||0);
-        if (currentSort === 'date') return (b.createdDate||'').localeCompare(a.createdDate||'');
-        return 0;
-    });
+// The chosen sort (default Priority) orders tasks within a group; the
+// selected sort supersedes priority, with priority then title as tiebreaks.
+function chosenSortCompare(a, b) {
+    if (currentSort === 'size') {
+        const d = (SIZE_ORDER[b.size]||0) - (SIZE_ORDER[a.size]||0);
+        if (d !== 0) return d;
+    } else if (currentSort === 'points') {
+        const d = (SIZE_POINTS[b.size]||0) - (SIZE_POINTS[a.size]||0);
+        if (d !== 0) return d;
+    } else if (currentSort === 'date') {
+        const d = (b.createdDate||'').localeCompare(a.createdDate||'');
+        if (d !== 0) return d;
+    }
+    const pd = prioRank(a) - prioRank(b);
+    if (pd !== 0) return pd;
+    return (a.title || '').localeCompare(b.title || '');
 }
 
 function sortKanbanFirst(tasks) {
@@ -468,9 +477,7 @@ function sortKanbanFirst(tasks) {
             const colDiff = (colIndex[a.kanbanColumn] ?? 99) - (colIndex[b.kanbanColumn] ?? 99);
             if (colDiff !== 0) return colDiff;
         }
-        const pd = prioRank(a) - prioRank(b);
-        if (pd !== 0) return pd;
-        return (a.title || '').localeCompare(b.title || '');
+        return chosenSortCompare(a, b);
     });
 }
 
@@ -1030,10 +1037,14 @@ function completeTask(id) {
         task.kanbanColumn = task._prevKanban || null;
         task.completedDate = null;
         delete task._prevKanban;
-        // Reverse the recurring spawn if its successor is still untouched
+        // Reverse the recurring spawn if its successor is still untouched,
+        // taking the schedule back onto this task
         if (task.spawnedChildId) {
             const child = state.tasks.find(t => t.id === task.spawnedChildId);
-            if (child && child.status === 'active' && !child.kanbanColumn) deleteTask(child.id);
+            if (child && child.status === 'active' && !child.kanbanColumn) {
+                task.recurring = child.recurring || task.recurring;
+                deleteTask(child.id);
+            }
             delete task.spawnedChildId;
             task.recurringSpawned = false;
         }
@@ -1042,12 +1053,13 @@ function completeTask(id) {
         task.status = 'complete';
         task.kanbanColumn = 'complete';
         task.completedDate = todayStr();
-        // Spawn the next occurrence exactly once (guard against re-spawn on
-        // every reload/sync, which is what duplicated recurring tasks before)
-        if (task.recurring && !task.recurringSpawned) {
+        // Create the next occurrence as a fresh task, then strip the schedule
+        // off this completed record so it can never spawn again
+        if (task.recurring) {
             const child = spawnRecurring(task);
-            task.recurringSpawned = true;
             task.spawnedChildId = child.id;
+            task.recurring = null;
+            task.recurringSpawned = true;
         }
     }
     task.updatedAt = Date.now();
@@ -1069,6 +1081,8 @@ function spawnRecurring(completedTask) {
     });
     newTask.createdDate = nextDate;
     newTask.recurringSpawned = false;
+    newTask.spotlight = false;     // a one-off spotlight shouldn't recur forever
+    newTask.reviewed = true;       // recurring items are already triaged
     delete newTask.spawnedChildId;
     state.tasks.push(newTask);
     return newTask;
@@ -1124,23 +1138,11 @@ function autoArchive() {
     archiveCompleted();
 }
 
-function checkRecurring() {
-    const today = todayStr();
-    let changed = false;
-    state.tasks.forEach(t => {
-        // Only ever spawn once per completed recurring task — the guard is
-        // what stops this catch-up pass from duplicating on every load/sync
-        if (!t.recurring || t.status !== 'complete' || t.recurringSpawned) return;
-        const next = calcNextRecurring(t.recurring, t.completedDate || today);
-        if (next <= today) {
-            const child = spawnRecurring(t);
-            t.recurringSpawned = true;
-            t.spawnedChildId = child.id;
-            changed = true;
-        }
-    });
-    if (changed) saveState();
-}
+// Recurrence is now driven entirely by completing a task (which spawns the
+// next occurrence once and strips its own schedule). The old load-time
+// catch-up pass is gone — it was the source of runaway duplication. Kept as a
+// no-op so any stray callers stay safe.
+function checkRecurring() {}
 
 function checkAutoKanban() {
     const today = todayStr();
