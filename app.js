@@ -61,6 +61,7 @@ let currentThemeTab = 'all';
 let currentSort = 'priority';
 let currentFilters = { priority:'', size:'', status:'active', search:'', age:'' };
 let staleBannerDismissed = false;
+let reviewBannerDismissed = false;
 let currentAdminTab = 'themes';
 let bulkMode = false;
 let selectedIds = new Set();
@@ -95,8 +96,13 @@ function defaultState() {
 
 // Legacy single "backlog" column was split into Day/Evening; map old tasks
 // (and any arriving via sync from an un-updated device) onto the Day backlog.
+// Also treat any task that predates the review feature as already reviewed so
+// the review queue only surfaces genuinely new captures.
 function migrateColumns(tasks) {
-    (tasks || []).forEach(t => { if (t.kanbanColumn === 'backlog') t.kanbanColumn = 'backlog-day'; });
+    (tasks || []).forEach(t => {
+        if (t.kanbanColumn === 'backlog') t.kanbanColumn = 'backlog-day';
+        if (t.reviewed === undefined) t.reviewed = true;
+    });
 }
 
 function loadState() {
@@ -162,6 +168,14 @@ function getTheme(id) { return state.themes.find(t => t.id === id) || null; }
 function prioRank(t) {
     const v = PRIORITY_ORDER[t.priority];
     return v === undefined ? 3 : v;
+}
+
+// Spotlighted tasks outrank everything, ahead of even High priority
+function spotRank(t) { return t.spotlight ? 0 : 1; }
+
+// Active list captures not yet triaged onto the board (or explicitly kept)
+function needsReview(t) {
+    return t.status === 'active' && !t.kanbanColumn && !t.reviewed && !isSnoozed(t);
 }
 
 function isSnoozed(t) { return !!(t.snoozedUntil && t.snoozedUntil > todayStr()); }
@@ -242,9 +256,114 @@ function hiddenThemeIds() {
 function renderLists() {
     const cur = getTheme(currentThemeTab);
     if (currentThemeTab !== 'all' && (!cur || (cur.hidden && !state.settings.showHidden))) currentThemeTab = 'all';
+    renderReviewBanner();
     renderStaleBanner();
     renderThemeTabs();
     renderListContent();
+}
+
+function reviewQueue() {
+    const hidden = hiddenThemeIds();
+    return state.tasks.filter(t => !hidden.has(t.themeId) && needsReview(t));
+}
+
+function renderReviewBanner() {
+    const banner = document.getElementById('review-banner');
+    const queue = reviewQueue();
+    if (!queue.length || reviewBannerDismissed) {
+        banner.style.display = 'none';
+        return;
+    }
+    banner.style.display = 'flex';
+    banner.innerHTML = '';
+    const txt = document.createElement('span');
+    txt.className = 'review-banner-text';
+    txt.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg> <strong>${queue.length}</strong> new item${queue.length>1?'s':''} to review — decide what goes on the board.`;
+    banner.appendChild(txt);
+    const actions = document.createElement('div');
+    actions.className = 'review-banner-actions';
+    const reviewBtn = document.createElement('button');
+    reviewBtn.className = 'btn-small';
+    reviewBtn.textContent = 'Review';
+    reviewBtn.addEventListener('click', openReviewModal);
+    const dismiss = document.createElement('button');
+    dismiss.className = 'btn-ghost review-banner-dismiss';
+    dismiss.innerHTML = '&times;';
+    dismiss.title = 'Dismiss';
+    dismiss.addEventListener('click', () => { reviewBannerDismissed = true; renderReviewBanner(); });
+    actions.appendChild(reviewBtn);
+    actions.appendChild(dismiss);
+    banner.appendChild(actions);
+}
+
+function openReviewModal() {
+    renderReviewList();
+    document.getElementById('review-modal').style.display = 'flex';
+}
+
+function closeReviewModal() {
+    document.getElementById('review-modal').style.display = 'none';
+}
+
+function renderReviewList() {
+    const list = document.getElementById('review-list');
+    list.innerHTML = '';
+    const queue = reviewQueue();
+    if (!queue.length) {
+        list.innerHTML = '<div class="review-empty">All caught up 🎉</div>';
+        return;
+    }
+    sortKanbanFirst(queue).forEach(task => {
+        const row = document.createElement('div');
+        row.className = 'review-row';
+
+        const info = document.createElement('div');
+        info.className = 'review-row-info';
+        const title = document.createElement('div');
+        title.className = 'review-row-title';
+        title.textContent = task.title;
+        title.addEventListener('click', () => { closeReviewModal(); openTaskModal(task.id); });
+        info.appendChild(title);
+        const meta = document.createElement('div');
+        meta.className = 'review-row-meta';
+        const theme = getTheme(task.themeId);
+        if (theme) {
+            const tc = document.createElement('span');
+            tc.className = 'chip chip-theme';
+            tc.style.background = theme.color;
+            tc.textContent = theme.name;
+            meta.appendChild(tc);
+        }
+        const age = document.createElement('span');
+        age.className = 'review-row-age';
+        const d = daysSince(task.createdDate);
+        age.textContent = d <= 0 ? 'today' : d + 'd ago';
+        meta.appendChild(age);
+        info.appendChild(meta);
+        row.appendChild(info);
+
+        const actions = document.createElement('div');
+        actions.className = 'review-row-actions';
+        const toBoard = document.createElement('button');
+        toBoard.className = 'btn-small';
+        toBoard.textContent = '→ Board';
+        toBoard.title = 'Add to Kanban backlog';
+        toBoard.addEventListener('click', () => { moveToKanban(task.id); afterReviewAction(); });
+        const keep = document.createElement('button');
+        keep.className = 'btn-ghost review-keep-btn';
+        keep.textContent = 'Keep';
+        keep.title = 'Keep in list (mark reviewed)';
+        keep.addEventListener('click', () => { markReviewed(task.id); afterReviewAction(); });
+        actions.appendChild(toBoard);
+        actions.appendChild(keep);
+        row.appendChild(actions);
+        list.appendChild(row);
+    });
+}
+
+function afterReviewAction() {
+    if (!reviewQueue().length) { closeReviewModal(); return; }
+    renderReviewList();
 }
 
 function renderStaleBanner() {
@@ -339,6 +458,9 @@ function sortKanbanFirst(tasks) {
     const colIndex = {};
     boardColumns().forEach((c, i) => colIndex[c.id] = i);
     return [...tasks].sort((a, b) => {
+        // Spotlight floats to the very top of its theme group
+        const sd = spotRank(a) - spotRank(b);
+        if (sd !== 0) return sd;
         const aOnBoard = a.kanbanColumn ? 0 : 1;
         const bOnBoard = b.kanbanColumn ? 0 : 1;
         if (aOnBoard !== bOnBoard) return aOnBoard - bOnBoard;
@@ -410,6 +532,7 @@ function createListItem(task) {
     const row = document.createElement('div');
     row.className = 'list-item';
     if (task.priority) row.classList.add('priority-' + task.priority);
+    if (task.spotlight) row.classList.add('spotlight');
     if (task.status === 'complete') row.classList.add('completed');
     if (task.status === 'wont-do') row.classList.add('wont-do');
     row.dataset.taskId = task.id;
@@ -440,11 +563,24 @@ function createListItem(task) {
 
     const title = document.createElement('span');
     title.className = 'list-item-title';
-    title.textContent = task.title;
+    if (task.spotlight) {
+        const star = document.createElement('span');
+        star.className = 'spotlight-star';
+        star.textContent = '★ ';
+        title.appendChild(star);
+    }
+    title.appendChild(document.createTextNode(task.title));
     body.appendChild(title);
 
     const chips = document.createElement('div');
     chips.className = 'list-item-chips';
+
+    if (needsReview(task)) {
+        const nw = document.createElement('span');
+        nw.className = 'chip chip-new';
+        nw.textContent = 'New';
+        chips.appendChild(nw);
+    }
 
     const theme = getTheme(task.themeId);
     if (theme) {
@@ -620,7 +756,12 @@ function renderBoard() {
         });
 
         tasks
-            .sort((a,b) => { const pd = prioRank(a) - prioRank(b); return pd !== 0 ? pd : (a.title||'').localeCompare(b.title||''); })
+            .sort((a,b) => {
+                const sd = spotRank(a) - spotRank(b);
+                if (sd !== 0) return sd;
+                const pd = prioRank(a) - prioRank(b);
+                return pd !== 0 ? pd : (a.title||'').localeCompare(b.title||'');
+            })
             .forEach(t => cards.appendChild(createBoardCard(t)));
         colEl.appendChild(cards);
 
@@ -637,20 +778,27 @@ function createBoardCard(task) {
     const card = document.createElement('div');
     card.className = 'board-card';
     if (task.status === 'complete') card.classList.add('completed');
+    if (task.spotlight) card.classList.add('spotlight');
     card.draggable = true;
     card.dataset.taskId = task.id;
     card.addEventListener('dragstart', e => { draggedId = task.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
     card.addEventListener('dragend', () => card.classList.remove('dragging'));
     card.addEventListener('click', () => openTaskModal(task.id));
 
-    if (task.priority) {
+    if (task.priority && !task.spotlight) {
         const bar = document.createElement('div');
         bar.className = 'board-card-priority ' + task.priority;
         card.appendChild(bar);
     }
     const title = document.createElement('div');
     title.className = 'board-card-title';
-    title.textContent = task.title;
+    if (task.spotlight) {
+        const star = document.createElement('span');
+        star.className = 'spotlight-star';
+        star.textContent = '★ ';
+        title.appendChild(star);
+    }
+    title.appendChild(document.createTextNode(task.title));
     card.appendChild(title);
 
     const footer = document.createElement('div');
@@ -842,6 +990,10 @@ function createTask(data) {
         completedDate: null,
         recurring: data.recurring || null,
         runCount: data.runCount || 0,
+        spotlight: data.spotlight || false,
+        // Items captured straight to the list start unreviewed; anything
+        // created already on the board counts as triaged
+        reviewed: data.reviewed || !!data.kanbanColumn,
         updatedAt: Date.now(),
     };
 }
@@ -923,11 +1075,11 @@ function spawnRecurring(completedTask) {
 }
 
 function moveToColumn(id, col) {
-    updateTask(id, { kanbanColumn: col });
+    updateTask(id, { kanbanColumn: col, reviewed: true });
 }
 
 function moveToKanban(id) {
-    updateTask(id, { kanbanColumn: defaultBacklogCol() });
+    updateTask(id, { kanbanColumn: defaultBacklogCol(), reviewed: true });
 }
 
 function backToList(id) {
@@ -935,7 +1087,16 @@ function backToList(id) {
 }
 
 function markWontDo(id) {
-    updateTask(id, { status: 'wont-do', kanbanColumn: null });
+    updateTask(id, { status: 'wont-do', kanbanColumn: null, reviewed: true });
+}
+
+function toggleSpotlight(id) {
+    const t = state.tasks.find(x => x.id === id);
+    if (t) updateTask(id, { spotlight: !t.spotlight });
+}
+
+function markReviewed(id) {
+    updateTask(id, { reviewed: true });
 }
 
 function archiveCompleted() {
@@ -1293,6 +1454,8 @@ function openContextMenu(e, taskId) {
     }
     menu.querySelector('[data-action="snooze"]').style.display = isSnoozed(task) ? 'none' : '';
     menu.querySelector('[data-action="unsnooze"]').style.display = isSnoozed(task) ? '' : 'none';
+    menu.querySelector('[data-action="spotlight"]').style.display = task.spotlight ? 'none' : '';
+    menu.querySelector('[data-action="unspotlight"]').style.display = task.spotlight ? '' : 'none';
     menu.style.display = 'block';
     let top = e.clientY + 4, left = e.clientX;
     if (left + 190 > window.innerWidth) left = window.innerWidth - 195;
@@ -1306,7 +1469,7 @@ function hideContextMenu() {
 }
 
 function snoozeTask(id, until) {
-    updateTask(id, { snoozedUntil: until, kanbanColumn: null });
+    updateTask(id, { snoozedUntil: until, kanbanColumn: null, reviewed: true });
 }
 
 function applySnooze(until) {
@@ -1499,6 +1662,7 @@ function init() {
         else if (action === 'move-to') { openMoveToModal(ctxTaskId); }
         else if (action === 'snooze') { openSnoozeModal(ctxTaskId); }
         else if (action === 'unsnooze') updateTask(ctxTaskId, { snoozedUntil: '' });
+        else if (action === 'spotlight' || action === 'unspotlight') toggleSpotlight(ctxTaskId);
         else if (action === 'from-kanban') backToList(ctxTaskId);
         else if (action === 'complete') completeTask(ctxTaskId);
         else if (action === 'wont-do') markWontDo(ctxTaskId);
@@ -1565,6 +1729,15 @@ function init() {
     document.getElementById('move-to-close').addEventListener('click', () => document.getElementById('move-to-modal').style.display = 'none');
     document.getElementById('move-to-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
 
+    // Review modal
+    document.getElementById('review-close').addEventListener('click', closeReviewModal);
+    document.getElementById('review-done').addEventListener('click', closeReviewModal);
+    document.getElementById('review-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeReviewModal(); });
+    document.getElementById('review-keep-all').addEventListener('click', () => {
+        reviewQueue().forEach(t => markReviewed(t.id));
+        closeReviewModal();
+    });
+
     // Snooze modal
     document.getElementById('snooze-close').addEventListener('click', closeSnoozeModal);
     document.getElementById('snooze-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeSnoozeModal(); });
@@ -1576,7 +1749,7 @@ function init() {
     // Escape key
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
-            closeTaskModal(); closeThemeModal(); hideContextMenu(); closeSnoozeModal();
+            closeTaskModal(); closeThemeModal(); hideContextMenu(); closeSnoozeModal(); closeReviewModal();
             document.getElementById('settings-modal').style.display = 'none';
             document.getElementById('theme-edit-modal').style.display = 'none';
             document.getElementById('move-to-modal').style.display = 'none';

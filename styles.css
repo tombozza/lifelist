@@ -165,6 +165,53 @@ main { margin:0 auto; padding:20px; }
 .chip-snoozed { background:rgba(142,142,147,0.15); color:var(--text-2); }
 .chip-stale { background:rgba(255,149,0,0.12); color:#b86800; }
 [data-theme="dark"] .chip-stale { color:#ffb340; }
+.chip-new { background:var(--accent); color:#fff; }
+
+/* ---- Spotlight ---- */
+.spotlight-star { color:#ffb800; }
+.list-item.spotlight {
+    border-left-color:#ffb800;
+    background:linear-gradient(90deg, rgba(255,184,0,0.10), var(--bg-card) 60%);
+    box-shadow:0 0 0 1px rgba(255,184,0,0.35);
+}
+.list-item.spotlight .list-item-title { font-weight:700; }
+.board-card.spotlight {
+    border:1px solid #ffb800;
+    box-shadow:0 0 0 1px rgba(255,184,0,0.5), 0 2px 10px rgba(255,184,0,0.25);
+    background:linear-gradient(180deg, rgba(255,184,0,0.10), var(--bg-card) 55%);
+}
+.board-card.spotlight .board-card-title { font-weight:700; }
+.ctx-spotlight { color:#c98a00 !important; font-weight:600; }
+[data-theme="dark"] .ctx-spotlight { color:#ffc62e !important; }
+
+/* ---- Review banner ---- */
+.review-banner {
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:11px 14px; margin-bottom:12px;
+    background:rgba(0,122,255,0.08); border:1px solid rgba(0,122,255,0.25);
+    border-radius:var(--r-sm); font-size:13px; color:var(--text);
+}
+.review-banner-text { display:flex; align-items:center; gap:8px; flex:1; min-width:200px; line-height:1.4; }
+.review-banner-text svg { color:var(--accent); flex-shrink:0; }
+.review-banner-text strong { font-weight:700; }
+.review-banner-actions { display:flex; align-items:center; gap:6px; margin-left:auto; }
+.review-banner .review-banner-dismiss { padding:6px 10px; font-size:16px; line-height:1; border-color:transparent; }
+
+/* ---- Review modal ---- */
+.review-intro { font-size:12px; color:var(--text-2); margin-bottom:12px; line-height:1.4; }
+.review-list { display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow-y:auto; }
+.review-empty { text-align:center; padding:24px; color:var(--text-3); font-size:14px; }
+.review-row {
+    display:flex; align-items:center; gap:10px; padding:10px 12px;
+    border:1px solid var(--border-light); border-radius:var(--r-sm); background:var(--bg-input);
+}
+.review-row-info { flex:1; min-width:0; }
+.review-row-title { font-size:14px; font-weight:600; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.review-row-title:hover { color:var(--accent); }
+.review-row-meta { display:flex; align-items:center; gap:6px; margin-top:4px; }
+.review-row-age { font-size:11px; color:var(--text-3); }
+.review-row-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.review-keep-btn { padding:6px 12px; }
 
 /* ---- Stale suggestion banner ---- */
 .stale-banner {
