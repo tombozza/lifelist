@@ -106,6 +106,14 @@ main { margin:0 auto; padding:20px; }
 .filter-clear-btn { padding:5px 14px; background:var(--accent); color:#fff; border:none; border-radius:var(--r-sm); font-size:12px; font-weight:600; cursor:pointer; margin-left:auto; }
 .filter-clear-btn:hover { background:var(--accent-hover); }
 
+/* Filter controls flow inline in the toolbar on desktop; on mobile they move
+   into a modal opened by the Filters button */
+.filter-controls { display:contents; }
+.filters-btn { display:none; align-items:center; gap:6px; }
+.filters-btn.has-active { border-color:var(--accent); color:var(--accent); }
+#filter-modal-body .filter-controls { display:flex; flex-direction:column; gap:12px; }
+#filter-modal-body .filter-select { width:100%; font-size:16px; padding:11px 12px; }
+
 /* ---- Bulk Action Bar ---- */
 .bulk-action-bar {
     display:flex; align-items:center; gap:10px;
@@ -125,6 +133,11 @@ main { margin:0 auto; padding:20px; }
 }
 .theme-tab:hover { color:var(--text); border-color:var(--border); }
 .theme-tab.active { color:#fff; border-color:transparent; }
+/* Quick-toggle chips: coloured dot + strike-through when muted (off) */
+.theme-tab-toggle { display:inline-flex; align-items:center; gap:7px; color:var(--text); border-color:var(--border-light); }
+.theme-tab-toggle .tt-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.theme-tab-toggle.muted { opacity:0.45; text-decoration:line-through; }
+.theme-tab-toggle.muted .tt-dot { text-decoration:none; }
 
 /* ---- Lists Content ---- */
 .lists-content { }
@@ -471,15 +484,12 @@ main { margin:0 auto; padding:20px; }
     main { padding:10px; }
     #fab { bottom:20px; right:16px; width:52px; height:52px; }
     .lists-toolbar { flex-direction:column; align-items:stretch; }
-    /* Filters: search full-width, then an even 2-column grid of selects */
-    .lists-toolbar-left { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-    .search-wrap { grid-column:1 / -1; }
+    /* Filters collapse behind a button; only search + Filters button show */
+    .lists-toolbar-left { display:flex; align-items:center; gap:8px; }
+    .search-wrap { flex:1; }
     .search-wrap input { width:100%; box-sizing:border-box; }
-    .filter-select { width:100%; font-size:16px; padding:9px 10px; min-width:0;
-        -webkit-appearance:none; appearance:none;
-        background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
-        background-repeat:no-repeat; background-position:right 10px center; padding-right:28px;
-    }
+    .lists-toolbar-left #filter-controls { display:none; }
+    .filters-btn { display:inline-flex; white-space:nowrap; flex-shrink:0; }
     .lists-toolbar-right { display:flex; }
     .lists-toolbar-right #bulk-select-btn { width:100%; }
     /* 16px inputs stop iOS from auto-zooming (and never zooming back) on focus */

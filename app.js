@@ -119,6 +119,7 @@ function loadState() {
             if (!p.archive) p.archive = [];
             if (!p.completionLog) p.completionLog = {};
             if (!p.settings) p.settings = { theme:'light' };
+            if (!p.settings.mutedThemes) p.settings.mutedThemes = [];
             if (!p.deletedIds) p.deletedIds = [];
             if (!p.themesUpdatedAt) p.themesUpdatedAt = 0;
             migrateColumns(p.tasks);
@@ -267,10 +268,22 @@ function hiddenThemeIds() {
     return new Set(state.themes.filter(t => t.hidden).map(t => t.id));
 }
 
+// Per-device "muted" themes — quick-toggled off on the Board
+function mutedThemeIds() { return new Set(state.settings.mutedThemes || []); }
+
+function toggleThemeMute(id) {
+    const list = state.settings.mutedThemes || (state.settings.mutedThemes = []);
+    const i = list.indexOf(id);
+    if (i >= 0) list.splice(i, 1); else list.push(id);
+    saveState();
+    renderBoard();
+}
+
 function renderLists() {
     const cur = getTheme(currentThemeTab);
     if (currentThemeTab !== 'all' && (!cur || (cur.hidden && !state.settings.showHidden))) currentThemeTab = 'all';
     renderFilterStatus();
+    updateFiltersButton();
     renderReviewBanner();
     renderStaleBanner();
     renderThemeTabs();
@@ -317,6 +330,37 @@ function renderFilterStatus() {
     clear.textContent = 'Clear';
     clear.addEventListener('click', clearListFilters);
     bar.appendChild(clear);
+}
+
+function activeFilterCount() {
+    let n = 0;
+    if (currentFilters.search) n++;
+    if (currentFilters.priority) n++;
+    if (currentFilters.size) n++;
+    if (currentFilters.age) n++;
+    if (currentFilters.status && currentFilters.status !== 'active') n++;
+    if (currentSort !== 'priority') n++;
+    return n;
+}
+
+function updateFiltersButton() {
+    const n = activeFilterCount();
+    const label = document.getElementById('filters-btn-label');
+    if (label) label.textContent = n ? `Filters & sort (${n})` : 'Filters & sort';
+    document.getElementById('open-filters').classList.toggle('has-active', n > 0);
+}
+
+// On mobile the filter controls live inside a modal; move the real elements
+// in/out so there's a single source of truth (no duplicated state to sync).
+function openFilterModal() {
+    document.getElementById('filter-modal-body').appendChild(document.getElementById('filter-controls'));
+    document.getElementById('filter-modal').style.display = 'flex';
+}
+
+function closeFilterModal() {
+    // Return the controls to the toolbar
+    document.querySelector('.lists-toolbar-left').appendChild(document.getElementById('filter-controls'));
+    document.getElementById('filter-modal').style.display = 'none';
 }
 
 function reviewQueue() {
@@ -772,7 +816,19 @@ function renderBoardFilter() {
     allBtn.addEventListener('click', () => { boardThemeFilter.clear(); renderBoard(); });
     container.appendChild(allBtn);
 
+    const muted = mutedThemeIds();
     [...visibleThemes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
+        if (theme.quickToggle) {
+            // Quick-toggle chip: mutes/shows this theme's cards on the board
+            const btn = document.createElement('button');
+            const isMuted = muted.has(theme.id);
+            btn.className = 'theme-tab theme-tab-toggle' + (isMuted ? ' muted' : '');
+            btn.innerHTML = `<span class="tt-dot" style="background:${theme.color}"></span>${theme.name}`;
+            btn.title = isMuted ? 'Show ' + theme.name : 'Hide ' + theme.name;
+            btn.addEventListener('click', () => toggleThemeMute(theme.id));
+            container.appendChild(btn);
+            return;
+        }
         const btn = document.createElement('button');
         const active = boardThemeFilter.has(theme.id);
         btn.className = 'theme-tab' + (active ? ' active' : '');
@@ -795,12 +851,14 @@ function renderBoard() {
     const weekStats = getWeekStats();
     const hidden = hiddenThemeIds();
     const weekendHidden = weekendHiddenThemeIds();
+    const muted = mutedThemeIds();
 
     boardColumns().forEach(col => {
         const tasks = state.tasks.filter(t =>
             t.kanbanColumn === col.id && t.status !== 'wont-do'
             && !hidden.has(t.themeId) && !weekendHidden.has(t.themeId)
-            && (boardThemeFilter.size === 0 || boardThemeFilter.has(t.themeId)));
+            // Include-filter takes precedence; otherwise hide muted themes
+            && (boardThemeFilter.size === 0 ? !muted.has(t.themeId) : boardThemeFilter.has(t.themeId)));
         const colEl = document.createElement('div');
         colEl.className = 'board-col';
         colEl.dataset.col = col.id;
@@ -1465,6 +1523,7 @@ function openThemeModal(themeId) {
         document.getElementById('theme-edit-subthemes').value = (theme.subThemes||[]).join('\n');
         document.getElementById('theme-edit-hidden').checked = !!theme.hidden;
         document.getElementById('theme-edit-hide-weekend').checked = !!theme.hideWeekend;
+        document.getElementById('theme-edit-toggle-chip').checked = !!theme.quickToggle;
     } else {
         document.getElementById('theme-edit-name').value = '';
         document.getElementById('theme-edit-color').value = '#007AFF';
@@ -1472,6 +1531,7 @@ function openThemeModal(themeId) {
         document.getElementById('theme-edit-subthemes').value = '';
         document.getElementById('theme-edit-hidden').checked = false;
         document.getElementById('theme-edit-hide-weekend').checked = false;
+        document.getElementById('theme-edit-toggle-chip').checked = false;
     }
     modal.style.display = 'flex';
 }
@@ -1488,12 +1548,13 @@ function saveThemeModal() {
     const subThemes = document.getElementById('theme-edit-subthemes').value.split('\n').map(s=>s.trim()).filter(Boolean);
     const hidden = document.getElementById('theme-edit-hidden').checked;
     const hideWeekend = document.getElementById('theme-edit-hide-weekend').checked;
+    const quickToggle = document.getElementById('theme-edit-toggle-chip').checked;
     if (editingThemeId) {
         const theme = getTheme(editingThemeId);
-        if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; theme.hidden = hidden; theme.hideWeekend = hideWeekend; }
+        if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; theme.hidden = hidden; theme.hideWeekend = hideWeekend; theme.quickToggle = quickToggle; }
     } else {
         const id = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') + '-' + genId().slice(0,4);
-        state.themes.push({ id, name, color, subThemes, hidden, hideWeekend });
+        state.themes.push({ id, name, color, subThemes, hidden, hideWeekend, quickToggle });
     }
     state.themesUpdatedAt = Date.now();
     saveState();
@@ -1821,6 +1882,13 @@ function init() {
         closeReviewModal();
     });
 
+    // Filter modal (mobile)
+    document.getElementById('open-filters').addEventListener('click', openFilterModal);
+    document.getElementById('filter-modal-close').addEventListener('click', closeFilterModal);
+    document.getElementById('filter-modal-done').addEventListener('click', closeFilterModal);
+    document.getElementById('filter-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeFilterModal(); });
+    document.getElementById('filter-modal-clear').addEventListener('click', clearListFilters);
+
     // Snooze modal
     document.getElementById('snooze-close').addEventListener('click', closeSnoozeModal);
     document.getElementById('snooze-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeSnoozeModal(); });
@@ -1833,6 +1901,7 @@ function init() {
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
             closeTaskModal(); closeThemeModal(); hideContextMenu(); closeSnoozeModal(); closeReviewModal();
+            if (document.getElementById('filter-modal').style.display === 'flex') closeFilterModal();
             document.getElementById('settings-modal').style.display = 'none';
             document.getElementById('theme-edit-modal').style.display = 'none';
             document.getElementById('move-to-modal').style.display = 'none';

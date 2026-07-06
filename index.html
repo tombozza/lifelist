@@ -40,6 +40,11 @@
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                     <input type="text" id="list-search" placeholder="Search…">
                 </div>
+                <button class="btn-ghost filters-btn" id="open-filters">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <span id="filters-btn-label">Filters &amp; sort</span>
+                </button>
+                <div id="filter-controls" class="filter-controls">
                 <select id="list-filter-priority" class="filter-select">
                     <option value="">All Priorities</option>
                     <option value="high">High</option>
@@ -73,6 +78,7 @@
                     <option value="date">Sort: Date added</option>
                     <option value="points">Sort: Points</option>
                 </select>
+                </div>
             </div>
             <div class="lists-toolbar-right">
                 <button class="btn-ghost" id="bulk-select-btn">Select</button>
@@ -328,6 +334,16 @@
                 </label>
                 <div class="form-hint">This theme's cards are hidden from the Board on Saturdays and Sundays</div>
             </div>
+            <div class="form-group">
+                <label class="toggle-row">
+                    <span class="form-label" style="margin:0">Quick-toggle chip on board</span>
+                    <label class="switch">
+                        <input type="checkbox" id="theme-edit-toggle-chip">
+                        <span class="switch-track"></span>
+                    </label>
+                </label>
+                <div class="form-hint">Adds a chip on the Board to quickly mute/show this theme (e.g. hide Work in the evening). Per-device.</div>
+            </div>
         </div>
         <div class="modal-footer">
             <button class="btn-danger-ghost" id="theme-edit-delete" style="display:none;">Delete</button>
@@ -387,6 +403,23 @@
             <div class="sync-info-box">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                 Syncing across devices
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ FILTER MODAL (mobile) ============ -->
+<div id="filter-modal" class="modal-overlay" style="display:none;">
+    <div class="modal modal-small">
+        <div class="modal-header">
+            <h3>Filters &amp; sort</h3>
+            <button class="icon-btn modal-close" id="filter-modal-close">&times;</button>
+        </div>
+        <div class="modal-body" id="filter-modal-body"><!-- #filter-controls is moved here on mobile --></div>
+        <div class="modal-footer">
+            <button class="btn-ghost" id="filter-modal-clear">Clear all</button>
+            <div class="modal-footer-right">
+                <button class="btn-primary" id="filter-modal-done">Done</button>
             </div>
         </div>
     </div>
