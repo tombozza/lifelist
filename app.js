@@ -214,6 +214,15 @@ function weekendHiddenThemeIds() {
 
 function themeColor(id) { const t = getTheme(id); return t ? t.color : '#8e8e93'; }
 
+// Pick black or white text for legibility on a given background colour
+function contrastText(hex) {
+    if (!hex || hex[0] !== '#' || hex.length < 7) return '#fff';
+    const r = parseInt(hex.substr(1,2),16), g = parseInt(hex.substr(3,2),16), b = parseInt(hex.substr(5,2),16);
+    // Perceived luminance (0–1); light backgrounds get dark text
+    const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+    return lum > 0.6 ? '#1d1d1f' : '#fff';
+}
+
 function calcNextRecurring(recurring, fromDate) {
     const d = new Date(fromDate + 'T00:00:00');
     if (recurring.type === 'daily') {
@@ -261,10 +270,53 @@ function hiddenThemeIds() {
 function renderLists() {
     const cur = getTheme(currentThemeTab);
     if (currentThemeTab !== 'all' && (!cur || (cur.hidden && !state.settings.showHidden))) currentThemeTab = 'all';
+    renderFilterStatus();
     renderReviewBanner();
     renderStaleBanner();
     renderThemeTabs();
     renderListContent();
+}
+
+function filtersActive() {
+    return !!(currentFilters.priority || currentFilters.size || currentFilters.age || currentFilters.search
+        || (currentFilters.status && currentFilters.status !== 'active'));
+}
+
+function clearListFilters() {
+    currentFilters.priority = ''; currentFilters.size = ''; currentFilters.age = '';
+    currentFilters.search = ''; currentFilters.status = 'active';
+    document.getElementById('list-filter-priority').value = '';
+    document.getElementById('list-filter-size').value = '';
+    document.getElementById('list-filter-age').value = '';
+    document.getElementById('list-filter-status').value = 'active';
+    document.getElementById('list-search').value = '';
+    staleBannerDismissed = false;
+    renderLists();
+}
+
+function renderFilterStatus() {
+    const bar = document.getElementById('filter-status');
+    if (!filtersActive()) { bar.style.display = 'none'; return; }
+    const parts = [];
+    if (currentFilters.search) parts.push('“' + currentFilters.search + '”');
+    if (currentFilters.priority) parts.push(currentFilters.priority[0].toUpperCase() + currentFilters.priority.slice(1) + ' priority');
+    if (currentFilters.size) parts.push('Size ' + currentFilters.size.toUpperCase());
+    if (currentFilters.status && currentFilters.status !== 'active') parts.push(currentFilters.status === 'complete' ? 'Completed' : 'Incl. done');
+    if (currentFilters.age) {
+        const m = { '7':'In list 1+ week', '14':'In list 2+ weeks', '30':'In list 1+ month', '90':'In list 3+ months' };
+        parts.push(m[currentFilters.age] || ('In list ' + currentFilters.age + '+ days'));
+    }
+    bar.style.display = 'flex';
+    bar.innerHTML = '';
+    const label = document.createElement('span');
+    label.className = 'filter-status-label';
+    label.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> ' + parts.join(' · ');
+    bar.appendChild(label);
+    const clear = document.createElement('button');
+    clear.className = 'filter-clear-btn';
+    clear.textContent = 'Clear';
+    clear.addEventListener('click', clearListFilters);
+    bar.appendChild(clear);
 }
 
 function reviewQueue() {
@@ -336,6 +388,7 @@ function renderReviewList() {
             const tc = document.createElement('span');
             tc.className = 'chip chip-theme';
             tc.style.background = theme.color;
+            tc.style.color = contrastText(theme.color);
             tc.textContent = theme.name;
             meta.appendChild(tc);
         }
@@ -420,7 +473,7 @@ function renderThemeTabs() {
         const btn = document.createElement('button');
         btn.className = 'theme-tab' + (currentThemeTab === theme.id ? ' active' : '');
         btn.textContent = theme.name;
-        if (currentThemeTab === theme.id) btn.style.background = theme.color;
+        if (currentThemeTab === theme.id) { btn.style.background = theme.color; btn.style.color = contrastText(theme.color); }
         btn.addEventListener('click', () => { currentThemeTab = theme.id; renderLists(); });
         container.appendChild(btn);
     });
@@ -463,6 +516,13 @@ function chosenSortCompare(a, b) {
     return (a.title || '').localeCompare(b.title || '');
 }
 
+// Tier within a theme group: on-board first, then off-board, then plain list
+function tierRank(t) {
+    if (t.kanbanColumn) return 0;
+    if (t.offKanban) return 1;
+    return 2;
+}
+
 function sortKanbanFirst(tasks) {
     const colIndex = {};
     boardColumns().forEach((c, i) => colIndex[c.id] = i);
@@ -470,10 +530,10 @@ function sortKanbanFirst(tasks) {
         // Spotlight floats to the very top of its theme group
         const sd = spotRank(a) - spotRank(b);
         if (sd !== 0) return sd;
-        const aOnBoard = a.kanbanColumn ? 0 : 1;
-        const bOnBoard = b.kanbanColumn ? 0 : 1;
-        if (aOnBoard !== bOnBoard) return aOnBoard - bOnBoard;
-        if (aOnBoard === 0 && bOnBoard === 0) {
+        const td = tierRank(a) - tierRank(b);
+        if (td !== 0) return td;
+        // Within the on-board tier, order by kanban column
+        if (a.kanbanColumn && b.kanbanColumn) {
             const colDiff = (colIndex[a.kanbanColumn] ?? 99) - (colIndex[b.kanbanColumn] ?? 99);
             if (colDiff !== 0) return colDiff;
         }
@@ -540,6 +600,7 @@ function createListItem(task) {
     row.className = 'list-item';
     if (task.priority) row.classList.add('priority-' + task.priority);
     if (task.spotlight) row.classList.add('spotlight');
+    if (task.offKanban && !task.kanbanColumn) row.classList.add('off-kanban');
     if (task.status === 'complete') row.classList.add('completed');
     if (task.status === 'wont-do') row.classList.add('wont-do');
     row.dataset.taskId = task.id;
@@ -588,12 +649,19 @@ function createListItem(task) {
         nw.textContent = 'New';
         chips.appendChild(nw);
     }
+    if (task.offKanban && !task.kanbanColumn) {
+        const ok = document.createElement('span');
+        ok.className = 'chip chip-offkanban';
+        ok.textContent = 'Off board';
+        chips.appendChild(ok);
+    }
 
     const theme = getTheme(task.themeId);
     if (theme) {
         const tc = document.createElement('span');
         tc.className = 'chip chip-theme';
         tc.style.background = theme.color;
+        tc.style.color = contrastText(theme.color);
         tc.textContent = theme.name;
         chips.appendChild(tc);
     }
@@ -709,7 +777,7 @@ function renderBoardFilter() {
         const active = boardThemeFilter.has(theme.id);
         btn.className = 'theme-tab' + (active ? ' active' : '');
         btn.textContent = theme.name;
-        if (active) btn.style.background = theme.color;
+        if (active) { btn.style.background = theme.color; btn.style.color = contrastText(theme.color); }
         btn.addEventListener('click', () => {
             if (boardThemeFilter.has(theme.id)) boardThemeFilter.delete(theme.id);
             else boardThemeFilter.add(theme.id);
@@ -815,6 +883,7 @@ function createBoardCard(task) {
         const tc = document.createElement('span');
         tc.className = 'chip chip-theme';
         tc.style.background = theme.color;
+        tc.style.color = contrastText(theme.color);
         tc.textContent = theme.name;
         footer.appendChild(tc);
     }
@@ -937,7 +1006,7 @@ function renderAdminArchive(container) {
             const tr = document.createElement('div');
             tr.className = 'archive-task-row';
             tr.innerHTML = `
-                ${th ? `<span class="chip chip-theme" style="background:${th.color}">${th.name}</span>` : ''}
+                ${th ? `<span class="chip chip-theme" style="background:${th.color};color:${contrastText(th.color)}">${th.name}</span>` : ''}
                 <span style="flex:1">${t.title}</span>
                 ${t.size ? `<span class="chip chip-size">${t.size.toUpperCase()}</span>` : ''}
                 ${t.size ? `<span class="chip chip-size">${t.size.toUpperCase()}</span>` : ''}
@@ -1089,15 +1158,21 @@ function spawnRecurring(completedTask) {
 }
 
 function moveToColumn(id, col) {
-    updateTask(id, { kanbanColumn: col, reviewed: true });
+    updateTask(id, { kanbanColumn: col, reviewed: true, offKanban: false });
 }
 
 function moveToKanban(id) {
-    updateTask(id, { kanbanColumn: defaultBacklogCol(), reviewed: true });
+    updateTask(id, { kanbanColumn: defaultBacklogCol(), reviewed: true, offKanban: false });
 }
 
+// Taken off the board — lands in the "Off board" tier of its themed list
 function backToList(id) {
-    updateTask(id, { kanbanColumn: null });
+    updateTask(id, { kanbanColumn: null, offKanban: true });
+}
+
+// Demote an off-board item all the way back into the normal themed list
+function moveToThemedList(id) {
+    updateTask(id, { kanbanColumn: null, offKanban: false });
 }
 
 function markWontDo(id) {
@@ -1248,6 +1323,7 @@ function renderThemePicker() {
         btn.type = 'button';
         btn.className = 'theme-pick-btn' + (modalThemeId === theme.id ? ' active' : '');
         btn.style.background = theme.color;
+        btn.style.color = contrastText(theme.color);
         btn.textContent = theme.name + (theme.hidden ? ' 🕶' : '');
         btn.addEventListener('click', () => {
             modalThemeId = theme.id;
@@ -1445,14 +1521,18 @@ function openContextMenu(e, taskId) {
     const toKanban = menu.querySelector('[data-action="to-kanban"]');
     const moveTo = menu.querySelector('[data-action="move-to"]');
     const fromKanban = menu.querySelector('[data-action="from-kanban"]');
+    const toList = menu.querySelector('[data-action="to-list"]');
+    const offBoard = !task.kanbanColumn && task.offKanban;
     if (task.kanbanColumn) {
         toKanban.style.display = 'none';
         moveTo.style.display = '';
         fromKanban.style.display = '';
+        toList.style.display = 'none';
     } else {
         toKanban.style.display = '';
         moveTo.style.display = 'none';
         fromKanban.style.display = 'none';
+        toList.style.display = offBoard ? '' : 'none';
     }
     menu.querySelector('[data-action="snooze"]').style.display = isSnoozed(task) ? 'none' : '';
     menu.querySelector('[data-action="unsnooze"]').style.display = isSnoozed(task) ? '' : 'none';
@@ -1666,6 +1746,7 @@ function init() {
         else if (action === 'unsnooze') updateTask(ctxTaskId, { snoozedUntil: '' });
         else if (action === 'spotlight' || action === 'unspotlight') toggleSpotlight(ctxTaskId);
         else if (action === 'from-kanban') backToList(ctxTaskId);
+        else if (action === 'to-list') moveToThemedList(ctxTaskId);
         else if (action === 'complete') completeTask(ctxTaskId);
         else if (action === 'wont-do') markWontDo(ctxTaskId);
         else if (action === 'delete') { if(confirm('Delete this task?')) deleteTask(ctxTaskId); }

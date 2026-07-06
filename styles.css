@@ -94,6 +94,18 @@ main { margin:0 auto; padding:20px; }
 .filter-select { padding:6px 10px; border:1px solid var(--border-light); border-radius:var(--r-sm); font-size:13px; background:var(--bg-card); color:var(--text); cursor:pointer; }
 .filter-select:focus { outline:none; border-color:var(--accent); }
 
+/* ---- Active filter status bar ---- */
+.filter-status {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:8px 12px; margin-bottom:12px;
+    background:rgba(0,122,255,0.08); border:1px solid rgba(0,122,255,0.22);
+    border-radius:var(--r-sm); font-size:12px; color:var(--text);
+}
+.filter-status-label { display:flex; align-items:center; gap:7px; flex:1; min-width:140px; font-weight:500; }
+.filter-status-label svg { color:var(--accent); flex-shrink:0; }
+.filter-clear-btn { padding:5px 14px; background:var(--accent); color:#fff; border:none; border-radius:var(--r-sm); font-size:12px; font-weight:600; cursor:pointer; margin-left:auto; }
+.filter-clear-btn:hover { background:var(--accent-hover); }
+
 /* ---- Bulk Action Bar ---- */
 .bulk-action-bar {
     display:flex; align-items:center; gap:10px;
@@ -166,6 +178,8 @@ main { margin:0 auto; padding:20px; }
 .chip-stale { background:rgba(255,149,0,0.12); color:#b86800; }
 [data-theme="dark"] .chip-stale { color:#ffb340; }
 .chip-new { background:var(--accent); color:#fff; }
+.chip-offkanban { background:rgba(142,142,147,0.18); color:var(--text-2); text-transform:uppercase; font-size:9px; letter-spacing:0.4px; }
+.list-item.off-kanban { border-left-color:var(--text-3); background:linear-gradient(90deg, rgba(142,142,147,0.06), var(--bg-card) 40%); }
 
 /* ---- Spotlight ---- */
 .spotlight-star { color:#ffb800; }
@@ -457,9 +471,19 @@ main { margin:0 auto; padding:20px; }
     main { padding:10px; }
     #fab { bottom:20px; right:16px; width:52px; height:52px; }
     .lists-toolbar { flex-direction:column; align-items:stretch; }
-    .lists-toolbar-left { flex-wrap:wrap; }
-    .search-wrap input { width:100%; }
-    .filter-select { font-size:12px; padding:6px 6px; flex:1; min-width:0; }
+    /* Filters: search full-width, then an even 2-column grid of selects */
+    .lists-toolbar-left { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .search-wrap { grid-column:1 / -1; }
+    .search-wrap input { width:100%; box-sizing:border-box; }
+    .filter-select { width:100%; font-size:16px; padding:9px 10px; min-width:0;
+        -webkit-appearance:none; appearance:none;
+        background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+        background-repeat:no-repeat; background-position:right 10px center; padding-right:28px;
+    }
+    .lists-toolbar-right { display:flex; }
+    .lists-toolbar-right #bulk-select-btn { width:100%; }
+    /* 16px inputs stop iOS from auto-zooming (and never zooming back) on focus */
+    .form-input, .form-select, .form-textarea, .search-wrap input, .num-input, .form-select-sm { font-size:16px; }
     .board-columns { gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; scroll-snap-type:x mandatory; }
     .board-col { min-width:85vw; max-width:85vw; scroll-snap-align:start; flex-shrink:0; }
     .form-row { flex-direction:column; gap:0; }
