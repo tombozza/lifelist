@@ -844,25 +844,15 @@ function renderBoardFilter() {
 
     const muted = mutedThemeIds();
     [...visibleThemes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
-        if (theme.quickToggle) {
-            // Quick-toggle chip: an independent on/off toggle for this theme's
-            // cards. It dresses to match its neighbours so its look always
-            // means the same thing: plain like the others in All mode, filled
-            // with its colour alongside an include filter, and dimmed
-            // (disabled-looking) when its cards are hidden.
+        if (theme.quickToggle && boardThemeFilter.size === 0) {
+            // All mode only: the quick-toggle theme gets an on/off override
+            // chip — plain like its neighbours when on, dimmed/disabled when
+            // off. In include mode it falls through below and behaves exactly
+            // like any other chip (deselected/selectable).
             const isOn = !muted.has(theme.id);
-            const includeMode = boardThemeFilter.size > 0;
-            // In include mode an off toggle-theme is simply absent — the
-            // dimmed chip only shows in All mode, where it can be re-enabled
-            if (!isOn && includeMode) return;
             const btn = document.createElement('button');
             btn.className = 'theme-tab theme-tab-toggle' + (isOn ? '' : ' off');
             btn.textContent = theme.name;
-            if (isOn && includeMode) {
-                btn.classList.add('active');
-                btn.style.background = theme.color;
-                btn.style.color = contrastText(theme.color);
-            }
             btn.title = (isOn ? 'Hide ' : 'Show ') + theme.name + ' cards';
             btn.addEventListener('click', () => toggleThemeMute(theme.id));
             container.appendChild(btn);
@@ -898,12 +888,11 @@ function renderBoard() {
         const tasks = state.tasks.filter(t =>
             t.kanbanColumn === col.id && t.status !== 'wont-do'
             && !hidden.has(t.themeId) && !weekendHidden.has(t.themeId)
-            // Quick-toggle themes are governed solely by their own switch,
-            // independent of the All / include chips; other themes follow the
-            // normal include-filter rules
-            && (quickToggleIds.has(t.themeId)
-                ? !muted.has(t.themeId)
-                : (boardThemeFilter.size === 0 || boardThemeFilter.has(t.themeId))));
+            // Include mode is a plain include filter for every theme; in All
+            // mode everything shows except quick-toggle themes switched off
+            && (boardThemeFilter.size > 0
+                ? boardThemeFilter.has(t.themeId)
+                : !(quickToggleIds.has(t.themeId) && muted.has(t.themeId))));
         const colEl = document.createElement('div');
         colEl.className = 'board-col';
         colEl.dataset.col = col.id;
