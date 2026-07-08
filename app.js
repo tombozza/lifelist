@@ -120,6 +120,7 @@ function loadState() {
             if (!p.completionLog) p.completionLog = {};
             if (!p.settings) p.settings = { theme:'light' };
             if (!p.settings.mutedThemes) p.settings.mutedThemes = [];
+            if (!p.settings.reminderTime) p.settings.reminderTime = '09:00';
             if (!p.deletedIds) p.deletedIds = [];
             if (!p.themesUpdatedAt) p.themesUpdatedAt = 0;
             migrateColumns(p.tasks);
@@ -799,6 +800,31 @@ function createListItem(task) {
 
 // ---- BOARD ----
 
+// Daily "review your Lists" reminder: shows on the Board from the configured
+// time onward if the Lists page hasn't been opened yet today (per-device).
+function reminderDue() {
+    const s = state.settings;
+    if (!s.reminderEnabled) return false;
+    const today = todayStr();
+    if (s.lastListVisit === today) return false;
+    if (s.reminderSkipDate === today) return false;
+    if (s.reminderSnoozeUntil && Date.now() < s.reminderSnoozeUntil) return false;
+    const now = new Date();
+    const hhmm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    return hhmm >= (s.reminderTime || '09:00');
+}
+
+function renderListReminder() {
+    const banner = document.getElementById('list-reminder');
+    banner.style.display = (currentView === 'board' && reminderDue()) ? 'flex' : 'none';
+}
+
+function markListsVisited() {
+    state.settings.lastListVisit = todayStr();
+    saveState();
+    renderListReminder();
+}
+
 function renderBoardFilter() {
     const container = document.getElementById('board-filter');
     container.innerHTML = '';
@@ -819,12 +845,13 @@ function renderBoardFilter() {
     const muted = mutedThemeIds();
     [...visibleThemes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         if (theme.quickToggle) {
-            // Quick-toggle chip: mutes/shows this theme's cards on the board
+            // Quick-toggle chip: an independent on/off switch for this theme's
+            // cards, regardless of what the All / include chips are doing
             const btn = document.createElement('button');
-            const isMuted = muted.has(theme.id);
-            btn.className = 'theme-tab theme-tab-toggle' + (isMuted ? ' muted' : '');
-            btn.innerHTML = `<span class="tt-dot" style="background:${theme.color}"></span>${theme.name}`;
-            btn.title = isMuted ? 'Show ' + theme.name : 'Hide ' + theme.name;
+            const isOn = !muted.has(theme.id);
+            btn.className = 'theme-tab theme-tab-toggle' + (isOn ? '' : ' muted');
+            btn.innerHTML = `<span class="tt-dot" style="background:${theme.color}"></span>${theme.name}<span class="mini-switch${isOn ? ' on' : ''}"${isOn ? ` style="background:${theme.color}"` : ''}></span>`;
+            btn.title = (isOn ? 'Hide ' : 'Show ') + theme.name + ' cards';
             btn.addEventListener('click', () => toggleThemeMute(theme.id));
             container.appendChild(btn);
             return;
@@ -845,6 +872,7 @@ function renderBoardFilter() {
 
 function renderBoard() {
     document.getElementById('board-stats').innerHTML = '';
+    renderListReminder();
     renderBoardFilter();
     const container = document.getElementById('board-columns');
     container.innerHTML = '';
@@ -852,13 +880,18 @@ function renderBoard() {
     const hidden = hiddenThemeIds();
     const weekendHidden = weekendHiddenThemeIds();
     const muted = mutedThemeIds();
+    const quickToggleIds = new Set(state.themes.filter(t => t.quickToggle).map(t => t.id));
 
     boardColumns().forEach(col => {
         const tasks = state.tasks.filter(t =>
             t.kanbanColumn === col.id && t.status !== 'wont-do'
             && !hidden.has(t.themeId) && !weekendHidden.has(t.themeId)
-            // Include-filter takes precedence; otherwise hide muted themes
-            && (boardThemeFilter.size === 0 ? !muted.has(t.themeId) : boardThemeFilter.has(t.themeId)));
+            // Quick-toggle themes are governed solely by their own switch,
+            // independent of the All / include chips; other themes follow the
+            // normal include-filter rules
+            && (quickToggleIds.has(t.themeId)
+                ? !muted.has(t.themeId)
+                : (boardThemeFilter.size === 0 || boardThemeFilter.has(t.themeId))));
         const colEl = document.createElement('div');
         colEl.className = 'board-col';
         colEl.dataset.col = col.id;
@@ -1720,6 +1753,7 @@ function init() {
             currentView = tab.dataset.view;
             document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
             document.getElementById('view-'+currentView).classList.add('active');
+            if (currentView === 'lists') markListsVisited();
             render();
         });
     });
@@ -1858,6 +1892,9 @@ function init() {
     document.getElementById('settings-btn').addEventListener('click', () => {
         document.getElementById('settings-dark').checked = state.settings.theme === 'dark';
         document.getElementById('settings-show-hidden').checked = !!state.settings.showHidden;
+        document.getElementById('settings-reminder').checked = !!state.settings.reminderEnabled;
+        document.getElementById('settings-reminder-time').value = state.settings.reminderTime || '09:00';
+        document.getElementById('reminder-time-row').style.display = state.settings.reminderEnabled ? '' : 'none';
         document.getElementById('settings-modal').style.display = 'flex';
     });
     document.getElementById('settings-close').addEventListener('click', () => document.getElementById('settings-modal').style.display = 'none');
@@ -1868,6 +1905,31 @@ function init() {
     document.getElementById('settings-show-hidden').addEventListener('change', e => {
         state.settings.showHidden = e.target.checked; saveState(); render();
     });
+    document.getElementById('settings-reminder').addEventListener('change', e => {
+        state.settings.reminderEnabled = e.target.checked;
+        document.getElementById('reminder-time-row').style.display = e.target.checked ? '' : 'none';
+        saveState(); renderListReminder();
+    });
+    document.getElementById('settings-reminder-time').addEventListener('change', e => {
+        if (e.target.value) { state.settings.reminderTime = e.target.value; saveState(); renderListReminder(); }
+    });
+
+    // List review reminder banner (Board)
+    document.getElementById('reminder-open').addEventListener('click', () => {
+        [...document.querySelectorAll('.tab')].find(t => t.dataset.view === 'lists').click();
+    });
+    document.getElementById('reminder-snooze').addEventListener('click', () => {
+        state.settings.reminderSnoozeUntil = Date.now() + 3600000;
+        saveState(); renderListReminder();
+    });
+    document.getElementById('reminder-tomorrow').addEventListener('click', () => {
+        state.settings.reminderSkipDate = todayStr();
+        saveState(); renderListReminder();
+    });
+    // Surface the reminder while the app sits open on the Board (e.g. 9am
+    // rolls around, or a snooze lapses)
+    setInterval(renderListReminder, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) renderListReminder(); });
 
     // Move-to modal
     document.getElementById('move-to-close').addEventListener('click', () => document.getElementById('move-to-modal').style.display = 'none');

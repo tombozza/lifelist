@@ -109,6 +109,17 @@
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" class="view active">
         <div class="board-stats" id="board-stats"></div>
+        <div id="list-reminder" class="review-banner" style="display:none;">
+            <span class="review-banner-text">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                <span><strong>Time to review your Lists</strong> — you haven't checked them today.</span>
+            </span>
+            <div class="review-banner-actions">
+                <button class="btn-small" id="reminder-open">Review list</button>
+                <button class="btn-ghost" id="reminder-snooze">1 hr</button>
+                <button class="btn-ghost" id="reminder-tomorrow">Tomorrow</button>
+            </div>
+        </div>
         <div class="theme-tabs-scroll">
             <div class="theme-tabs" id="board-filter"></div>
         </div>
@@ -399,6 +410,20 @@
                     </label>
                 </label>
                 <div class="form-hint">Temporarily reveal themes marked as hidden in Lists and on the Board</div>
+            </div>
+            <div class="form-group">
+                <label class="toggle-row">
+                    <span class="form-label" style="margin:0">Daily list review reminder</span>
+                    <label class="switch">
+                        <input type="checkbox" id="settings-reminder">
+                        <span class="switch-track"></span>
+                    </label>
+                </label>
+                <div class="form-hint">Nudges you on the Board if you haven't checked Lists yet that day. This device only.</div>
+            </div>
+            <div class="form-group" id="reminder-time-row" style="display:none;">
+                <label class="form-label">Remind from</label>
+                <input type="time" id="settings-reminder-time" class="form-input" value="09:00">
             </div>
             <div class="sync-info-box">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
