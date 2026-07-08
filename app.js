@@ -69,7 +69,6 @@ let editingTaskId = null;
 let editingThemeId = null;
 let ctxTaskId = null;
 let draggedId = null;
-let boardThemeFilter = new Set();
 let snoozedExpanded = new Set();
 let snoozeTargetIds = null;
 let snoozeFromBulk = false;
@@ -828,46 +827,20 @@ function markListsVisited() {
 function renderBoardFilter() {
     const container = document.getElementById('board-filter');
     container.innerHTML = '';
-    // Drop filters for themes that no longer exist, are hidden, or are
-    // weekend-hidden right now
     const weekendHidden = weekendHiddenThemeIds();
     const visibleThemes = state.themes.filter(t => (!t.hidden || state.settings.showHidden) && !weekendHidden.has(t.id));
-    const valid = new Set(visibleThemes.map(t => t.id));
-    boardThemeFilter.forEach(id => { if (!valid.has(id)) boardThemeFilter.delete(id); });
-
-    const allBtn = document.createElement('button');
-    allBtn.className = 'theme-tab' + (boardThemeFilter.size === 0 ? ' active' : '');
-    allBtn.textContent = 'All';
-    if (boardThemeFilter.size === 0) allBtn.style.background = '#1d1d1f';
-    allBtn.addEventListener('click', () => { boardThemeFilter.clear(); renderBoard(); });
-    container.appendChild(allBtn);
-
     const muted = mutedThemeIds();
+
+    // Every theme is an on/off chip: filled with its colour when on, dimmed
+    // when off. No "All" chip — off chips simply hide that theme's cards.
     [...visibleThemes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
-        if (theme.quickToggle && boardThemeFilter.size === 0) {
-            // All mode only: the quick-toggle theme gets an on/off override
-            // chip — plain like its neighbours when on, dimmed/disabled when
-            // off. In include mode it falls through below and behaves exactly
-            // like any other chip (deselected/selectable).
-            const isOn = !muted.has(theme.id);
-            const btn = document.createElement('button');
-            btn.className = 'theme-tab theme-tab-toggle' + (isOn ? '' : ' off');
-            btn.textContent = theme.name;
-            btn.title = (isOn ? 'Hide ' : 'Show ') + theme.name + ' cards';
-            btn.addEventListener('click', () => toggleThemeMute(theme.id));
-            container.appendChild(btn);
-            return;
-        }
+        const isOn = !muted.has(theme.id);
         const btn = document.createElement('button');
-        const active = boardThemeFilter.has(theme.id);
-        btn.className = 'theme-tab' + (active ? ' active' : '');
+        btn.className = 'theme-tab theme-tab-toggle' + (isOn ? ' active' : ' off');
         btn.textContent = theme.name;
-        if (active) { btn.style.background = theme.color; btn.style.color = contrastText(theme.color); }
-        btn.addEventListener('click', () => {
-            if (boardThemeFilter.has(theme.id)) boardThemeFilter.delete(theme.id);
-            else boardThemeFilter.add(theme.id);
-            renderBoard();
-        });
+        if (isOn) { btn.style.background = theme.color; btn.style.color = contrastText(theme.color); }
+        btn.title = (isOn ? 'Hide ' : 'Show ') + theme.name + ' cards';
+        btn.addEventListener('click', () => toggleThemeMute(theme.id));
         container.appendChild(btn);
     });
 }
@@ -882,17 +855,12 @@ function renderBoard() {
     const hidden = hiddenThemeIds();
     const weekendHidden = weekendHiddenThemeIds();
     const muted = mutedThemeIds();
-    const quickToggleIds = new Set(state.themes.filter(t => t.quickToggle).map(t => t.id));
 
     boardColumns().forEach(col => {
         const tasks = state.tasks.filter(t =>
             t.kanbanColumn === col.id && t.status !== 'wont-do'
             && !hidden.has(t.themeId) && !weekendHidden.has(t.themeId)
-            // Include mode is a plain include filter for every theme; in All
-            // mode everything shows except quick-toggle themes switched off
-            && (boardThemeFilter.size > 0
-                ? boardThemeFilter.has(t.themeId)
-                : !(quickToggleIds.has(t.themeId) && muted.has(t.themeId))));
+            && !muted.has(t.themeId));
         const colEl = document.createElement('div');
         colEl.className = 'board-col';
         colEl.dataset.col = col.id;
@@ -1557,7 +1525,6 @@ function openThemeModal(themeId) {
         document.getElementById('theme-edit-subthemes').value = (theme.subThemes||[]).join('\n');
         document.getElementById('theme-edit-hidden').checked = !!theme.hidden;
         document.getElementById('theme-edit-hide-weekend').checked = !!theme.hideWeekend;
-        document.getElementById('theme-edit-toggle-chip').checked = !!theme.quickToggle;
     } else {
         document.getElementById('theme-edit-name').value = '';
         document.getElementById('theme-edit-color').value = '#007AFF';
@@ -1565,7 +1532,6 @@ function openThemeModal(themeId) {
         document.getElementById('theme-edit-subthemes').value = '';
         document.getElementById('theme-edit-hidden').checked = false;
         document.getElementById('theme-edit-hide-weekend').checked = false;
-        document.getElementById('theme-edit-toggle-chip').checked = false;
     }
     modal.style.display = 'flex';
 }
@@ -1582,13 +1548,12 @@ function saveThemeModal() {
     const subThemes = document.getElementById('theme-edit-subthemes').value.split('\n').map(s=>s.trim()).filter(Boolean);
     const hidden = document.getElementById('theme-edit-hidden').checked;
     const hideWeekend = document.getElementById('theme-edit-hide-weekend').checked;
-    const quickToggle = document.getElementById('theme-edit-toggle-chip').checked;
     if (editingThemeId) {
         const theme = getTheme(editingThemeId);
-        if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; theme.hidden = hidden; theme.hideWeekend = hideWeekend; theme.quickToggle = quickToggle; }
+        if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; theme.hidden = hidden; theme.hideWeekend = hideWeekend; }
     } else {
         const id = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') + '-' + genId().slice(0,4);
-        state.themes.push({ id, name, color, subThemes, hidden, hideWeekend, quickToggle });
+        state.themes.push({ id, name, color, subThemes, hidden, hideWeekend });
     }
     state.themesUpdatedAt = Date.now();
     saveState();
