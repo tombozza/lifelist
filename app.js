@@ -845,12 +845,21 @@ function renderBoardFilter() {
     const muted = mutedThemeIds();
     [...visibleThemes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         if (theme.quickToggle) {
-            // Quick-toggle chip: an independent on/off switch for this theme's
-            // cards, regardless of what the All / include chips are doing
+            // Quick-toggle chip: an independent on/off toggle for this theme's
+            // cards. It dresses to match its neighbours so its look always
+            // means the same thing: plain like the others in All mode, filled
+            // with its colour alongside an include filter, and dimmed
+            // (disabled-looking) when its cards are hidden.
             const btn = document.createElement('button');
             const isOn = !muted.has(theme.id);
-            btn.className = 'theme-tab theme-tab-toggle' + (isOn ? '' : ' muted');
-            btn.innerHTML = `<span class="tt-dot" style="background:${theme.color}"></span>${theme.name}<span class="mini-switch${isOn ? ' on' : ''}"${isOn ? ` style="background:${theme.color}"` : ''}></span>`;
+            const includeMode = boardThemeFilter.size > 0;
+            btn.className = 'theme-tab theme-tab-toggle' + (isOn ? '' : ' off');
+            btn.textContent = theme.name;
+            if (isOn && includeMode) {
+                btn.classList.add('active');
+                btn.style.background = theme.color;
+                btn.style.color = contrastText(theme.color);
+            }
             btn.title = (isOn ? 'Hide ' : 'Show ') + theme.name + ' cards';
             btn.addEventListener('click', () => toggleThemeMute(theme.id));
             container.appendChild(btn);
