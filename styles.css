@@ -239,8 +239,8 @@ main { margin:0 auto; padding:20px; }
 .review-row-title:hover { color:var(--accent); }
 .review-row-meta { display:flex; align-items:center; gap:6px; margin-top:4px; }
 .review-row-age { font-size:11px; color:var(--text-3); }
-.review-row-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-.review-keep-btn { padding:6px 12px; }
+.review-row-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; }
+.review-keep-btn, .review-edit-btn { padding:6px 12px; }
 
 /* ---- Stale suggestion banner ---- */
 .stale-banner {

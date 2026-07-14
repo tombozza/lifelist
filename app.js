@@ -62,6 +62,7 @@ let currentSort = 'priority';
 let currentFilters = { priority:'', size:'', status:'active', search:'', age:'' };
 let staleBannerDismissed = false;
 let reviewBannerDismissed = false;
+let reopenReviewAfterTask = false;
 let currentAdminTab = 'themes';
 let bulkMode = false;
 let selectedIds = new Set();
@@ -106,6 +107,9 @@ function migrateColumns(tasks) {
         // stops any device (even one on old cached code) from re-spawning them,
         // which is what kept duplicating recurring tasks.
         if (t.status === 'complete' && t.recurring) { t.recurring = null; t.recurringSpawned = true; }
+        // Give live recurring tasks a stable chain id so occurrence ids are
+        // deterministic across devices (prevents duplicate spawns)
+        if (t.recurring && !t.recurRoot) t.recurRoot = t.id;
     });
 }
 
@@ -252,6 +256,37 @@ function calcNextRecurring(recurring, fromDate) {
     }
     return toDateStr(d);
 }
+
+// Does a given date land on a recurrence's pattern? (weekly/monthly only)
+function matchesRecurrence(recurring, dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    if (recurring.type === 'weekly') {
+        return d.getDay() === (recurring.dayOfWeek !== undefined ? recurring.dayOfWeek : 1);
+    }
+    if (recurring.type === 'monthly') {
+        if (recurring.monthlyMode === 'date') return d.getDate() === (recurring.dayOfMonth || 1);
+        if (d.getDay() !== (recurring.dayOfWeek || 1)) return false;
+        const occ = Math.floor((d.getDate() - 1) / 7) + 1;
+        return occ === (recurring.weekOfMonth || 1);
+    }
+    return false;
+}
+
+// First occurrence on or after a date — used to schedule a brand-new
+// recurring task (so "monthly on the 7th" first lands on the coming 7th).
+function nextOccurrenceOnOrAfter(recurring, fromDate) {
+    if (recurring.type === 'daily') return fromDate;
+    let d = fromDate;
+    for (let i = 0; i < 400; i++) {
+        if (matchesRecurrence(recurring, d)) return d;
+        d = addDays(d, 1);
+    }
+    return calcNextRecurring(recurring, fromDate);
+}
+
+// Scheduled = a future recurrence occurrence, dormant until its date, then
+// activated straight onto the board. Hidden from lists/board/counts meanwhile.
+function isScheduled(t) { return t.status === 'scheduled'; }
 
 // ============ RENDERING ============
 
@@ -423,7 +458,8 @@ function renderReviewList() {
         const title = document.createElement('div');
         title.className = 'review-row-title';
         title.textContent = task.title;
-        title.addEventListener('click', () => { closeReviewModal(); openTaskModal(task.id); });
+        const editFromReview = () => { reopenReviewAfterTask = true; closeReviewModal(); openTaskModal(task.id); };
+        title.addEventListener('click', editFromReview);
         info.appendChild(title);
         const meta = document.createElement('div');
         meta.className = 'review-row-meta';
@@ -446,6 +482,11 @@ function renderReviewList() {
 
         const actions = document.createElement('div');
         actions.className = 'review-row-actions';
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn-ghost review-edit-btn';
+        editBtn.textContent = 'Edit';
+        editBtn.title = 'Open to add a theme, priority, etc.';
+        editBtn.addEventListener('click', editFromReview);
         const toBoard = document.createElement('button');
         toBoard.className = 'btn-small';
         toBoard.textContent = '→ Board';
@@ -456,6 +497,7 @@ function renderReviewList() {
         keep.textContent = 'Keep';
         keep.title = 'Keep in list (mark reviewed)';
         keep.addEventListener('click', () => { markReviewed(task.id); afterReviewAction(); });
+        actions.appendChild(editBtn);
         actions.appendChild(toBoard);
         actions.appendChild(keep);
         row.appendChild(actions);
@@ -488,7 +530,15 @@ function renderStaleBanner() {
     review.className = 'btn-small';
     review.textContent = 'Review';
     review.addEventListener('click', () => {
-        currentFilters.age = String(STALE_DAYS);
+        // Clear anything that could hide stale items, then filter to 30+ days
+        // across every theme (the count is theme-wide, so the view must be too)
+        currentThemeTab = 'all';
+        currentFilters.priority = ''; currentFilters.size = ''; currentFilters.search = '';
+        currentFilters.status = 'active'; currentFilters.age = String(STALE_DAYS);
+        document.getElementById('list-filter-priority').value = '';
+        document.getElementById('list-filter-size').value = '';
+        document.getElementById('list-filter-status').value = 'active';
+        document.getElementById('list-search').value = '';
         document.getElementById('list-filter-age').value = String(STALE_DAYS);
         if (!bulkMode) document.getElementById('bulk-select-btn').click();
         renderLists();
@@ -527,6 +577,7 @@ function getFilteredTasks() {
     const today = todayStr();
     const hidden = hiddenThemeIds();
     return state.tasks.filter(t => {
+        if (t.status === 'scheduled') return false; // dormant recurrence
         if (hidden.has(t.themeId)) return false;
         if (currentFilters.status === 'active' && (t.status === 'complete' || t.status === 'wont-do')) return false;
         if (currentFilters.status === 'complete' && t.status !== 'complete') return false;
@@ -576,10 +627,14 @@ function sortKanbanFirst(tasks) {
         if (sd !== 0) return sd;
         const td = tierRank(a) - tierRank(b);
         if (td !== 0) return td;
-        // Within the on-board tier, order by kanban column
+        // Within the on-board tier: high priority first, then position on the
+        // board (Backlog → Complete), then title
         if (a.kanbanColumn && b.kanbanColumn) {
+            const pd = prioRank(a) - prioRank(b);
+            if (pd !== 0) return pd;
             const colDiff = (colIndex[a.kanbanColumn] ?? 99) - (colIndex[b.kanbanColumn] ?? 99);
             if (colDiff !== 0) return colDiff;
+            return (a.title || '').localeCompare(b.title || '');
         }
         return chosenSortCompare(a, b);
     });
@@ -724,7 +779,7 @@ function createListItem(task) {
     if (task.recurring) {
         const rc = document.createElement('span');
         rc.className = 'chip chip-recurring';
-        rc.textContent = '↻' + (task.runCount > 0 ? ' ×'+task.runCount : '');
+        rc.textContent = '↻' + (task.runCount > 0 ? ' #'+task.runCount : '');
         chips.appendChild(rc);
     }
     const today = todayStr();
@@ -956,7 +1011,7 @@ function createBoardCard(task) {
     if (task.recurring) {
         const rc = document.createElement('span');
         rc.className = 'chip chip-recurring';
-        rc.textContent = '↻' + (task.runCount > 0 ? ' ×'+task.runCount : '');
+        rc.textContent = '↻' + (task.runCount > 0 ? ' #'+task.runCount : '');
         footer.appendChild(rc);
     }
     const menuBtn = document.createElement('button');
@@ -1118,13 +1173,15 @@ function createTask(data) {
         priority: data.priority || '',
         size: data.size || 'm',
         kanbanColumn: data.kanbanColumn || null,
-        status: 'active',
+        status: data.status || 'active',
         dueDate: data.dueDate || '',
         doDate: data.doDate || '',
         notes: data.notes || '',
-        createdDate: todayStr(),
+        createdDate: data.createdDate || todayStr(),
         completedDate: null,
         recurring: data.recurring || null,
+        recurRoot: data.recurRoot || null,
+        scheduledFor: data.scheduledFor || null,
         runCount: data.runCount || 0,
         spotlight: data.spotlight || false,
         // Items captured straight to the list start unreviewed; anything
@@ -1166,29 +1223,30 @@ function completeTask(id) {
         task.kanbanColumn = task._prevKanban || null;
         task.completedDate = null;
         delete task._prevKanban;
-        // Reverse the recurring spawn if its successor is still untouched,
+        // Reverse the scheduled next occurrence if it's still dormant,
         // taking the schedule back onto this task
         if (task.spawnedChildId) {
             const child = state.tasks.find(t => t.id === task.spawnedChildId);
-            if (child && child.status === 'active' && !child.kanbanColumn) {
+            if (child && child.status === 'scheduled') {
                 task.recurring = child.recurring || task.recurring;
+                if (!task.recurRoot) task.recurRoot = child.recurRoot;
                 deleteTask(child.id);
             }
             delete task.spawnedChildId;
-            task.recurringSpawned = false;
         }
     } else {
         task._prevKanban = task.kanbanColumn;
         task.status = 'complete';
         task.kanbanColumn = 'complete';
         task.completedDate = todayStr();
-        // Create the next occurrence as a fresh task, then strip the schedule
-        // off this completed record so it can never spawn again
+        // Schedule the next occurrence for its recurrence date (it stays
+        // dormant until then, then appears on the board), and clear the
+        // schedule off this completed record
         if (task.recurring) {
-            const child = spawnRecurring(task);
+            const nextDate = calcNextRecurring(task.recurring, todayStr());
+            const child = scheduleOccurrence(task, nextDate, (task.runCount || 0) + 1);
             task.spawnedChildId = child.id;
             task.recurring = null;
-            task.recurringSpawned = true;
         }
     }
     task.updatedAt = Date.now();
@@ -1196,25 +1254,35 @@ function completeTask(id) {
     render();
 }
 
-function spawnRecurring(completedTask) {
-    const nextDate = calcNextRecurring(completedTask.recurring, todayStr());
-    const newTask = createTask({
-        ...completedTask,
-        id: undefined,
-        status: 'active',
-        kanbanColumn: null,
-        completedDate: null,
-        createdDate: nextDate,
-        doDate: '',
-        runCount: (completedTask.runCount || 0) + 1,
+// Create (or reuse) a dormant "scheduled" occurrence of a recurring task. Its
+// id is deterministic (chain root + date) so two devices scheduling the same
+// occurrence collapse into one on sync.
+function scheduleOccurrence(source, dateStr, runCount) {
+    const root = source.recurRoot || source.id;
+    const occId = root + '__' + dateStr;
+    const existing = state.tasks.find(t => t.id === occId);
+    if (existing) return existing;
+    // Deliberately (re)creating this occurrence — drop any old tombstone so a
+    // prior delete (e.g. from un-completing) can't wipe it on the next sync
+    if (state.deletedIds) state.deletedIds = state.deletedIds.filter(x => x.id !== occId);
+    const occ = createTask({
+        title: source.title,
+        themeId: source.themeId,
+        subTheme: source.subTheme,
+        priority: source.priority,
+        size: source.size,
+        notes: source.notes,
+        recurring: source.recurring,
+        recurRoot: root,
+        status: 'scheduled',
+        scheduledFor: dateStr,
+        createdDate: dateStr,
+        runCount: runCount || 0,
+        reviewed: true,
     });
-    newTask.createdDate = nextDate;
-    newTask.recurringSpawned = false;
-    newTask.spotlight = false;     // a one-off spotlight shouldn't recur forever
-    newTask.reviewed = true;       // recurring items are already triaged
-    delete newTask.spawnedChildId;
-    state.tasks.push(newTask);
-    return newTask;
+    occ.id = occId;
+    state.tasks.push(occ);
+    return occ;
 }
 
 function moveToColumn(id, col) {
@@ -1273,11 +1341,27 @@ function autoArchive() {
     archiveCompleted();
 }
 
-// Recurrence is now driven entirely by completing a task (which spawns the
-// next occurrence once and strips its own schedule). The old load-time
-// catch-up pass is gone — it was the source of runaway duplication. Kept as a
-// no-op so any stray callers stay safe.
-function checkRecurring() {}
+// Activate any dormant recurrence whose date has arrived: it flips to an
+// active task placed straight on the board backlog. Idempotent and safe to
+// call repeatedly; deterministic occurrence ids stop cross-device duplicates.
+function checkRecurring() {
+    const today = todayStr();
+    let changed = false;
+    state.tasks.forEach(t => {
+        if (t.status !== 'scheduled') return;
+        if ((t.scheduledFor || '9999-99-99') <= today) {
+            t.status = 'active';
+            t.kanbanColumn = defaultBacklogCol();
+            t.createdDate = t.scheduledFor || today;
+            t.scheduledFor = null;
+            t.reviewed = true;
+            t.autoKanbaned = true;
+            t.updatedAt = Date.now();
+            changed = true;
+        }
+    });
+    if (changed) saveState();
+}
 
 function checkAutoKanban() {
     const today = todayStr();
@@ -1373,6 +1457,11 @@ function openTaskModal(taskId, defaultKanbanCol) {
 function closeTaskModal() {
     document.getElementById('task-modal').style.display = 'none';
     editingTaskId = null;
+    // If we came here from the review modal, return to it to keep triaging
+    if (reopenReviewAfterTask) {
+        reopenReviewAfterTask = false;
+        if (reviewQueue().length) openReviewModal();
+    }
 }
 
 function renderThemePicker() {
@@ -1502,11 +1591,22 @@ function saveTaskModal() {
         if (existing && (existing.doDate !== data.doDate || existing.dueDate !== data.dueDate)) {
             data.autoKanbaned = false;
         }
+        if (data.recurring && existing && !existing.recurRoot) data.recurRoot = editingTaskId;
         updateTask(editingTaskId, data);
+    } else if (data.recurring) {
+        // New recurring task: schedule its first occurrence so it appears on
+        // the board on its recurrence date (e.g. the coming 7th), rather than
+        // sitting in the list from now
+        const root = genId();
+        const first = addToKanban ? todayStr() : nextOccurrenceOnOrAfter(data.recurring, todayStr());
+        scheduleOccurrence({ ...data, recurRoot: root }, first, 1);
+        saveState();
     } else {
         addTask(data);
     }
     checkAutoKanban();
+    checkRecurring();
+    render();
     closeTaskModal();
 }
 
@@ -1893,9 +1993,11 @@ function init() {
         saveState(); renderListReminder();
     });
     // Surface the reminder while the app sits open on the Board (e.g. 9am
-    // rolls around, or a snooze lapses)
-    setInterval(renderListReminder, 60000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) renderListReminder(); });
+    // rolls around, or a snooze lapses), and activate any recurrence whose day
+    // has arrived while the app was left open / backgrounded
+    const periodicChecks = () => { checkRecurring(); checkAutoKanban(); renderListReminder(); };
+    setInterval(periodicChecks, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { periodicChecks(); render(); } });
 
     // Move-to modal
     document.getElementById('move-to-close').addEventListener('click', () => document.getElementById('move-to-modal').style.display = 'none');
