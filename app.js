@@ -81,6 +81,7 @@ let modalSize = 'm';
 let modalRecurType = 'daily';
 let modalRecurDow = new Set();
 let modalMonthlyMode = 'date';
+let modalThemeFocus = 'home';
 
 function defaultState() {
     return {
@@ -113,12 +114,21 @@ function migrateColumns(tasks) {
     });
 }
 
+// Classify themes into work/home focus; anything unclassified defaults to
+// home, except a theme literally named "Work".
+function migrateThemes(themes) {
+    (themes || []).forEach(t => {
+        if (t.focus === undefined) t.focus = (t.name === 'Work') ? 'work' : 'home';
+    });
+}
+
 function loadState() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
             const p = JSON.parse(raw);
             if (!p.themes || !p.themes.length) p.themes = DEFAULT_THEMES.map(t=>({...t,subThemes:[...t.subThemes]}));
+            migrateThemes(p.themes);
             if (!p.archive) p.archive = [];
             if (!p.completionLog) p.completionLog = {};
             if (!p.settings) p.settings = { theme:'light' };
@@ -879,6 +889,35 @@ function markListsVisited() {
     renderListReminder();
 }
 
+// Each theme is classified as a work- or home-focus theme (set in the theme
+// editor); the board's focus control flips whole groups of chips at once.
+function themeFocus(t) { return t.focus === 'work' ? 'work' : 'home'; }
+
+// The focus indicator is derived from the chip states rather than stored:
+// exactly the work set on = Work, exactly the home set on = Home, anything
+// else (including everything on) = All. That way toggling any chip by hand
+// moves the indicator correctly on its own.
+function deriveBoardFocus(themes, muted) {
+    const work = themes.filter(t => themeFocus(t) === 'work');
+    const home = themes.filter(t => themeFocus(t) === 'home');
+    if (!work.length || !home.length) return 'all';
+    const workAllOn  = work.every(t => !muted.has(t.id));
+    const workAllOff = work.every(t => muted.has(t.id));
+    const homeAllOn  = home.every(t => !muted.has(t.id));
+    const homeAllOff = home.every(t => muted.has(t.id));
+    if (workAllOn && homeAllOff) return 'work';
+    if (homeAllOn && workAllOff) return 'home';
+    return 'all';
+}
+
+function setBoardFocus(mode) {
+    if (mode === 'all') state.settings.mutedThemes = [];
+    else if (mode === 'work') state.settings.mutedThemes = state.themes.filter(t => themeFocus(t) !== 'work').map(t => t.id);
+    else state.settings.mutedThemes = state.themes.filter(t => themeFocus(t) === 'work').map(t => t.id);
+    saveState();
+    renderBoard();
+}
+
 function renderBoardFilter() {
     const container = document.getElementById('board-filter');
     container.innerHTML = '';
@@ -886,8 +925,21 @@ function renderBoardFilter() {
     const visibleThemes = state.themes.filter(t => (!t.hidden || state.settings.showHidden) && !weekendHidden.has(t.id));
     const muted = mutedThemeIds();
 
+    // Focus segmented control: All / Work / Home presets
+    const seg = document.createElement('div');
+    seg.className = 'focus-seg';
+    const currentFocus = deriveBoardFocus(visibleThemes, muted);
+    [['all','All'], ['work','Work'], ['home','Home']].forEach(([mode, label]) => {
+        const b = document.createElement('button');
+        b.className = 'focus-seg-btn' + (currentFocus === mode ? ' active' : '');
+        b.textContent = label;
+        b.addEventListener('click', () => setBoardFocus(mode));
+        seg.appendChild(b);
+    });
+    container.appendChild(seg);
+
     // Every theme is an on/off chip: filled with its colour when on, dimmed
-    // when off. No "All" chip — off chips simply hide that theme's cards.
+    // when off. Off chips simply hide that theme's cards.
     [...visibleThemes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const isOn = !muted.has(theme.id);
         const btn = document.createElement('button');
@@ -1625,6 +1677,7 @@ function openThemeModal(themeId) {
         document.getElementById('theme-edit-subthemes').value = (theme.subThemes||[]).join('\n');
         document.getElementById('theme-edit-hidden').checked = !!theme.hidden;
         document.getElementById('theme-edit-hide-weekend').checked = !!theme.hideWeekend;
+        modalThemeFocus = themeFocus(theme);
     } else {
         document.getElementById('theme-edit-name').value = '';
         document.getElementById('theme-edit-color').value = '#007AFF';
@@ -1632,8 +1685,16 @@ function openThemeModal(themeId) {
         document.getElementById('theme-edit-subthemes').value = '';
         document.getElementById('theme-edit-hidden').checked = false;
         document.getElementById('theme-edit-hide-weekend').checked = false;
+        modalThemeFocus = 'home';
     }
+    renderThemeFocusPicker();
     modal.style.display = 'flex';
+}
+
+function renderThemeFocusPicker() {
+    document.querySelectorAll('#theme-focus-picker .group-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.value === modalThemeFocus);
+    });
 }
 
 function closeThemeModal() {
@@ -1650,10 +1711,10 @@ function saveThemeModal() {
     const hideWeekend = document.getElementById('theme-edit-hide-weekend').checked;
     if (editingThemeId) {
         const theme = getTheme(editingThemeId);
-        if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; theme.hidden = hidden; theme.hideWeekend = hideWeekend; }
+        if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; theme.hidden = hidden; theme.hideWeekend = hideWeekend; theme.focus = modalThemeFocus; }
     } else {
         const id = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') + '-' + genId().slice(0,4);
-        state.themes.push({ id, name, color, subThemes, hidden, hideWeekend });
+        state.themes.push({ id, name, color, subThemes, hidden, hideWeekend, focus: modalThemeFocus });
     }
     state.themesUpdatedAt = Date.now();
     saveState();
@@ -1887,6 +1948,9 @@ function init() {
     });
 
     // Theme modal
+    document.querySelectorAll('#theme-focus-picker .group-btn').forEach(btn => {
+        btn.addEventListener('click', () => { modalThemeFocus = btn.dataset.value; renderThemeFocusPicker(); });
+    });
     document.getElementById('theme-edit-save').addEventListener('click', saveThemeModal);
     document.getElementById('theme-edit-cancel').addEventListener('click', closeThemeModal);
     document.getElementById('theme-edit-close').addEventListener('click', closeThemeModal);
@@ -2183,6 +2247,7 @@ async function pullFromCloud() {
         if ((d.themesUpdatedAt||0) > (state.themesUpdatedAt||0) && d.themes) {
             state.themes = d.themes;
             state.themesUpdatedAt = d.themesUpdatedAt;
+            migrateThemes(state.themes);
         }
 
         // --- Archive: merge weeks, union tasks within each week ---

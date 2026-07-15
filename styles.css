@@ -133,13 +133,18 @@ main { margin:0 auto; padding:20px; }
 }
 .theme-tab:hover { color:var(--text); border-color:var(--border); }
 .theme-tab.active { color:#fff; border-color:transparent; }
-/* Quick-toggle chips dress like their neighbours when on (plain in All mode,
-   filled alongside an include filter); off = disabled-looking */
+/* Theme chips: filled with their colour when on; off = disabled-looking */
 .theme-tab-toggle.off {
     opacity:0.45; color:var(--text-3); background:var(--bg-input);
     box-shadow:none;
 }
 .theme-tab-toggle.off:hover { border-color:var(--border); color:var(--text-2); }
+
+/* Focus segmented control (All / Work / Home) on the board filter row */
+.focus-seg { display:inline-flex; gap:2px; background:var(--bg-input); padding:3px; border-radius:20px; margin-right:8px; flex-shrink:0; }
+.focus-seg-btn { padding:4px 12px; border:none; border-radius:16px; font-size:12px; font-weight:600; background:none; color:var(--text-2); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+.focus-seg-btn:hover { color:var(--text); }
+.focus-seg-btn.active { background:var(--bg-card); color:var(--text); box-shadow:var(--shadow); }
 
 /* ---- Lists Content ---- */
 .lists-content { }
