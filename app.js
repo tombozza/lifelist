@@ -1251,6 +1251,19 @@ function addTask(data) {
     return task;
 }
 
+// Capture-by-URL: opening ?add=Buy%20milk (e.g. from an Apple Siri Shortcut)
+// drops the item into the list unreviewed, then strips the param so a refresh
+// won't add it again. Multiple items can be separated by newlines.
+function handleAddParam() {
+    const params = new URLSearchParams(location.search);
+    const raw = params.get('add');
+    if (!raw) return;
+    const titles = raw.split(/\r?\n/).map(t => t.trim()).filter(Boolean);
+    titles.forEach(title => addTask({ title }));
+    // Remove ?add= (and any other params) from the URL without reloading
+    history.replaceState(null, '', location.pathname);
+}
+
 function updateTask(id, data) {
     const task = state.tasks.find(t => t.id === id);
     if (!task) return;
@@ -1871,6 +1884,7 @@ function init() {
     autoArchive();
     checkRecurring();
     checkAutoKanban();
+    handleAddParam();
 
     // View tabs
     document.querySelectorAll('.tab').forEach(tab => {
