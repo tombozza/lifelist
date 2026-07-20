@@ -1351,6 +1351,20 @@ function scheduleOccurrence(source, dateStr, runCount) {
 }
 
 function moveToColumn(id, col) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    const nowComplete = col === 'complete';
+    const wasComplete = task.status === 'complete';
+    // Dragging into Complete should complete the task (strikethrough,
+    // completedDate, recurrence spawn) just like ticking it off.
+    if (nowComplete && !wasComplete) { completeTask(id); return; }
+    // Dragging a completed card back out un-completes it, then lands it in
+    // the drop target column.
+    if (!nowComplete && wasComplete) {
+        completeTask(id); // flips status back to active
+        updateTask(id, { kanbanColumn: col, reviewed: true, offKanban: false });
+        return;
+    }
     updateTask(id, { kanbanColumn: col, reviewed: true, offKanban: false });
 }
 
