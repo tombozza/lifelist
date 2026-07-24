@@ -471,7 +471,9 @@ function renderStaleBanner() {
     const banner = document.getElementById('stale-banner');
     const hidden = hiddenThemeIds();
     const stale = state.tasks.filter(t => !hidden.has(t.themeId) && isStale(t));
-    if (!stale.length || staleBannerDismissed || currentFilters.age) {
+    const snoozedUntil = state.settings.staleSnoozeUntil;
+    if (!stale.length || staleBannerDismissed || currentFilters.age
+        || (snoozedUntil && todayStr() < snoozedUntil)) {
         banner.style.display = 'none';
         return;
     }
@@ -503,8 +505,15 @@ function renderStaleBanner() {
     const dismiss = document.createElement('button');
     dismiss.className = 'btn-ghost stale-banner-dismiss';
     dismiss.innerHTML = '&times;';
-    dismiss.title = 'Dismiss';
-    dismiss.addEventListener('click', () => { staleBannerDismissed = true; renderStaleBanner(); });
+    dismiss.title = 'Snooze until next week';
+    // Closing snoozes the reminder until the start of next week, so it stops
+    // nagging but comes back for the following weekly review.
+    dismiss.addEventListener('click', () => {
+        staleBannerDismissed = true;
+        state.settings.staleSnoozeUntil = addDays(getWeekStart(todayStr()), 7);
+        saveState();
+        renderStaleBanner();
+    });
     actions.appendChild(review);
     actions.appendChild(dismiss);
     banner.appendChild(actions);
@@ -553,6 +562,12 @@ function getFilteredTasks() {
 // The chosen sort (default Priority) orders tasks within a group; the
 // selected sort supersedes priority, with priority then title as tiebreaks.
 function chosenSortCompare(a, b) {
+    // When reviewing the aged-tasks filter, longest-in-list comes first
+    // (oldest createdDate wins) regardless of the chosen sort.
+    if (currentFilters.age) {
+        const d = (a.createdDate || '').localeCompare(b.createdDate || '');
+        if (d !== 0) return d;
+    }
     if (currentSort === 'size') {
         const d = (SIZE_ORDER[b.size]||0) - (SIZE_ORDER[a.size]||0);
         if (d !== 0) return d;
@@ -626,6 +641,20 @@ function renderListContent() {
             if (open) sortKanbanFirst(snoozed).forEach(t => container.appendChild(createListItem(t)));
         }
     };
+
+    // Aged-tasks review (30-day banner): one flat list of list-only cards,
+    // longest-in-list first, so the oldest across every theme surface together.
+    // On-board and snoozed items are excluded to match the banner's count.
+    if (currentFilters.age) {
+        const aged = all.filter(t => !t.kanbanColumn && !isSnoozed(t))
+            .sort((a, b) => (a.createdDate || '').localeCompare(b.createdDate || ''));
+        if (!aged.length) {
+            container.innerHTML = '<div class="empty-state"><p>Nothing sitting that long 🎉</p></div>';
+            return;
+        }
+        aged.forEach(t => container.appendChild(createListItem(t)));
+        return;
+    }
 
     // Group by theme if "all" tab
     if (currentThemeTab === 'all') {
@@ -762,7 +791,9 @@ function createListItem(task, opts = {}) {
         sn.className = 'chip chip-snoozed';
         sn.textContent = 'Snoozed until ' + formatDateShort(task.snoozedUntil);
         chips.appendChild(sn);
-    } else if (isStale(task)) {
+    } else if (currentFilters.age && !opts.review && !task.kanbanColumn) {
+        // Only surface "days in list" while reviewing the aged-tasks filter
+        // (e.g. via the 30-day banner) — otherwise it's just clutter.
         const st = document.createElement('span');
         st.className = 'chip chip-stale';
         st.textContent = daysSince(task.createdDate) + 'd in list';
@@ -1470,7 +1501,12 @@ function openTaskModal(taskId, defaultKanbanCol) {
             document.getElementById('recur-monthly-dow').value = t.recurring.dayOfWeek || 1;
             document.querySelectorAll('input[name="monthly-mode"]').forEach(r => { r.checked = r.value === modalMonthlyMode; });
         }
+        const inList = document.getElementById('task-in-list');
+        const days = daysSince(t.createdDate);
+        inList.textContent = `In list ${days === 0 ? 'since today' : days + ' day' + (days === 1 ? '' : 's')} · added ${formatDateShort(t.createdDate)}`;
+        inList.style.display = '';
     } else {
+        document.getElementById('task-in-list').style.display = 'none';
         document.getElementById('task-title').value = '';
         document.getElementById('task-due').value = '';
         document.getElementById('task-do').value = '';
