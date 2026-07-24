@@ -304,6 +304,10 @@ function render() {
     if (currentView === 'lists') renderLists();
     else if (currentView === 'board') renderBoard();
     else if (currentView === 'admin') renderAdmin();
+    if (document.getElementById('review-modal').style.display === 'flex') {
+        if (reviewQueue().length) renderReviewList();
+        else closeReviewModal();
+    }
 }
 
 // ---- LISTS ----
@@ -329,7 +333,6 @@ function renderLists() {
     if (currentThemeTab !== 'all' && (!cur || (cur.hidden && !state.settings.showHidden))) currentThemeTab = 'all';
     renderFilterStatus();
     updateFiltersButton();
-    renderReviewBanner();
     renderStaleBanner();
     renderThemeTabs();
     renderListContent();
@@ -460,64 +463,8 @@ function renderReviewList() {
         return;
     }
     sortKanbanFirst(queue).forEach(task => {
-        const row = document.createElement('div');
-        row.className = 'review-row';
-
-        const info = document.createElement('div');
-        info.className = 'review-row-info';
-        const title = document.createElement('div');
-        title.className = 'review-row-title';
-        title.textContent = task.title;
-        const editFromReview = () => { reopenReviewAfterTask = true; closeReviewModal(); openTaskModal(task.id); };
-        title.addEventListener('click', editFromReview);
-        info.appendChild(title);
-        const meta = document.createElement('div');
-        meta.className = 'review-row-meta';
-        const theme = getTheme(task.themeId);
-        if (theme) {
-            const tc = document.createElement('span');
-            tc.className = 'chip chip-theme';
-            tc.style.background = theme.color;
-            tc.style.color = contrastText(theme.color);
-            tc.textContent = theme.name;
-            meta.appendChild(tc);
-        }
-        const age = document.createElement('span');
-        age.className = 'review-row-age';
-        const d = daysSince(task.createdDate);
-        age.textContent = d <= 0 ? 'today' : d + 'd ago';
-        meta.appendChild(age);
-        info.appendChild(meta);
-        row.appendChild(info);
-
-        const actions = document.createElement('div');
-        actions.className = 'review-row-actions';
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn-ghost review-edit-btn';
-        editBtn.textContent = 'Edit';
-        editBtn.title = 'Open to add a theme, priority, etc.';
-        editBtn.addEventListener('click', editFromReview);
-        const toBoard = document.createElement('button');
-        toBoard.className = 'btn-small';
-        toBoard.textContent = '→ Board';
-        toBoard.title = 'Add to Kanban backlog';
-        toBoard.addEventListener('click', () => { moveToKanban(task.id); afterReviewAction(); });
-        const keep = document.createElement('button');
-        keep.className = 'btn-ghost review-keep-btn';
-        keep.textContent = 'Keep';
-        keep.title = 'Keep in list (mark reviewed)';
-        keep.addEventListener('click', () => { markReviewed(task.id); afterReviewAction(); });
-        actions.appendChild(editBtn);
-        actions.appendChild(toBoard);
-        actions.appendChild(keep);
-        row.appendChild(actions);
-        list.appendChild(row);
+        list.appendChild(createListItem(task, { review: true }));
     });
-}
-
-function afterReviewAction() {
-    if (!reviewQueue().length) { closeReviewModal(); return; }
-    renderReviewList();
 }
 
 function renderStaleBanner() {
@@ -704,9 +651,10 @@ function renderListContent() {
     }
 }
 
-function createListItem(task) {
+function createListItem(task, opts = {}) {
     const row = document.createElement('div');
     row.className = 'list-item';
+    if (opts.review) row.classList.add('review-item');
     if (task.priority) row.classList.add('priority-' + task.priority);
     if (task.spotlight) row.classList.add('spotlight');
     if (task.offKanban && !task.kanbanColumn) row.classList.add('off-kanban');
@@ -736,7 +684,10 @@ function createListItem(task) {
     // Body
     const body = document.createElement('div');
     body.className = 'list-item-body';
-    body.addEventListener('click', () => openTaskModal(task.id));
+    body.addEventListener('click', () => {
+        if (opts.review) { reopenReviewAfterTask = true; closeReviewModal(); }
+        openTaskModal(task.id);
+    });
 
     const title = document.createElement('span');
     title.className = 'list-item-title';
@@ -852,11 +803,20 @@ function createListItem(task) {
     dateEl.textContent = formatDateShort(task.createdDate);
     right.appendChild(dateEl);
 
-    const menu = document.createElement('button');
-    menu.className = 'list-item-menu';
-    menu.innerHTML = '⋯';
-    menu.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
-    right.appendChild(menu);
+    if (opts.review) {
+        const del = document.createElement('button');
+        del.className = 'list-item-delete';
+        del.title = 'Delete';
+        del.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
+        del.addEventListener('click', e => { e.stopPropagation(); deleteTask(task.id); });
+        right.appendChild(del);
+    } else {
+        const menu = document.createElement('button');
+        menu.className = 'list-item-menu';
+        menu.innerHTML = '⋯';
+        menu.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
+        right.appendChild(menu);
+    }
 
     row.appendChild(right);
     return row;
@@ -954,6 +914,7 @@ function renderBoardFilter() {
 
 function renderBoard() {
     document.getElementById('board-stats').innerHTML = '';
+    renderReviewBanner();
     renderListReminder();
     renderBoardFilter();
     const container = document.getElementById('board-columns');
@@ -2096,13 +2057,15 @@ function init() {
     document.getElementById('move-to-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
 
     // Review modal
-    document.getElementById('review-close').addEventListener('click', closeReviewModal);
-    document.getElementById('review-done').addEventListener('click', closeReviewModal);
-    document.getElementById('review-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeReviewModal(); });
-    document.getElementById('review-keep-all').addEventListener('click', () => {
+    // Keep remaining: everything still in the queue was reviewed, so mark it
+    // reviewed (clearing the banner) and close. The X just closes.
+    const keepRemaining = () => {
         reviewQueue().forEach(t => markReviewed(t.id));
         closeReviewModal();
-    });
+    };
+    document.getElementById('review-close').addEventListener('click', closeReviewModal);
+    document.getElementById('review-done').addEventListener('click', keepRemaining);
+    document.getElementById('review-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeReviewModal(); });
 
     // Filter modal (mobile)
     document.getElementById('open-filters').addEventListener('click', openFilterModal);
