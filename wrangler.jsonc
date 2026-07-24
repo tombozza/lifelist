@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "life-kanban",
+  "compatibility_date": "2025-04-01",
+  "pages_build_output_dir": ".",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "life-kanban-db",
+      "database_id": "15bb9a76-b7b9-445a-85a7-9c3893dd50ec",
+      "migrations_dir": "migrations/d1"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'life-kanban-v31';
+const CACHE_NAME = 'life-kanban-v32';
 const ASSETS = [
     './',
     './index.html',
@@ -28,6 +28,8 @@ self.addEventListener('activate', (e) => {
 
 // Fetch — network first, fall back to cache (so updates always come through)
 self.addEventListener('fetch', (e) => {
+    // Never cache the data API — it's per-request state and must hit the network.
+    if (new URL(e.request.url).pathname.startsWith('/api/')) return;
     e.respondWith(
         fetch(e.request).then((response) => {
             if (response.status === 200) {

@@ -17,6 +17,8 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 cp index.html app.js styles.css sw.js manifest.json "$STAGE"/
 cp -R icons "$STAGE"/icons
+# Pages Functions (the /api backend that replaced Supabase) must ship too.
+cp -R functions "$STAGE"/functions
 
 echo "Deploying $(grep -m1 CACHE_NAME sw.js) …"
 npx wrangler@latest pages deploy "$STAGE" \

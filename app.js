@@ -7,8 +7,9 @@
 // ============ CONSTANTS ============
 
 const STORAGE_KEY = 'life-kanban-v2';
-const SUPABASE_URL = 'https://gctcxgjvnaptywmhnmuf.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjdGN4Z2p2bmFwdHl3bWhubXVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NzE3MTMsImV4cCI6MjA5NTM0NzcxM30.psusSSNMhV62XEj03Pje1TUIc25l46YAUnZgiHeFcvY';
+// Sync now goes through Cloudflare Pages Functions (browser -> /api/sync/* -> D1),
+// so no database key is ever shipped to the browser. SYNC_CODE namespaces this
+// board's blob (and its "-inbox" sibling) in the kanban_sync table.
 const SYNC_CODE = 'mpy31l1nrkp69mpy31l1nihblx';
 
 const KANBAN_COLS = [
@@ -2069,6 +2070,45 @@ function init() {
         if (e.target.value) { state.settings.reminderTime = e.target.value; saveState(); renderListReminder(); }
     });
 
+    // --- Optional site password gate ---
+    document.getElementById('settings-password').addEventListener('change', async e => {
+        if (e.target.checked) {
+            // Reveal the password entry; only enable once a password is saved.
+            e.target.checked = false;
+            document.getElementById('password-set-row').style.display = '';
+            document.getElementById('settings-password-input').focus();
+        } else {
+            try {
+                await apiUpdateSettings(false);
+                refreshPasswordUI(false);
+            } catch(err) { alert('Could not disable the lock: ' + err.message); e.target.checked = true; }
+        }
+    });
+    document.getElementById('settings-password-save').addEventListener('click', async () => {
+        const pw = document.getElementById('settings-password-input').value;
+        if (!pw || pw.length < 4) { alert('Choose a password of at least 4 characters.'); return; }
+        try {
+            await apiUpdateSettings(true, pw);
+            document.getElementById('settings-password-input').value = '';
+            document.getElementById('password-set-row').style.display = 'none';
+            refreshPasswordUI(true);
+        } catch(err) { alert('Could not enable the lock: ' + err.message); }
+    });
+    document.getElementById('settings-password-logout').addEventListener('click', async () => {
+        try { await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ action:'logout' }) }); } catch(_) {}
+        location.reload();
+    });
+
+    // Password gate (unlock screen)
+    const gateSubmit = document.getElementById('gate-submit');
+    if (gateSubmit) {
+        gateSubmit.addEventListener('click', unlockSite);
+        document.getElementById('gate-password').addEventListener('keydown', e => { if (e.key === 'Enter') unlockSite(); });
+    }
+
+    // Reflect the current lock state when Settings opens.
+    document.getElementById('settings-btn').addEventListener('click', loadPasswordSetting);
+
     // List review reminder banner (Board)
     document.getElementById('reminder-open').addEventListener('click', () => {
         [...document.querySelectorAll('.tab')].find(t => t.dataset.view === 'lists').click();
@@ -2203,37 +2243,104 @@ function init() {
     render();
 }
 
-// ============ SUPABASE SYNC ============
+// ============ CLOUDFLARE SYNC ============
+// Sync goes through Pages Functions (browser -> /api/sync/:code -> D1). The
+// merge logic below is unchanged from the Supabase version — only the transport
+// (fetch instead of the Supabase client) is different. A 401 means the site's
+// optional password gate is on and this device isn't authorised yet.
 
-let supabaseClient = null;
-let syncChannel = null;
+let syncEnabled = false;   // becomes true once the initial pull succeeds
 let syncPaused = false;
 let pushTimer = null;
 const _baseSave = saveState;
 
+async function apiGet(code) {
+    const res = await fetch(`/api/sync/${encodeURIComponent(code)}`, { headers: { 'accept': 'application/json' } });
+    if (res.status === 401) { showPasswordGate(); throw new Error('locked'); }
+    if (!res.ok) throw new Error(`GET /api/sync ${res.status}`);
+    const body = await res.json();
+    return body.data; // parsed blob or null
+}
+
+async function apiPut(code, payload) {
+    const res = await fetch(`/api/sync/${encodeURIComponent(code)}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (res.status === 401) { showPasswordGate(); throw new Error('locked'); }
+    if (!res.ok) throw new Error(`PUT /api/sync ${res.status}`);
+    return res.json();
+}
+
+// --- Password gate helpers ---
+function showPasswordGate() {
+    const gate = document.getElementById('password-gate');
+    if (gate) gate.style.display = 'flex';
+}
+async function unlockSite() {
+    const input = document.getElementById('gate-password');
+    const errEl = document.getElementById('gate-error');
+    const pw = input ? input.value : '';
+    try {
+        const res = await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ password: pw }) });
+        if (!res.ok) {
+            if (errEl) { errEl.textContent = 'Incorrect password.'; errEl.style.display = ''; }
+            return;
+        }
+        // Cookie set — reload so the gated data endpoints work and sync re-runs.
+        location.reload();
+    } catch(e) {
+        if (errEl) { errEl.textContent = 'Could not reach the server.'; errEl.style.display = ''; }
+    }
+}
+async function apiUpdateSettings(enabled, password) {
+    const res = await fetch('/api/settings', {
+        method:'PUT', headers:{'content-type':'application/json'},
+        body: JSON.stringify({ password_enabled: enabled, password }),
+    });
+    if (!res.ok) { const b = await res.json().catch(()=>({})); throw new Error((b.error && b.error.message) || `HTTP ${res.status}`); }
+    return res.json();
+}
+async function loadPasswordSetting() {
+    try {
+        const res = await fetch('/api/settings', { headers:{'accept':'application/json'} });
+        const body = await res.json();
+        refreshPasswordUI(!!body.password_enabled);
+    } catch(_) { refreshPasswordUI(false); }
+}
+function refreshPasswordUI(enabled) {
+    const toggle = document.getElementById('settings-password');
+    if (toggle) toggle.checked = enabled;
+    document.getElementById('password-set-row').style.display = 'none';
+    const status = document.getElementById('password-status');
+    if (status) {
+        status.textContent = enabled ? 'This site is locked. A password is required on each device.' : '';
+        status.style.display = enabled ? '' : 'none';
+    }
+    document.getElementById('password-logout-row').style.display = enabled ? '' : 'none';
+}
+
 saveState = function() {
     _baseSave();
-    if (supabaseClient && !syncPaused) {
+    if (syncEnabled && !syncPaused) {
         clearTimeout(pushTimer);
         pushTimer = setTimeout(pushToCloud, 600);
     }
 };
 
 async function pushToCloud() {
-    if (!supabaseClient || syncPaused) return;
+    if (!syncEnabled || syncPaused) return;
     try {
         const payload = { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt };
-        const { error } = await supabaseClient.from('kanban_sync').upsert({ sync_code: SYNC_CODE, data: payload, updated_at: new Date().toISOString() });
-        if (error) console.error('Sync push:', error.message);
-    } catch(e) { console.error('Sync push failed:', e); }
+        await apiPut(SYNC_CODE, payload);
+    } catch(e) { if (String(e).indexOf('locked') === -1) console.error('Sync push failed:', e); }
 }
 
 async function pullFromCloud() {
-    if (!supabaseClient) return;
+    if (!syncEnabled) return;
     try {
-        const { data, error } = await supabaseClient.from('kanban_sync').select('data').eq('sync_code', SYNC_CODE).maybeSingle();
-        if (error || !data) return;
-        const d = data.data;
+        const d = await apiGet(SYNC_CODE);
         if (!d) return;
         syncPaused = true;
 
@@ -2305,12 +2412,12 @@ async function pullFromCloud() {
 // Reminders) write pending task titles to a sibling sync row; we import
 // them as tasks and clear the row.
 async function checkInbox() {
-    if (!supabaseClient) return;
+    if (!syncEnabled) return;
     try {
         const inboxCode = SYNC_CODE + '-inbox';
-        const { data, error } = await supabaseClient.from('kanban_sync').select('data').eq('sync_code', inboxCode).maybeSingle();
-        if (error || !data || !data.data) return;
-        const pending = data.data.pending;
+        const d = await apiGet(inboxCode);
+        if (!d) return;
+        const pending = d.pending;
         let titles = [];
         if (Array.isArray(pending)) titles = pending;
         else if (typeof pending === 'string') titles = pending.split('\n');
@@ -2318,27 +2425,26 @@ async function checkInbox() {
         if (!titles.length) return;
         // Clear the inbox first so another device opening simultaneously
         // doesn't import the same batch
-        await supabaseClient.from('kanban_sync').upsert({ sync_code: inboxCode, data: { pending: '' }, updated_at: new Date().toISOString() });
+        await apiPut(inboxCode, { pending: '' });
         titles.forEach(title => addTask({ title }));
-    } catch(e) { console.error('Inbox:', e); }
+    } catch(e) { if (String(e).indexOf('locked') === -1) console.error('Inbox:', e); }
 }
 
+// Cloudflare has no Supabase-style realtime channel, so we poll instead: an
+// interval plus the existing foreground/focus/online re-pulls keep devices fresh.
+const SYNC_POLL_MS = 20000;
+
 (function initSync() {
-    if (!window.supabase) return;
-    try {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        pullFromCloud().then(() => {
-            checkInbox();
-            syncChannel = supabaseClient.channel('kanban-rt')
-                .on('postgres_changes', { event:'*', schema:'public', table:'kanban_sync', filter:`sync_code=eq.${SYNC_CODE}` }, () => pullFromCloud())
-                .subscribe();
-        });
-        // Re-pull whenever the app comes back to the foreground (PWAs lose the
-        // realtime connection while backgrounded, which is why devices went stale)
-        document.addEventListener('visibilitychange', () => { if (!document.hidden) { pullFromCloud(); checkInbox(); } });
-        window.addEventListener('focus', () => pullFromCloud());
-        window.addEventListener('online', () => pullFromCloud());
-    } catch(e) { console.error('Sync init:', e); }
+    // The first pull enables sync; if the site is locked it throws and the
+    // password gate is shown — auth (unlockSite) re-runs this.
+    syncEnabled = true;
+    pullFromCloud().then(() => {
+        checkInbox();
+        setInterval(() => { if (!document.hidden) { pullFromCloud(); checkInbox(); } }, SYNC_POLL_MS);
+    }).catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { pullFromCloud(); checkInbox(); } });
+    window.addEventListener('focus', () => pullFromCloud());
+    window.addEventListener('online', () => pullFromCloud());
 })();
 
 init();

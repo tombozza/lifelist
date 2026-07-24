@@ -12,7 +12,6 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 
@@ -423,9 +422,48 @@
                 <label class="form-label">Remind from</label>
                 <input type="time" id="settings-reminder-time" class="form-input" value="09:00">
             </div>
+            <div class="form-group">
+                <label class="toggle-row">
+                    <span class="form-label" style="margin:0">Require a password</span>
+                    <label class="switch">
+                        <input type="checkbox" id="settings-password">
+                        <span class="switch-track"></span>
+                    </label>
+                </label>
+                <div class="form-hint">Locks this site behind a single shared password on every device. Off by default.</div>
+                <div id="password-set-row" style="display:none; margin-top:8px;">
+                    <input type="password" id="settings-password-input" class="form-input" placeholder="Choose a password (min 4 characters)" autocomplete="new-password">
+                    <div class="modal-footer-right" style="margin-top:8px;">
+                        <button class="btn-primary" id="settings-password-save">Enable lock</button>
+                    </div>
+                </div>
+                <div id="password-status" class="form-hint" style="display:none;"></div>
+                <div id="password-logout-row" style="display:none; margin-top:8px;">
+                    <button class="btn-ghost" id="settings-password-logout">Log out this device</button>
+                </div>
+            </div>
             <div class="sync-info-box">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                 Syncing across devices
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ PASSWORD GATE (shown only when the site is locked) ============ -->
+<div id="password-gate" class="modal-overlay" style="display:none; z-index:1000;">
+    <div class="modal modal-small">
+        <div class="modal-header">
+            <h3>Life Kanban</h3>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label" for="gate-password">This board is locked</label>
+                <input type="password" id="gate-password" class="form-input" placeholder="Password" autocomplete="current-password">
+                <div id="gate-error" class="form-hint" style="display:none; color:var(--danger, #c00);"></div>
+            </div>
+            <div class="modal-footer-right">
+                <button class="btn-primary" id="gate-submit">Unlock</button>
             </div>
         </div>
     </div>
