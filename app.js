@@ -209,6 +209,31 @@ function daysSince(dateStr) {
     return Math.floor((Date.now() - d.getTime()) / 86400000);
 }
 
+// Whole days from today until a date (negative once it's in the past)
+function daysUntil(dateStr) {
+    if (!dateStr) return 0;
+    const from = new Date(todayStr() + 'T00:00:00');
+    const to = new Date(dateStr + 'T00:00:00');
+    return Math.round((to.getTime() - from.getTime()) / 86400000);
+}
+
+// Opt-in countdown chip for a task's "do by" date. Returns null when the task
+// hasn't asked for one (or has already been finished).
+function countdownChip(task) {
+    if (!task.countdown || !task.dueDate || task.status !== 'active') return null;
+    const n = daysUntil(task.dueDate);
+    const chip = document.createElement('span');
+    chip.className = 'chip chip-countdown' + (n < 0 ? ' past' : n <= 2 ? ' soon' : '');
+    if (n < 0)       chip.textContent = Math.abs(n) + 'd overdue';
+    else if (n === 0) chip.textContent = 'Due today';
+    else if (n === 1) chip.textContent = 'Tomorrow';
+    else if (n < 14)  chip.textContent = n + ' days left';
+    else if (n < 60)  chip.textContent = Math.round(n / 7) + ' weeks left';
+    else              chip.textContent = Math.round(n / 30) + ' months left';
+    chip.title = 'Do by ' + formatDateFull(task.dueDate);
+    return chip;
+}
+
 function isWeekend() {
     const day = new Date().getDay();
     return day === 0 || day === 6;
@@ -251,11 +276,15 @@ function calcNextRecurring(recurring, fromDate) {
         d.setDate(d.getDate() + diff);
     } else if (recurring.type === 'monthly') {
         if (recurring.monthlyMode === 'date') {
-            d.setMonth(d.getMonth() + (recurring.interval || 1));
-            d.setDate(recurring.dayOfMonth || 1);
-        } else {
-            d.setMonth(d.getMonth() + (recurring.interval || 1));
+            // Anchor to the 1st first, so adding months can't skip one via a
+            // short-month overflow (31 Jan + 3 months would land in May)
             d.setDate(1);
+            d.setMonth(d.getMonth() + (recurring.interval || 1));
+            const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+            d.setDate(Math.min(recurring.dayOfMonth || 1, lastDay));
+        } else {
+            d.setDate(1);
+            d.setMonth(d.getMonth() + (recurring.interval || 1));
             const targetDow = recurring.dayOfWeek || 1;
             const weekNum = recurring.weekOfMonth || 1;
             let count = 0;
@@ -774,7 +803,10 @@ function createListItem(task, opts = {}) {
         chips.appendChild(rc);
     }
     const today = todayStr();
-    if (task.dueDate) {
+    const cd = countdownChip(task);
+    if (cd) {
+        chips.appendChild(cd);
+    } else if (task.dueDate) {
         const due = document.createElement('span');
         due.className = 'chip ' + (task.dueDate < today ? 'chip-overdue' : 'chip-due');
         due.textContent = 'Due ' + formatDateShort(task.dueDate);
@@ -1059,6 +1091,8 @@ function createBoardCard(task) {
         rc.textContent = '↻' + (task.runCount > 0 ? ' #'+task.runCount : '');
         footer.appendChild(rc);
     }
+    const cd = countdownChip(task);
+    if (cd) footer.appendChild(cd);
     const menuBtn = document.createElement('button');
     menuBtn.className = 'board-card-menu';
     menuBtn.innerHTML = '⋯';
@@ -1220,6 +1254,7 @@ function createTask(data) {
         kanbanColumn: data.kanbanColumn || null,
         status: data.status || 'active',
         dueDate: data.dueDate || '',
+        countdown: data.countdown || false,
         doDate: data.doDate || '',
         notes: data.notes || '',
         createdDate: data.createdDate || todayStr(),
@@ -1483,8 +1518,10 @@ function openTaskModal(taskId, defaultKanbanCol) {
         modalPriority = t.priority || '';
         modalSize = t.size || 'm';
         document.getElementById('task-due').value = t.dueDate || '';
+        document.getElementById('task-countdown').checked = !!t.countdown;
         document.getElementById('task-do').value = t.doDate || '';
         document.getElementById('task-notes').value = t.notes || '';
+        setNotesOpen(!!t.notes);
         document.getElementById('task-add-to-kanban').checked = !!t.kanbanColumn;
         const ri = !!t.recurring;
         document.getElementById('task-recurring-toggle').checked = ri;
@@ -1497,6 +1534,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
             modalMonthlyMode = t.recurring.monthlyMode || 'date';
             document.getElementById('recur-daily-interval').value = t.recurring.interval || 1;
             document.getElementById('recur-weekly-interval').value = t.recurring.interval || 1;
+            if (t.recurring.type === 'monthly') document.getElementById('recur-monthly-interval').value = t.recurring.interval || 1;
             document.getElementById('recur-monthly-day').value = t.recurring.dayOfMonth || 1;
             document.getElementById('recur-monthly-week').value = t.recurring.weekOfMonth || 1;
             document.getElementById('recur-monthly-dow').value = t.recurring.dayOfWeek || 1;
@@ -1510,15 +1548,20 @@ function openTaskModal(taskId, defaultKanbanCol) {
         document.getElementById('task-in-list').style.display = 'none';
         document.getElementById('task-title').value = '';
         document.getElementById('task-due').value = '';
+        document.getElementById('task-countdown').checked = false;
         document.getElementById('task-do').value = '';
         document.getElementById('task-notes').value = '';
+        setNotesOpen(false);
         document.getElementById('task-recurring-toggle').checked = false;
         document.getElementById('recurring-config').style.display = 'none';
         document.getElementById('task-add-to-kanban').checked = !!defaultKanbanCol;
         document.getElementById('recur-daily-interval').value = 1;
         document.getElementById('recur-weekly-interval').value = 1;
+        document.getElementById('recur-monthly-interval').value = 1;
     }
 
+    updateCountdownRow();
+    renderMonthPresets();
     renderThemePicker();
     renderPriorityPicker();
     renderSizePicker();
@@ -1572,6 +1615,27 @@ function renderSizePicker() {
     });
 }
 
+// Notes start collapsed behind a button so the modal stays short; they open
+// automatically when the task already has some.
+function setNotesOpen(open) {
+    document.getElementById('task-notes').style.display = open ? '' : 'none';
+    document.getElementById('task-notes-add').style.display = open ? 'none' : '';
+}
+
+// The countdown option only makes sense once a "do by" date is set
+function updateCountdownRow() {
+    const has = !!document.getElementById('task-due').value;
+    document.getElementById('countdown-row').style.display = has ? '' : 'none';
+    if (!has) document.getElementById('task-countdown').checked = false;
+}
+
+function renderMonthPresets() {
+    const val = parseInt(document.getElementById('recur-monthly-interval').value) || 1;
+    document.querySelectorAll('#month-presets .preset-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.months) === val);
+    });
+}
+
 function renderRecurTypeBtns() {
     document.querySelectorAll('.recur-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.type === modalRecurType);
@@ -1594,6 +1658,9 @@ function updateSubThemeSelect() {
     const sel = document.getElementById('task-subtheme');
     const theme = getTheme(modalThemeId);
     sel.innerHTML = '<option value="">None</option>';
+    // Nothing to choose from = one less row in the modal
+    document.getElementById('subtheme-field').style.display =
+        (theme && theme.subThemes && theme.subThemes.length) ? '' : 'none';
     if (theme && theme.subThemes) {
         [...theme.subThemes].sort((a,b) => a.localeCompare(b)).forEach(s => {
             const opt = document.createElement('option');
@@ -1620,10 +1687,11 @@ function getRecurringFromModal() {
     }
     if (type === 'monthly') {
         const mode = document.querySelector('input[name="monthly-mode"]:checked')?.value || 'date';
+        const interval = parseInt(document.getElementById('recur-monthly-interval').value) || 1;
         if (mode === 'date') {
-            return { type:'monthly', interval:1, monthlyMode:'date', dayOfMonth: parseInt(document.getElementById('recur-monthly-day').value)||1 };
+            return { type:'monthly', interval, monthlyMode:'date', dayOfMonth: parseInt(document.getElementById('recur-monthly-day').value)||1 };
         } else {
-            return { type:'monthly', interval:1, monthlyMode:'weekday', weekOfMonth: parseInt(document.getElementById('recur-monthly-week').value)||1, dayOfWeek: parseInt(document.getElementById('recur-monthly-dow').value)||1 };
+            return { type:'monthly', interval, monthlyMode:'weekday', weekOfMonth: parseInt(document.getElementById('recur-monthly-week').value)||1, dayOfWeek: parseInt(document.getElementById('recur-monthly-dow').value)||1 };
         }
     }
     return null;
@@ -1638,6 +1706,7 @@ function saveTaskModal() {
         priority: modalPriority,
         size: modalSize,
         dueDate: document.getElementById('task-due').value,
+        countdown: document.getElementById('task-countdown').checked,
         doDate: document.getElementById('task-do').value,
         notes: document.getElementById('task-notes').value.trim(),
         recurring: getRecurringFromModal(),
@@ -1958,6 +2027,25 @@ function init() {
     document.getElementById('task-recurring-toggle').addEventListener('change', e => {
         document.getElementById('recurring-config').style.display = e.target.checked ? '' : 'none';
     });
+
+    // "Do by" date drives whether the countdown option is offered
+    document.getElementById('task-due').addEventListener('change', updateCountdownRow);
+    document.getElementById('task-due').addEventListener('input', updateCountdownRow);
+
+    // Notes stay collapsed until asked for
+    document.getElementById('task-notes-add').addEventListener('click', () => {
+        setNotesOpen(true);
+        document.getElementById('task-notes').focus();
+    });
+
+    // Monthly interval presets (every 1 / 3 / 6 / 12 months)
+    document.querySelectorAll('#month-presets .preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('recur-monthly-interval').value = btn.dataset.months;
+            renderMonthPresets();
+        });
+    });
+    document.getElementById('recur-monthly-interval').addEventListener('input', renderMonthPresets);
 
     // Recurring type
     document.querySelectorAll('.recur-btn').forEach(btn => {

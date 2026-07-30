@@ -155,65 +155,78 @@
                 <textarea id="task-title-multi" class="task-title-input task-title-multi" rows="4" placeholder="One task per line…" style="display:none;"></textarea>
                 <label class="multi-add-row" id="multi-add-row">
                     <input type="checkbox" id="task-multi-toggle">
-                    <span>Add several at once (one per line, shared settings below)</span>
+                    <span>Add several at once (one per line)</span>
                 </label>
                 <div id="task-in-list" class="task-in-list" style="display:none;"></div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Theme</label>
-                <div id="theme-picker" class="theme-picker"></div>
+            <div class="field">
+                <span class="field-label">Theme</span>
+                <div class="field-control"><div id="theme-picker" class="theme-picker"></div></div>
             </div>
 
-            <div class="form-row">
-                <div class="form-group" style="flex:1">
-                    <label class="form-label">Sub-theme</label>
+            <div class="field" id="subtheme-field">
+                <span class="field-label">Sub-theme</span>
+                <div class="field-control">
                     <select id="task-subtheme" class="form-select">
                         <option value="">None</option>
                     </select>
                 </div>
-                <div class="form-group" style="flex:1">
-                    <label class="form-label">Due date</label>
+            </div>
+
+            <div class="field">
+                <span class="field-label">Priority</span>
+                <div class="field-control">
+                    <div class="btn-group" id="priority-picker">
+                        <button type="button" class="group-btn active" data-value="">None</button>
+                        <button type="button" class="group-btn low" data-value="low">Low</button>
+                        <button type="button" class="group-btn medium" data-value="medium">Medium</button>
+                        <button type="button" class="group-btn high" data-value="high">High</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="field">
+                <span class="field-label">Size</span>
+                <div class="field-control">
+                    <div class="size-picker" id="size-picker">
+                        <button type="button" class="size-btn" data-value="xs"><span class="size-label">XS</span><span class="size-pts">1</span></button>
+                        <button type="button" class="size-btn" data-value="s"><span class="size-label">S</span><span class="size-pts">2</span></button>
+                        <button type="button" class="size-btn active" data-value="m"><span class="size-label">M</span><span class="size-pts">3</span></button>
+                        <button type="button" class="size-btn" data-value="l"><span class="size-label">L</span><span class="size-pts">5</span></button>
+                        <button type="button" class="size-btn" data-value="xl"><span class="size-label">XL</span><span class="size-pts">8</span></button>
+                        <button type="button" class="size-btn" data-value="xxl"><span class="size-label">XXL</span><span class="size-pts">13</span></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="field">
+                <span class="field-label">Do by</span>
+                <div class="field-control">
                     <input type="date" id="task-due" class="form-input">
+                    <label class="check-row" id="countdown-row">
+                        <input type="checkbox" id="task-countdown">
+                        <span>Show countdown on card</span>
+                    </label>
                 </div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Do on day</label>
-                <input type="date" id="task-do" class="form-input">
-                <div class="form-hint">Automatically added to the Kanban backlog on this day</div>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Priority</label>
-                <div class="btn-group" id="priority-picker">
-                    <button type="button" class="group-btn active" data-value="">None</button>
-                    <button type="button" class="group-btn low" data-value="low">Low</button>
-                    <button type="button" class="group-btn medium" data-value="medium">Medium</button>
-                    <button type="button" class="group-btn high" data-value="high">High</button>
+            <div class="field">
+                <span class="field-label">Do on</span>
+                <div class="field-control">
+                    <input type="date" id="task-do" class="form-input">
+                    <div class="form-hint">Auto-added to the Kanban backlog on this day</div>
                 </div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Size <span class="form-label-hint">(Fibonacci points)</span></label>
-                <div class="size-picker" id="size-picker">
-                    <button type="button" class="size-btn" data-value="xs"><span class="size-label">XS</span><span class="size-pts">1pt</span></button>
-                    <button type="button" class="size-btn" data-value="s"><span class="size-label">S</span><span class="size-pts">2pt</span></button>
-                    <button type="button" class="size-btn active" data-value="m"><span class="size-label">M</span><span class="size-pts">3pt</span></button>
-                    <button type="button" class="size-btn" data-value="l"><span class="size-label">L</span><span class="size-pts">5pt</span></button>
-                    <button type="button" class="size-btn" data-value="xl"><span class="size-label">XL</span><span class="size-pts">8pt</span></button>
-                    <button type="button" class="size-btn" data-value="xxl"><span class="size-label">XXL</span><span class="size-pts">13pt</span></button>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label class="toggle-row">
-                    <span class="form-label" style="margin:0">Recurring</span>
+            <div class="field field-toggle">
+                <span class="field-label">Recurring</span>
+                <div class="field-control">
                     <label class="switch">
                         <input type="checkbox" id="task-recurring-toggle">
                         <span class="switch-track"></span>
                     </label>
-                </label>
+                </div>
             </div>
 
             <div id="recurring-config" class="recurring-config" style="display:none;">
@@ -227,7 +240,7 @@
                     <div class="inline-row">
                         <span>Every</span>
                         <input type="number" id="recur-daily-interval" value="1" min="1" max="365" class="num-input">
-                        <span>days</span>
+                        <span>day(s)</span>
                     </div>
                 </div>
 
@@ -235,7 +248,7 @@
                     <div class="inline-row">
                         <span>Every</span>
                         <input type="number" id="recur-weekly-interval" value="1" min="1" max="52" class="num-input">
-                        <span>weeks on</span>
+                        <span>week(s) on</span>
                     </div>
                     <div class="dow-picker">
                         <button type="button" class="dow-btn" data-day="1">Mon</button>
@@ -249,6 +262,17 @@
                 </div>
 
                 <div id="recur-monthly" class="recur-opts" style="display:none;">
+                    <div class="inline-row">
+                        <span>Every</span>
+                        <input type="number" id="recur-monthly-interval" value="1" min="1" max="60" class="num-input">
+                        <span>month(s)</span>
+                        <div class="month-presets" id="month-presets">
+                            <button type="button" class="preset-btn" data-months="1">1</button>
+                            <button type="button" class="preset-btn" data-months="3">3</button>
+                            <button type="button" class="preset-btn" data-months="6">6</button>
+                            <button type="button" class="preset-btn" data-months="12">12</button>
+                        </div>
+                    </div>
                     <label class="radio-row">
                         <input type="radio" name="monthly-mode" value="date" checked> On day
                         <input type="number" id="recur-monthly-day" value="1" min="1" max="31" class="num-input">
@@ -275,25 +299,22 @@
                 </div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Notes</label>
-                <textarea id="task-notes" class="form-textarea" rows="2" placeholder="Optional notes…"></textarea>
-            </div>
-
-            <div class="form-group">
-                <label class="toggle-row">
-                    <span class="form-label" style="margin:0">Add to Kanban backlog now</span>
-                    <label class="switch">
-                        <input type="checkbox" id="task-add-to-kanban">
-                        <span class="switch-track"></span>
-                    </label>
-                </label>
+            <div class="field field-notes">
+                <span class="field-label">Notes</span>
+                <div class="field-control">
+                    <button type="button" class="btn-ghost add-notes-btn" id="task-notes-add">+ Add notes</button>
+                    <textarea id="task-notes" class="form-textarea" rows="3" placeholder="Optional notes…" style="display:none;"></textarea>
+                </div>
             </div>
 
         </div>
         <div class="modal-footer">
             <button class="btn-danger-ghost" id="task-modal-delete" style="display:none;">Delete</button>
             <div class="modal-footer-right">
+                <label class="check-row footer-check">
+                    <input type="checkbox" id="task-add-to-kanban">
+                    <span>Add to board</span>
+                </label>
                 <button class="btn-ghost" id="task-modal-cancel">Cancel</button>
                 <button class="btn-primary" id="task-modal-save">Save</button>
             </div>
