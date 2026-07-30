@@ -395,9 +395,8 @@ main { margin:0 auto; padding:20px; }
 .modal-task .modal-footer { flex-shrink:0; padding-top:12px; border-top:1px solid var(--border-light); }
 
 /* ---- Task modal field rows: label in a fixed left column, control on the right ---- */
-.field { display:flex; align-items:flex-start; gap:12px; padding:9px 0; border-bottom:1px solid var(--border-light); }
-.field:last-child { border-bottom:none; }
-.field-label { flex:0 0 86px; padding-top:7px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--text-2); }
+.field { display:flex; align-items:flex-start; gap:14px; padding:8px 0; }
+.field-label { flex:0 0 100px; padding-top:8px; font-size:13px; font-weight:600; color:var(--text-2); }
 .field-control { flex:1; min-width:0; }
 .field-toggle { align-items:center; }
 .field-toggle .field-label { padding-top:0; }
@@ -406,6 +405,51 @@ main { margin:0 auto; padding:20px; }
 .check-row input { width:15px; height:15px; accent-color:var(--accent); cursor:pointer; flex-shrink:0; }
 .footer-check { margin:0 8px 0 0; white-space:nowrap; }
 .add-notes-btn { padding:5px 10px; font-size:12px; }
+.sub-label { display:block; font-size:11px; color:var(--text-3); margin-bottom:3px; }
+
+/* Priority over size, both on a shared 12-column track so the two rows line
+   up as one neat rectangle (4 × 3 cols, then 6 × 2 cols) */
+.ps-grid { display:flex; flex-direction:column; gap:5px; }
+.ps-grid .btn-group, .ps-grid .size-picker { display:grid; grid-template-columns:repeat(12, 1fr); gap:5px; }
+.ps-grid .group-btn { grid-column:span 3; padding:7px 4px; }
+.ps-grid .size-btn { grid-column:span 2; padding:7px 4px; display:block; font-size:12px; font-weight:600; }
+
+/* min-width:0 or the date inputs' intrinsic width overflows the 1fr tracks */
+.date-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.date-grid > div { min-width:0; }
+.date-grid .form-input { min-width:0; }
+
+/* Provenance line — kept at the very bottom, deliberately quiet */
+.task-in-list { padding-top:14px; font-size:11px; color:var(--text-3); }
+
+/* Softer, filled controls inside the task modal — outlined grey boxes on
+   white read as a wireframe */
+.modal-task .group-btn,
+.modal-task .size-btn,
+.modal-task .recur-btn,
+.modal-task .dow-btn { border-color:transparent; background:var(--bg-input); color:var(--text-2); font-weight:600; }
+.modal-task .group-btn:hover,
+.modal-task .size-btn:hover,
+.modal-task .recur-btn:hover,
+.modal-task .dow-btn:hover { background:var(--bg-hover); color:var(--text); }
+.modal-task .group-btn.active { background:var(--text); color:var(--bg-card); }
+.modal-task .size-btn.active,
+.modal-task .recur-btn.active,
+.modal-task .dow-btn.active { background:var(--accent); color:#fff; box-shadow:0 1px 3px rgba(0,122,255,0.35); }
+.modal-task .form-input,
+.modal-task .form-select,
+.modal-task .form-textarea,
+.modal-task .num-input,
+.modal-task .form-select-sm { background:var(--bg-input); border-color:transparent; border-radius:8px; }
+.modal-task .form-input:focus,
+.modal-task .form-select:focus,
+.modal-task .form-textarea:focus,
+.modal-task .num-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,122,255,0.15); }
+.modal-task .add-notes-btn { background:var(--bg-input); border-color:transparent; color:var(--text-2); }
+.modal-task .recurring-config { background:rgba(0,122,255,0.06); border:1px solid rgba(0,122,255,0.12); border-radius:10px; }
+[data-theme="dark"] .modal-task .recurring-config { background:rgba(10,132,255,0.10); border-color:rgba(10,132,255,0.22); }
+.modal-task .recurring-config .num-input,
+.modal-task .recurring-config .form-select-sm { background:var(--bg-card); }
 
 /* ---- Form ---- */
 .form-group { margin-bottom:14px; }
@@ -446,11 +490,9 @@ main { margin:0 auto; padding:20px; }
 .size-btn { flex:1; padding:6px 4px; border:1px solid var(--border); border-radius:var(--r-sm); background:none; color:var(--text-2); cursor:pointer; transition:all 0.15s; display:flex; flex-direction:column; align-items:center; gap:2px; }
 .size-btn:hover { background:var(--bg-hover); color:var(--text); }
 .size-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
-.size-label { font-size:13px; font-weight:600; }
-.size-pts { font-size:10px; opacity:0.75; }
 
 /* ---- Recurring ---- */
-.recurring-config { background:var(--bg-input); border-radius:var(--r-sm); padding:12px; margin:0 0 9px 98px; }
+.recurring-config { background:var(--bg-input); border-radius:var(--r-sm); padding:12px; margin:0 0 9px 114px; }
 .recur-type-row { display:flex; gap:4px; margin-bottom:12px; }
 .recur-btn { flex:1; padding:6px; border:1px solid var(--border); border-radius:var(--r-sm); font-size:12px; font-weight:600; background:none; color:var(--text-2); cursor:pointer; transition:all 0.15s; }
 .recur-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
@@ -461,10 +503,6 @@ main { margin:0 auto; padding:20px; }
 .dow-btn { padding:5px 8px; border:1px solid var(--border); border-radius:var(--r-sm); font-size:12px; font-weight:600; background:none; color:var(--text-2); cursor:pointer; transition:all 0.15s; }
 .dow-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 .radio-row { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-2); }
-.month-presets { display:flex; gap:4px; margin-left:auto; }
-.preset-btn { min-width:28px; padding:4px 6px; border:1px solid var(--border); border-radius:var(--r-sm); font-size:12px; font-weight:600; background:var(--bg-card); color:var(--text-2); cursor:pointer; transition:all 0.15s; }
-.preset-btn:hover { background:var(--bg-hover); color:var(--text); }
-.preset-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 
 /* ---- Toggle switch ---- */
 .toggle-row { display:flex; align-items:center; justify-content:space-between; }
@@ -531,15 +569,18 @@ main { margin:0 auto; padding:20px; }
     .list-item-to-kanban { opacity:1; }
     .size-picker { display:grid; grid-template-columns:repeat(6, 1fr); gap:4px; }
     .size-btn { min-width:0; padding:6px 2px; }
+    .ps-grid .size-btn, .ps-grid .group-btn { padding:8px 2px; }
     .modal { max-height:85vh; margin:0 8px; }
     .modal-task { max-width:100%; }
     /* Stack the label above its control — an 86px gutter is too much on phones */
-    .field { flex-direction:column; gap:6px; padding:10px 0; }
+    /* stretch, or flex-start from the base rule shrinks controls to content */
+    .field { flex-direction:column; align-items:stretch; gap:6px; padding:10px 0; }
     .field-label { flex:none; padding-top:0; }
     .field-toggle { flex-direction:row; align-items:center; justify-content:space-between; }
     .field-toggle .field-label { flex:1; }
     .recurring-config { margin-left:0; }
-    .month-presets { margin-left:0; }
+    .date-grid { gap:8px; }
+    .date-grid .form-input { padding:9px 8px; }
     .footer-check { font-size:11px; margin-right:4px; }
     .modal-task .modal-footer { padding:10px 14px 14px; }
     .modal-footer-right { gap:6px; }

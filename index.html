@@ -157,7 +157,6 @@
                     <input type="checkbox" id="task-multi-toggle">
                     <span>Add several at once (one per line)</span>
                 </label>
-                <div id="task-in-list" class="task-in-list" style="display:none;"></div>
             </div>
 
             <div class="field">
@@ -175,47 +174,45 @@
             </div>
 
             <div class="field">
-                <span class="field-label">Priority</span>
+                <span class="field-label">Priority &amp; size</span>
                 <div class="field-control">
-                    <div class="btn-group" id="priority-picker">
-                        <button type="button" class="group-btn active" data-value="">None</button>
-                        <button type="button" class="group-btn low" data-value="low">Low</button>
-                        <button type="button" class="group-btn medium" data-value="medium">Medium</button>
-                        <button type="button" class="group-btn high" data-value="high">High</button>
+                    <div class="ps-grid">
+                        <div class="btn-group" id="priority-picker">
+                            <button type="button" class="group-btn active" data-value="">None</button>
+                            <button type="button" class="group-btn low" data-value="low">Low</button>
+                            <button type="button" class="group-btn medium" data-value="medium">Medium</button>
+                            <button type="button" class="group-btn high" data-value="high">High</button>
+                        </div>
+                        <div class="size-picker" id="size-picker">
+                            <button type="button" class="size-btn" data-value="xs">XS</button>
+                            <button type="button" class="size-btn" data-value="s">S</button>
+                            <button type="button" class="size-btn active" data-value="m">M</button>
+                            <button type="button" class="size-btn" data-value="l">L</button>
+                            <button type="button" class="size-btn" data-value="xl">XL</button>
+                            <button type="button" class="size-btn" data-value="xxl">XXL</button>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div class="field">
-                <span class="field-label">Size</span>
+                <span class="field-label">Dates</span>
                 <div class="field-control">
-                    <div class="size-picker" id="size-picker">
-                        <button type="button" class="size-btn" data-value="xs"><span class="size-label">XS</span><span class="size-pts">1</span></button>
-                        <button type="button" class="size-btn" data-value="s"><span class="size-label">S</span><span class="size-pts">2</span></button>
-                        <button type="button" class="size-btn active" data-value="m"><span class="size-label">M</span><span class="size-pts">3</span></button>
-                        <button type="button" class="size-btn" data-value="l"><span class="size-label">L</span><span class="size-pts">5</span></button>
-                        <button type="button" class="size-btn" data-value="xl"><span class="size-label">XL</span><span class="size-pts">8</span></button>
-                        <button type="button" class="size-btn" data-value="xxl"><span class="size-label">XXL</span><span class="size-pts">13</span></button>
+                    <div class="date-grid">
+                        <div>
+                            <span class="sub-label">Do by</span>
+                            <input type="date" id="task-due" class="form-input">
+                        </div>
+                        <div>
+                            <span class="sub-label">Do on</span>
+                            <input type="date" id="task-do" class="form-input">
+                        </div>
                     </div>
-                </div>
-            </div>
-
-            <div class="field">
-                <span class="field-label">Do by</span>
-                <div class="field-control">
-                    <input type="date" id="task-due" class="form-input">
                     <label class="check-row" id="countdown-row">
                         <input type="checkbox" id="task-countdown">
                         <span>Show countdown on card</span>
                     </label>
-                </div>
-            </div>
-
-            <div class="field">
-                <span class="field-label">Do on</span>
-                <div class="field-control">
-                    <input type="date" id="task-do" class="form-input">
-                    <div class="form-hint">Auto-added to the Kanban backlog on this day</div>
+                    <div class="form-hint">“Do on” auto-adds it to the Kanban backlog that day</div>
                 </div>
             </div>
 
@@ -266,12 +263,6 @@
                         <span>Every</span>
                         <input type="number" id="recur-monthly-interval" value="1" min="1" max="60" class="num-input">
                         <span>month(s)</span>
-                        <div class="month-presets" id="month-presets">
-                            <button type="button" class="preset-btn" data-months="1">1</button>
-                            <button type="button" class="preset-btn" data-months="3">3</button>
-                            <button type="button" class="preset-btn" data-months="6">6</button>
-                            <button type="button" class="preset-btn" data-months="12">12</button>
-                        </div>
                     </div>
                     <label class="radio-row">
                         <input type="radio" name="monthly-mode" value="date" checked> On day
@@ -306,6 +297,8 @@
                     <textarea id="task-notes" class="form-textarea" rows="3" placeholder="Optional notes…" style="display:none;"></textarea>
                 </div>
             </div>
+
+            <div id="task-in-list" class="task-in-list" style="display:none;"></div>
 
         </div>
         <div class="modal-footer">

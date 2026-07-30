@@ -1542,7 +1542,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
         }
         const inList = document.getElementById('task-in-list');
         const days = daysSince(t.createdDate);
-        inList.textContent = `In list ${days === 0 ? 'since today' : days + ' day' + (days === 1 ? '' : 's')} · added ${formatDateShort(t.createdDate)}`;
+        inList.textContent = `Added ${formatDateShort(t.createdDate)} · ${days === 0 ? 'in list since today' : days + ' day' + (days === 1 ? '' : 's') + ' in list'}`;
         inList.style.display = '';
     } else {
         document.getElementById('task-in-list').style.display = 'none';
@@ -1561,7 +1561,6 @@ function openTaskModal(taskId, defaultKanbanCol) {
     }
 
     updateCountdownRow();
-    renderMonthPresets();
     renderThemePicker();
     renderPriorityPicker();
     renderSizePicker();
@@ -1627,13 +1626,6 @@ function updateCountdownRow() {
     const has = !!document.getElementById('task-due').value;
     document.getElementById('countdown-row').style.display = has ? '' : 'none';
     if (!has) document.getElementById('task-countdown').checked = false;
-}
-
-function renderMonthPresets() {
-    const val = parseInt(document.getElementById('recur-monthly-interval').value) || 1;
-    document.querySelectorAll('#month-presets .preset-btn').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.months) === val);
-    });
 }
 
 function renderRecurTypeBtns() {
@@ -2037,15 +2029,6 @@ function init() {
         setNotesOpen(true);
         document.getElementById('task-notes').focus();
     });
-
-    // Monthly interval presets (every 1 / 3 / 6 / 12 months)
-    document.querySelectorAll('#month-presets .preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.getElementById('recur-monthly-interval').value = btn.dataset.months;
-            renderMonthPresets();
-        });
-    });
-    document.getElementById('recur-monthly-interval').addEventListener('input', renderMonthPresets);
 
     // Recurring type
     document.querySelectorAll('.recur-btn').forEach(btn => {
