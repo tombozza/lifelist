@@ -124,11 +124,13 @@ main { margin:0 auto; padding:20px; }
 .bulk-action-bar .btn-ghost { background:none; border:1px solid rgba(255,255,255,0.4); color:#fff; margin-left:auto; }
 
 /* ---- Theme Tabs ---- */
-.theme-tabs-scroll { overflow-x:auto; margin-bottom:16px; padding-bottom:2px; }
-.theme-tabs { display:flex; gap:6px; white-space:nowrap; }
+.theme-tabs-scroll { overflow-x:auto; margin-bottom:12px; padding-bottom:2px; }
+.theme-tabs { display:flex; gap:5px; white-space:nowrap; }
+/* Kept close in size to the chips on the cards below — a much larger filter
+   row unbalances the page */
 .theme-tab {
-    padding:6px 14px; border:2px solid transparent; border-radius:20px;
-    font-size:13px; font-weight:500; cursor:pointer; background:var(--bg-card);
+    padding:4px 11px; border:1px solid transparent; border-radius:20px;
+    font-size:11.5px; font-weight:500; cursor:pointer; background:var(--bg-card);
     color:var(--text-2); transition:all 0.15s; white-space:nowrap;
 }
 .theme-tab:hover { color:var(--text); border-color:var(--border); }
@@ -141,8 +143,8 @@ main { margin:0 auto; padding:20px; }
 .theme-tab-toggle.off:hover { border-color:var(--border); color:var(--text-2); }
 
 /* Focus segmented control (All / Work / Home) on the board filter row */
-.focus-seg { display:inline-flex; gap:2px; background:var(--bg-input); padding:3px; border-radius:20px; margin-right:8px; flex-shrink:0; }
-.focus-seg-btn { padding:4px 12px; border:none; border-radius:16px; font-size:12px; font-weight:500; background:none; color:var(--text-2); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+.focus-seg { display:inline-flex; gap:2px; background:var(--bg-input); padding:2px; border-radius:20px; margin-right:8px; flex-shrink:0; }
+.focus-seg-btn { padding:3px 10px; border:none; border-radius:16px; font-size:11.5px; font-weight:500; background:none; color:var(--text-2); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
 .focus-seg-btn:hover { color:var(--text); }
 .focus-seg-btn.active { background:var(--bg-card); color:var(--text); box-shadow:var(--shadow); }
 
