@@ -611,6 +611,12 @@ main { margin:0 auto; padding:20px; }
     .list-item-title { max-width:none; }
     .chip { font-size:10px; padding:2px 6px; }
     .board-card-menu { opacity:1; }
-    /* Long-pressing a card starts a drag, so suppress iOS's own callout */
-    .board-card { -webkit-touch-callout:none; }
+    /* Long-pressing a card starts a drag, so suppress the OS's own
+       long-press behaviour: the callout menu and the text selection it
+       drags out underneath. */
+    .board-card, .board-card * {
+        -webkit-touch-callout:none;
+        -webkit-user-select:none;
+        user-select:none;
+    }
 }

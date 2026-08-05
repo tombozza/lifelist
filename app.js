@@ -2279,6 +2279,9 @@ function init() {
         touchHoldTimer = setTimeout(() => {
             touchArmed = true;
             card.classList.add('touch-armed');
+            // Belt and braces for browsers that got a selection in first
+            const sel = window.getSelection();
+            if (sel && !sel.isCollapsed) sel.removeAllRanges();
             if (navigator.vibrate) navigator.vibrate(10);
         }, HOLD_MS);
     }, { passive: true });
