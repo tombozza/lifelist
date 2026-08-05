@@ -331,6 +331,8 @@ main { margin:0 auto; padding:20px; }
 .board-card-menu { width:24px; height:24px; border:none; background:none; color:var(--text-3); border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; opacity:0; margin-left:auto; transition:opacity 0.1s; }
 .board-card:hover .board-card-menu { opacity:1; }
 .board-card-menu:hover { background:var(--bg-hover); color:var(--text); }
+/* Long press held: the card is picked up and ready to drag */
+.board-card.touch-armed { transform:scale(1.03); box-shadow:0 4px 12px rgba(0,0,0,0.28); transition:transform 0.12s ease, box-shadow 0.12s ease; }
 
 /* ---- Move-to modal ---- */
 .move-to-option { display:block; width:100%; padding:12px 14px; border:1px solid var(--border-light); border-radius:var(--r-sm); background:var(--bg-input); color:var(--text); font-size:14px; font-weight:500; cursor:pointer; margin-bottom:6px; text-align:left; transition:all 0.1s; }
@@ -609,4 +611,6 @@ main { margin:0 auto; padding:20px; }
     .list-item-title { max-width:none; }
     .chip { font-size:10px; padding:2px 6px; }
     .board-card-menu { opacity:1; }
+    /* Long-pressing a card starts a drag, so suppress iOS's own callout */
+    .board-card { -webkit-touch-callout:none; }
 }

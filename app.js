@@ -2248,30 +2248,57 @@ function init() {
         history.replaceState(null, '', location.pathname);
     }
 
-    // Touch drag for kanban cards on mobile
+    // Touch drag for kanban cards on mobile. A drag only begins after a
+    // long press — otherwise every swipe would pick a card up instead of
+    // scrolling the board sideways between columns.
     let touchDragId = null;
     let touchGhost = null;
     let touchStartX = 0, touchStartY = 0;
     let touchDragging = false;
+    let touchArmed = false;      // long press completed: the card is grabbable
+    let touchHoldTimer = null;
     const TOUCH_THRESHOLD = 10;
+    const HOLD_MS = 350;
+
+    function cancelHold() {
+        clearTimeout(touchHoldTimer);
+        touchHoldTimer = null;
+    }
 
     document.addEventListener('touchstart', e => {
         const card = e.target.closest('.board-card');
         if (!card || !card.dataset.taskId) return;
+        if (e.target.closest('.board-card-menu')) return;
         touchDragId = card.dataset.taskId;
         touchDragging = false;
+        touchArmed = false;
         const touch = e.touches[0];
         touchStartX = touch.clientX;
         touchStartY = touch.clientY;
+        cancelHold();
+        touchHoldTimer = setTimeout(() => {
+            touchArmed = true;
+            card.classList.add('touch-armed');
+            if (navigator.vibrate) navigator.vibrate(10);
+        }, HOLD_MS);
     }, { passive: true });
 
     document.addEventListener('touchmove', e => {
         if (!touchDragId) return;
         const touch = e.touches[0];
+        const dx = Math.abs(touch.clientX - touchStartX);
+        const dy = Math.abs(touch.clientY - touchStartY);
+        if (!touchArmed) {
+            // Moved before the hold completed — treat it as a scroll/swipe
+            // and let the browser have the gesture.
+            if (dx >= TOUCH_THRESHOLD || dy >= TOUCH_THRESHOLD) {
+                cancelHold();
+                clearTouchDrag();
+            }
+            return;
+        }
         if (!touchDragging) {
-            const dx = Math.abs(touch.clientX - touchStartX);
-            const dy = Math.abs(touch.clientY - touchStartY);
-            if (dx < TOUCH_THRESHOLD && dy < TOUCH_THRESHOLD) return;
+            if (dx < TOUCH_THRESHOLD && dy < TOUCH_THRESHOLD) { e.preventDefault(); return; }
             touchDragging = true;
             const origCard = document.querySelector(`.board-card[data-task-id="${touchDragId}"]`);
             if (!origCard) return;
@@ -2293,23 +2320,34 @@ function init() {
         if (dropZone) dropZone.classList.add('drag-over');
     }, { passive: false });
 
+    function clearTouchDrag() {
+        if (touchGhost) { touchGhost.remove(); touchGhost = null; }
+        if (touchDragId) {
+            const origCard = document.querySelector(`.board-card[data-task-id="${touchDragId}"]`);
+            if (origCard) { origCard.style.opacity = ''; origCard.classList.remove('touch-armed'); }
+        }
+        document.querySelectorAll('.board-cards').forEach(c => c.classList.remove('drag-over'));
+        touchDragId = null;
+        touchDragging = false;
+        touchArmed = false;
+    }
+
     document.addEventListener('touchend', e => {
+        cancelHold();
         if (!touchDragId) return;
         if (touchDragging) {
             const touch = e.changedTouches[0];
             if (touchGhost) { touchGhost.remove(); touchGhost = null; }
-            const origCard = document.querySelector(`.board-card[data-task-id="${touchDragId}"]`);
-            if (origCard) origCard.style.opacity = '';
-            document.querySelectorAll('.board-cards').forEach(c => c.classList.remove('drag-over'));
             const el = document.elementFromPoint(touch.clientX, touch.clientY);
             const dropZone = el && el.closest('.board-cards');
             if (dropZone && dropZone.dataset.col) {
                 moveToColumn(touchDragId, dropZone.dataset.col);
             }
         }
-        touchDragId = null;
-        touchDragging = false;
+        clearTouchDrag();
     });
+
+    document.addEventListener('touchcancel', () => { cancelHold(); clearTouchDrag(); });
 
     render();
 }
