@@ -2260,9 +2260,77 @@ function init() {
     const TOUCH_THRESHOLD = 10;
     const HOLD_MS = 350;
 
+    // Holding a dragged card near either edge pages the board to the next
+    // column, so you can reach a column that isn't on screen yet.
+    let edgeTimer = null;
+    let lastTouchX = 0, lastTouchY = 0;
+    const EDGE_ZONE = 56;
+    const EDGE_INTERVAL = 550;
+
+    function dropZoneAt(x, y) {
+        const el = document.elementFromPoint(x, y);
+        return el && el.closest('.board-cards');
+    }
+
+    function highlightDropZone() {
+        const zone = dropZoneAt(lastTouchX, lastTouchY);
+        document.querySelectorAll('.board-cards').forEach(c => {
+            c.classList.toggle('drag-over', c === zone);
+        });
+    }
+
     function cancelHold() {
         clearTimeout(touchHoldTimer);
         touchHoldTimer = null;
+    }
+
+    // scrollTo({behavior:'smooth'}) is unreliable here — mandatory snapping
+    // cancels it outright — so the glide is animated by hand.
+    let pageAnim = null;
+
+    function pageBoard(dir) {
+        const container = document.getElementById('board-columns');
+        const col = container && container.querySelector('.board-col');
+        if (!col) return;
+        const gap = parseFloat(getComputedStyle(container).columnGap) || 0;
+        const step = col.offsetWidth + gap;
+        const max = container.scrollWidth - container.clientWidth;
+        const from = container.scrollLeft;
+        const to = Math.max(0, Math.min(max, from + dir * step));
+        if (Math.abs(to - from) < 1) return;
+        clearInterval(pageAnim);
+        const t0 = Date.now();
+        const DUR = 260;
+        pageAnim = setInterval(() => {
+            const p = Math.min(1, (Date.now() - t0) / DUR);
+            const eased = 1 - Math.pow(1 - p, 3);
+            container.scrollLeft = from + (to - from) * eased;
+            if (p >= 1) { clearInterval(pageAnim); pageAnim = null; highlightDropZone(); }
+        }, 16);
+    }
+
+    function startEdgeScroll() {
+        if (edgeTimer) return;
+        // Mandatory snapping cancels a programmatic smooth scroll outright,
+        // so it has to come off while we're paging the board ourselves.
+        const container = document.getElementById('board-columns');
+        if (container) container.style.scrollSnapType = 'none';
+        edgeTimer = setInterval(() => {
+            const container = document.getElementById('board-columns');
+            if (!container) return;
+            const r = container.getBoundingClientRect();
+            if (lastTouchX < r.left + EDGE_ZONE) pageBoard(-1);
+            else if (lastTouchX > r.right - EDGE_ZONE) pageBoard(1);
+        }, EDGE_INTERVAL);
+    }
+
+    function stopEdgeScroll() {
+        clearInterval(edgeTimer);
+        edgeTimer = null;
+        clearInterval(pageAnim);
+        pageAnim = null;
+        const container = document.getElementById('board-columns');
+        if (container) container.style.scrollSnapType = '';
     }
 
     document.addEventListener('touchstart', e => {
@@ -2311,19 +2379,20 @@ function init() {
             touchGhost.style.width = origCard.offsetWidth + 'px';
             document.body.appendChild(touchGhost);
             origCard.style.opacity = '0.3';
+            startEdgeScroll();
         }
         e.preventDefault();
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
         if (touchGhost) {
             touchGhost.style.left = (touch.clientX - 30) + 'px';
             touchGhost.style.top = (touch.clientY - 20) + 'px';
         }
-        document.querySelectorAll('.board-cards').forEach(c => c.classList.remove('drag-over'));
-        const el = document.elementFromPoint(touch.clientX, touch.clientY);
-        const dropZone = el && el.closest('.board-cards');
-        if (dropZone) dropZone.classList.add('drag-over');
+        highlightDropZone();
     }, { passive: false });
 
     function clearTouchDrag() {
+        stopEdgeScroll();
         if (touchGhost) { touchGhost.remove(); touchGhost = null; }
         if (touchDragId) {
             const origCard = document.querySelector(`.board-card[data-task-id="${touchDragId}"]`);
@@ -2341,8 +2410,7 @@ function init() {
         if (touchDragging) {
             const touch = e.changedTouches[0];
             if (touchGhost) { touchGhost.remove(); touchGhost = null; }
-            const el = document.elementFromPoint(touch.clientX, touch.clientY);
-            const dropZone = el && el.closest('.board-cards');
+            const dropZone = dropZoneAt(touch.clientX, touch.clientY);
             if (dropZone && dropZone.dataset.col) {
                 moveToColumn(touchDragId, dropZone.dataset.col);
             }
