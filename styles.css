@@ -496,6 +496,28 @@ main { margin:0 auto; padding:20px; }
 }
 .theme-pick-btn:hover { opacity:0.9; }
 .theme-pick-btn.active { opacity:1; box-shadow:0 0 0 3px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.2); transform:scale(1.05); }
+/* Creating a theme from inside a task — reads as an action, not a theme */
+.theme-pick-add {
+    padding:5px 12px; border:1px dashed var(--border); border-radius:16px;
+    font-size:12px; font-weight:600; background:none; color:var(--text-2);
+    cursor:pointer; transition:all 0.15s;
+}
+.theme-pick-add:hover { border-color:var(--text-3); color:var(--text); }
+
+/* ---- Sub-theme row (select + inline "new") ---- */
+.subtheme-row { display:flex; gap:6px; align-items:center; }
+.subtheme-row .form-select { flex:1; min-width:0; }
+.subtheme-add-btn { flex-shrink:0; padding:6px 12px; font-size:12px; white-space:nowrap; }
+.subtheme-new { display:flex; gap:5px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+.subtheme-new .form-input { flex:1; min-width:90px; }
+.subtheme-new .form-select { flex:0 0 auto; width:auto; max-width:38%; }
+/* Keep the whole row on one line at phone width — a lone wrapped "Add"
+   button reads like it belongs to the field below it */
+.subtheme-new .btn-ghost, .subtheme-new .btn-small { flex-shrink:0; padding:7px 10px; font-size:12px; }
+
+/* Week's completions — the Complete column used to carry this */
+.board-week-stat { font-size:12px; font-weight:500; color:var(--text-2); display:inline-flex; gap:5px; align-items:center; }
+.board-week-stat strong { font-weight:600; color:var(--text); }
 
 /* ---- Button Groups ---- */
 .btn-group { display:flex; gap:4px; }

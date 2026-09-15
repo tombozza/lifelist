@@ -160,16 +160,28 @@
             </div>
 
             <div class="field">
-                <span class="field-label">Theme</span>
-                <div class="field-control"><div id="theme-picker" class="theme-picker"></div></div>
+                <span class="field-label">Themes</span>
+                <div class="field-control">
+                    <div id="theme-picker" class="theme-picker"></div>
+                    <div class="form-hint">Tap more than one to give a task several &mdash; e.g. Work + Jim</div>
+                </div>
             </div>
 
             <div class="field" id="subtheme-field">
                 <span class="field-label">Sub-theme</span>
                 <div class="field-control">
-                    <select id="task-subtheme" class="form-select">
-                        <option value="">None</option>
-                    </select>
+                    <div class="subtheme-row">
+                        <select id="task-subtheme" class="form-select">
+                            <option value="">None</option>
+                        </select>
+                        <button type="button" class="btn-ghost subtheme-add-btn" id="subtheme-add-btn">+ New</button>
+                    </div>
+                    <div class="subtheme-new" id="subtheme-new" style="display:none;">
+                        <select id="subtheme-new-theme" class="form-select form-select-sm" style="display:none;"></select>
+                        <input type="text" id="subtheme-new-name" class="form-input" placeholder="New sub-theme&hellip;">
+                        <button type="button" class="btn-ghost" id="subtheme-new-cancel">Cancel</button>
+                        <button type="button" class="btn-small" id="subtheme-new-save">Add</button>
+                    </div>
                 </div>
             </div>
 

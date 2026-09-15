@@ -18,8 +18,12 @@ const KANBAN_COLS = [
     { id: 'next',            name: 'Next' },
     { id: 'in-progress',     name: 'In Progress' },
     { id: 'ongoing',         name: 'Ongoing' },
+    { id: 'waiting',         name: 'Waiting' },
     { id: 'blocked',         name: 'Blocked' },
-    { id: 'complete',        name: 'Complete' },
+    // Completing a task still parks it here, but the column is never drawn:
+    // it was only ever in the way. Tasks leave via "Mark complete" and the
+    // list checkbox, and the week's count sits above the board instead.
+    { id: 'complete',        name: 'Complete',    offBoard: true },
 ];
 
 const EVENING_HOUR = 17; // 5pm
@@ -35,7 +39,7 @@ function defaultBacklogCol() { return isEvening() ? 'backlog-evening' : 'backlog
 function boardColumns() {
     const day = KANBAN_COLS.find(c => c.id === 'backlog-day');
     const evening = KANBAN_COLS.find(c => c.id === 'backlog-evening');
-    const rest = KANBAN_COLS.filter(c => !c.backlog);
+    const rest = KANBAN_COLS.filter(c => !c.backlog && !c.offBoard);
     const backlogs = isEvening() ? [day, evening] : [evening, day];
     return [...backlogs, ...rest];
 }
@@ -76,7 +80,9 @@ let snoozeTargetIds = null;
 let snoozeFromBulk = false;
 
 // Modal field state
-let modalThemeId = '';
+let modalThemeIds = [];      // a task can carry several themes
+let modalSubTheme = '';
+let themeModalFromTask = false;  // theme modal opened over the task modal
 let modalPriority = '';
 let modalSize = 'm';
 let modalRecurType = 'daily';
@@ -112,6 +118,17 @@ function migrateColumns(tasks) {
         // Give live recurring tasks a stable chain id so occurrence ids are
         // deterministic across devices (prevents duplicate spawns)
         if (t.recurring && !t.recurRoot) t.recurRoot = t.id;
+        // Keep themeIds and the legacy themeId mirror in step. A record last
+        // written by an older device carries only themeId, so that wins —
+        // otherwise a stale themeIds array would mask the newer choice.
+        if (!Array.isArray(t.themeIds) || !t.themeIds.length) {
+            t.themeIds = t.themeId ? [t.themeId] : [];
+        } else if (t.themeId && !t.themeIds.includes(t.themeId)) {
+            t.themeIds = [t.themeId];
+        } else {
+            t.themeIds = [...new Set(t.themeIds.filter(Boolean))];
+            t.themeId = t.themeIds[0] || '';
+        }
     });
 }
 
@@ -185,6 +202,37 @@ function getWeekStart(dateStr) {
 function getWeekKey(dateStr) { return getWeekStart(dateStr || todayStr()); }
 
 function getTheme(id) { return state.themes.find(t => t.id === id) || null; }
+
+// A task can carry more than one theme (e.g. Work + Jim). `themeIds` is the
+// source of truth; `themeId` mirrors themeIds[0] so a device still running
+// older cached code — and every record already in the cloud — keeps working.
+function taskThemeIds(t) {
+    if (t && Array.isArray(t.themeIds) && t.themeIds.length) return t.themeIds;
+    return (t && t.themeId) ? [t.themeId] : [];
+}
+
+function taskThemes(t) { return taskThemeIds(t).map(getTheme).filter(Boolean); }
+
+// The theme a task is grouped under in Lists: its first still-existing one, so
+// deleting a theme doesn't drop a two-theme task into "No Theme".
+function primaryThemeId(t) {
+    const first = taskThemes(t)[0];
+    return first ? first.id : '';
+}
+
+// Normalise a theme selection onto a task payload: deduped, with the mirror.
+function withThemeIds(data, ids) {
+    const clean = [...new Set((ids || []).filter(Boolean))];
+    return { ...data, themeIds: clean, themeId: clean[0] || '' };
+}
+
+// A task survives a theme filter as long as ONE of its themes is visible, so
+// tagging something Work + Jim never makes it vanish from either view.
+function themesPass(t, ...excluded) {
+    const ids = taskThemeIds(t);
+    if (!ids.length) return true;
+    return ids.some(id => !excluded.some(set => set.has(id)));
+}
 
 function prioRank(t) {
     const v = PRIORITY_ORDER[t.priority];
@@ -443,7 +491,7 @@ function closeFilterModal() {
 
 function reviewQueue() {
     const hidden = hiddenThemeIds();
-    return state.tasks.filter(t => !hidden.has(t.themeId) && needsReview(t));
+    return state.tasks.filter(t => themesPass(t, hidden) && needsReview(t));
 }
 
 function renderReviewBanner() {
@@ -500,7 +548,7 @@ function renderReviewList() {
 function renderStaleBanner() {
     const banner = document.getElementById('stale-banner');
     const hidden = hiddenThemeIds();
-    const stale = state.tasks.filter(t => !hidden.has(t.themeId) && isStale(t));
+    const stale = state.tasks.filter(t => themesPass(t, hidden) && isStale(t));
     const snoozedUntil = state.settings.staleSnoozeUntil;
     if (!stale.length || staleBannerDismissed || currentFilters.age
         || (snoozedUntil && todayStr() < snoozedUntil)) {
@@ -574,13 +622,13 @@ function getFilteredTasks() {
     const hidden = hiddenThemeIds();
     return state.tasks.filter(t => {
         if (t.status === 'scheduled') return false; // dormant recurrence
-        if (hidden.has(t.themeId)) return false;
+        if (!themesPass(t, hidden)) return false;
         if (currentFilters.status === 'active' && (t.status === 'complete' || t.status === 'wont-do')) return false;
         if (currentFilters.status === 'complete' && t.status !== 'complete') return false;
         if (currentFilters.priority && t.priority !== currentFilters.priority) return false;
         if (currentFilters.size && t.size !== currentFilters.size) return false;
         if (currentFilters.age && daysSince(t.createdDate) < parseInt(currentFilters.age)) return false;
-        if (currentThemeTab !== 'all' && t.themeId !== currentThemeTab) return false;
+        if (currentThemeTab !== 'all' && !taskThemeIds(t).includes(currentThemeTab)) return false;
         if (currentFilters.search) {
             const q = currentFilters.search.toLowerCase();
             if (!t.title.toLowerCase().includes(q) && !(t.subTheme||'').toLowerCase().includes(q)) return false;
@@ -690,7 +738,7 @@ function renderListContent() {
     if (currentThemeTab === 'all') {
         const grouped = {};
         all.forEach(t => {
-            const key = t.themeId || '__none__';
+            const key = primaryThemeId(t) || '__none__';
             if (!grouped[key]) grouped[key] = [];
             grouped[key].push(t);
         });
@@ -775,15 +823,14 @@ function createListItem(task, opts = {}) {
         chips.appendChild(ok);
     }
 
-    const theme = getTheme(task.themeId);
-    if (theme) {
+    taskThemes(task).forEach(theme => {
         const tc = document.createElement('span');
         tc.className = 'chip chip-theme';
         tc.style.background = theme.color;
         tc.style.color = contrastText(theme.color);
         tc.textContent = theme.name;
         chips.appendChild(tc);
-    }
+    });
     if (task.subTheme) {
         const sc = document.createElement('span');
         sc.className = 'chip chip-sub';
@@ -977,13 +1024,12 @@ function renderBoardFilter() {
 }
 
 function renderBoard() {
-    document.getElementById('board-stats').innerHTML = '';
+    renderBoardWeekStat();
     renderReviewBanner();
     renderListReminder();
     renderBoardFilter();
     const container = document.getElementById('board-columns');
     container.innerHTML = '';
-    const weekStats = getWeekStats();
     const hidden = hiddenThemeIds();
     const weekendHidden = weekendHiddenThemeIds();
     const muted = mutedThemeIds();
@@ -991,25 +1037,14 @@ function renderBoard() {
     boardColumns().forEach(col => {
         const tasks = state.tasks.filter(t =>
             t.kanbanColumn === col.id && t.status !== 'wont-do'
-            && !hidden.has(t.themeId) && !weekendHidden.has(t.themeId)
-            && !muted.has(t.themeId));
+            && themesPass(t, hidden, weekendHidden, muted));
         const colEl = document.createElement('div');
         colEl.className = 'board-col';
         colEl.dataset.col = col.id;
 
         const header = document.createElement('div');
         header.className = 'board-col-header';
-        if (col.id === 'complete') {
-            const arrow = weekStats.delta === null ? '' : weekStats.delta > 0 ? ` ↑${Math.abs(weekStats.delta)}%` : weekStats.delta < 0 ? ` ↓${Math.abs(weekStats.delta)}%` : '';
-            const cls = weekStats.delta === null ? '' : weekStats.delta > 0 ? 'col-stat-up' : weekStats.delta < 0 ? 'col-stat-down' : '';
-            header.innerHTML = `
-                <span class="board-col-name">${col.name}</span>
-                <span class="board-col-count">${tasks.length}</span>
-                <span class="col-week-stat ${cls}">${weekStats.count} this week${arrow}</span>
-            `;
-        } else {
-            header.innerHTML = `<span class="board-col-name">${col.name}</span><span class="board-col-count">${tasks.length}</span>`;
-        }
+        header.innerHTML = `<span class="board-col-name">${col.name}</span><span class="board-col-count">${tasks.length}</span>`;
         colEl.appendChild(header);
 
         const cards = document.createElement('div');
@@ -1041,6 +1076,21 @@ function renderBoard() {
     });
 }
 
+// The Complete column used to carry this in its header. The column is off the
+// board now, so the week's tally sits above it instead.
+function renderBoardWeekStat() {
+    const host = document.getElementById('board-stats');
+    host.innerHTML = '';
+    const w = getWeekStats();
+    if (!w.count && !w.lastCount) return;
+    const arrow = w.delta === null ? '' : w.delta > 0 ? ` ↑${Math.abs(w.delta)}%` : w.delta < 0 ? ` ↓${Math.abs(w.delta)}%` : '';
+    const cls = w.delta === null ? '' : w.delta > 0 ? 'col-stat-up' : w.delta < 0 ? 'col-stat-down' : '';
+    const pill = document.createElement('div');
+    pill.className = 'board-week-stat';
+    pill.innerHTML = `<strong>${w.count}</strong> completed this week<span class="${cls}">${arrow}</span>`;
+    host.appendChild(pill);
+}
+
 function createBoardCard(task) {
     const card = document.createElement('div');
     card.className = 'board-card';
@@ -1070,15 +1120,14 @@ function createBoardCard(task) {
 
     const footer = document.createElement('div');
     footer.className = 'board-card-footer';
-    const theme = getTheme(task.themeId);
-    if (theme) {
+    taskThemes(task).forEach(theme => {
         const tc = document.createElement('span');
         tc.className = 'chip chip-theme';
         tc.style.background = theme.color;
         tc.style.color = contrastText(theme.color);
         tc.textContent = theme.name;
         footer.appendChild(tc);
-    }
+    });
     if (task.size) {
         const sz = document.createElement('span');
         sz.className = 'chip chip-size';
@@ -1196,11 +1245,11 @@ function renderAdminArchive(container) {
         const taskList = document.createElement('div');
         taskList.className = 'archive-task-list';
         week.tasks.forEach(t => {
-            const th = getTheme(t.themeId);
+            const ths = taskThemes(t);
             const tr = document.createElement('div');
             tr.className = 'archive-task-row';
             tr.innerHTML = `
-                ${th ? `<span class="chip chip-theme" style="background:${th.color};color:${contrastText(th.color)}">${th.name}</span>` : ''}
+                ${ths.map(th => `<span class="chip chip-theme" style="background:${th.color};color:${contrastText(th.color)}">${th.name}</span>`).join('')}
                 <span style="flex:1">${t.title}</span>
                 ${t.size ? `<span class="chip chip-size">${t.size.toUpperCase()}</span>` : ''}
                 ${t.size ? `<span class="chip chip-size">${t.size.toUpperCase()}</span>` : ''}
@@ -1247,7 +1296,8 @@ function createTask(data) {
     return {
         id: genId(),
         title: data.title || '',
-        themeId: data.themeId || '',
+        themeId: (data.themeIds && data.themeIds[0]) || data.themeId || '',
+        themeIds: taskThemeIds(data),
         subTheme: data.subTheme || '',
         priority: data.priority || '',
         size: data.size || 'm',
@@ -1361,6 +1411,7 @@ function scheduleOccurrence(source, dateStr, runCount) {
     const occ = createTask({
         title: source.title,
         themeId: source.themeId,
+        themeIds: taskThemeIds(source),
         subTheme: source.subTheme,
         priority: source.priority,
         size: source.size,
@@ -1503,7 +1554,8 @@ function openTaskModal(taskId, defaultKanbanCol) {
     document.getElementById('task-title').style.display = '';
 
     // Reset fields
-    modalThemeId = '';
+    modalThemeIds = [];
+    modalSubTheme = '';
     modalPriority = '';
     modalSize = 'm';
     modalRecurType = 'daily';
@@ -1514,7 +1566,8 @@ function openTaskModal(taskId, defaultKanbanCol) {
         const t = state.tasks.find(x => x.id === taskId);
         if (!t) return;
         document.getElementById('task-title').value = t.title;
-        modalThemeId = t.themeId || '';
+        modalThemeIds = [...taskThemeIds(t)];
+        modalSubTheme = t.subTheme || '';
         modalPriority = t.priority || '';
         modalSize = t.size || 'm';
         document.getElementById('task-due').value = t.dueDate || '';
@@ -1589,17 +1642,26 @@ function renderThemePicker() {
     [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'theme-pick-btn' + (modalThemeId === theme.id ? ' active' : '');
+        btn.className = 'theme-pick-btn' + (modalThemeIds.includes(theme.id) ? ' active' : '');
         btn.style.background = theme.color;
         btn.style.color = contrastText(theme.color);
         btn.textContent = theme.name + (theme.hidden ? ' 🕶' : '');
         btn.addEventListener('click', () => {
-            modalThemeId = theme.id;
+            // Each chip is an independent toggle, so Work + Jim is just two taps
+            const i = modalThemeIds.indexOf(theme.id);
+            if (i === -1) modalThemeIds.push(theme.id); else modalThemeIds.splice(i, 1);
             renderThemePicker();
             updateSubThemeSelect();
         });
         container.appendChild(btn);
     });
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'theme-pick-add';
+    add.textContent = '+ New theme';
+    add.title = 'Create a theme without leaving this task';
+    add.addEventListener('click', () => openThemeModal(null, { fromTask: true }));
+    container.appendChild(add);
 }
 
 function renderPriorityPicker() {
@@ -1648,23 +1710,75 @@ function renderDowPicker() {
 
 function updateSubThemeSelect() {
     const sel = document.getElementById('task-subtheme');
-    const theme = getTheme(modalThemeId);
+    const themes = modalThemeIds.map(getTheme).filter(Boolean);
     sel.innerHTML = '<option value="">None</option>';
-    // Nothing to choose from = one less row in the modal
-    document.getElementById('subtheme-field').style.display =
-        (theme && theme.subThemes && theme.subThemes.length) ? '' : 'none';
-    if (theme && theme.subThemes) {
-        [...theme.subThemes].sort((a,b) => a.localeCompare(b)).forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s; opt.textContent = s;
-            sel.appendChild(opt);
+    const addOpt = (host, name) => {
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name;
+        host.appendChild(opt);
+    };
+    const withSubs = themes.filter(t => (t.subThemes || []).length);
+    if (withSubs.length === 1) {
+        [...withSubs[0].subThemes].sort((a,b) => a.localeCompare(b)).forEach(n => addOpt(sel, n));
+    } else {
+        // Several themes in play: label each theme's sub-themes so identical
+        // names (two "Maintenance"es) stay tellable apart
+        withSubs.forEach(t => {
+            const g = document.createElement('optgroup');
+            g.label = t.name;
+            [...t.subThemes].sort((a,b) => a.localeCompare(b)).forEach(n => addOpt(g, n));
+            sel.appendChild(g);
         });
     }
-    // Preserve existing selection if editing
-    if (editingTaskId) {
-        const t = state.tasks.find(x=>x.id===editingTaskId);
-        if (t && t.subTheme) sel.value = t.subTheme;
-    }
+    // The row is worth its space as soon as there's a theme to hang one off
+    document.getElementById('subtheme-field').style.display = themes.length ? '' : 'none';
+    // Drop a selection whose theme has just been untoggled
+    if (modalSubTheme && !withSubs.some(t => (t.subThemes||[]).includes(modalSubTheme))) modalSubTheme = '';
+    sel.value = modalSubTheme;
+    if (!themes.length) hideNewSubTheme();
+}
+
+// Which theme a brand-new sub-theme should be filed under: unambiguous with
+// one theme selected, otherwise the user picks.
+function newSubThemeTargets() { return modalThemeIds.map(getTheme).filter(Boolean); }
+
+function showNewSubTheme() {
+    const targets = newSubThemeTargets();
+    if (!targets.length) return;
+    const picker = document.getElementById('subtheme-new-theme');
+    picker.innerHTML = '';
+    targets.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id; opt.textContent = t.name;
+        picker.appendChild(opt);
+    });
+    picker.style.display = targets.length > 1 ? '' : 'none';
+    document.getElementById('subtheme-new').style.display = '';
+    const input = document.getElementById('subtheme-new-name');
+    input.value = '';
+    input.focus();
+}
+
+function hideNewSubTheme() {
+    document.getElementById('subtheme-new').style.display = 'none';
+    document.getElementById('subtheme-new-name').value = '';
+}
+
+function saveNewSubTheme() {
+    const name = document.getElementById('subtheme-new-name').value.trim();
+    const targets = newSubThemeTargets();
+    if (!name || !targets.length) return;
+    const theme = targets.length > 1
+        ? (getTheme(document.getElementById('subtheme-new-theme').value) || targets[0])
+        : targets[0];
+    if (!theme.subThemes) theme.subThemes = [];
+    if (!theme.subThemes.some(s => s.toLowerCase() === name.toLowerCase())) theme.subThemes.push(name);
+    state.themesUpdatedAt = Date.now();
+    saveState();
+    modalSubTheme = theme.subThemes.find(s => s.toLowerCase() === name.toLowerCase()) || name;
+    hideNewSubTheme();
+    updateSubThemeSelect();
+    if (currentView === 'admin') renderAdmin();
 }
 
 function getRecurringFromModal() {
@@ -1692,9 +1806,8 @@ function getRecurringFromModal() {
 function saveTaskModal() {
     const multiMode = !editingTaskId && document.getElementById('task-multi-toggle').checked;
     const addToKanban = document.getElementById('task-add-to-kanban').checked;
-    const shared = {
-        themeId: modalThemeId,
-        subTheme: document.getElementById('task-subtheme').value,
+    const shared = withThemeIds({
+        subTheme: modalSubTheme,
         priority: modalPriority,
         size: modalSize,
         dueDate: document.getElementById('task-due').value,
@@ -1702,7 +1815,7 @@ function saveTaskModal() {
         doDate: document.getElementById('task-do').value,
         notes: document.getElementById('task-notes').value.trim(),
         recurring: getRecurringFromModal(),
-    };
+    }, modalThemeIds);
 
     if (multiMode) {
         const titles = document.getElementById('task-title-multi').value
@@ -1719,9 +1832,16 @@ function saveTaskModal() {
 
     const title = document.getElementById('task-title').value.trim();
     if (!title) { document.getElementById('task-title').focus(); return; }
+    const existingKanbanCol = editingTaskId
+        ? (state.tasks.find(t => t.id === editingTaskId)?.kanbanColumn || null)
+        : null;
     const data = {
         ...shared, title,
-        kanbanColumn: addToKanban ? defaultBacklogCol() : (editingTaskId ? (state.tasks.find(t=>t.id===editingTaskId)?.kanbanColumn || null) : null),
+        // A task already on the board keeps the column it's in: editing one
+        // (to add a theme, say) must not tip it back into the backlog.
+        kanbanColumn: addToKanban
+            ? (existingKanbanCol || defaultBacklogCol())
+            : (existingKanbanCol || null),
     };
     if (editingTaskId) {
         // Re-arm auto-kanban if the dates changed
@@ -1750,8 +1870,9 @@ function saveTaskModal() {
 
 // ============ THEME MODAL ============
 
-function openThemeModal(themeId) {
+function openThemeModal(themeId, opts) {
     editingThemeId = themeId;
+    themeModalFromTask = !!(opts && opts.fromTask);
     const modal = document.getElementById('theme-edit-modal');
     document.getElementById('theme-edit-title').textContent = themeId ? 'Edit Theme' : 'Add Theme';
     document.getElementById('theme-edit-delete').style.display = themeId ? '' : 'none';
@@ -1786,6 +1907,7 @@ function renderThemeFocusPicker() {
 function closeThemeModal() {
     document.getElementById('theme-edit-modal').style.display = 'none';
     editingThemeId = null;
+    themeModalFromTask = false;
 }
 
 function saveThemeModal() {
@@ -1795,22 +1917,33 @@ function saveThemeModal() {
     const subThemes = document.getElementById('theme-edit-subthemes').value.split('\n').map(s=>s.trim()).filter(Boolean);
     const hidden = document.getElementById('theme-edit-hidden').checked;
     const hideWeekend = document.getElementById('theme-edit-hide-weekend').checked;
+    let savedId = editingThemeId;
     if (editingThemeId) {
         const theme = getTheme(editingThemeId);
         if (theme) { theme.name = name; theme.color = color; theme.subThemes = subThemes; theme.hidden = hidden; theme.hideWeekend = hideWeekend; theme.focus = modalThemeFocus; }
     } else {
-        const id = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') + '-' + genId().slice(0,4);
-        state.themes.push({ id, name, color, subThemes, hidden, hideWeekend, focus: modalThemeFocus });
+        savedId = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') + '-' + genId().slice(0,4);
+        state.themes.push({ id: savedId, name, color, subThemes, hidden, hideWeekend, focus: modalThemeFocus });
     }
     state.themesUpdatedAt = Date.now();
     saveState();
     renderAdmin();
+    // Opened from a task: hand the new theme straight back to it, selected,
+    // rather than making the user find it again.
+    const backToTask = themeModalFromTask;
     closeThemeModal();
+    if (backToTask) {
+        if (savedId && !modalThemeIds.includes(savedId)) modalThemeIds.push(savedId);
+        renderThemePicker();
+        updateSubThemeSelect();
+        return;
+    }
+    render();
 }
 
 function deleteTheme() {
     if (!editingThemeId) return;
-    const count = state.tasks.filter(t => t.themeId === editingThemeId).length;
+    const count = state.tasks.filter(t => taskThemeIds(t).includes(editingThemeId)).length;
     if (count && !confirm(`${count} task(s) use this theme. Delete anyway? (Tasks keep their data.)`)) return;
     state.themes = state.themes.filter(t => t.id !== editingThemeId);
     state.themesUpdatedAt = Date.now();
@@ -2024,6 +2157,16 @@ function init() {
     document.getElementById('task-due').addEventListener('change', updateCountdownRow);
     document.getElementById('task-due').addEventListener('input', updateCountdownRow);
 
+    // Sub-themes can be created here rather than over in Admin
+    document.getElementById('subtheme-add-btn').addEventListener('click', showNewSubTheme);
+    document.getElementById('subtheme-new-cancel').addEventListener('click', hideNewSubTheme);
+    document.getElementById('subtheme-new-save').addEventListener('click', saveNewSubTheme);
+    document.getElementById('subtheme-new-name').addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); saveNewSubTheme(); }
+        if (e.key === 'Escape') { e.preventDefault(); hideNewSubTheme(); }
+    });
+    document.getElementById('task-subtheme').addEventListener('change', e => { modalSubTheme = e.target.value; });
+
     // Notes stay collapsed until asked for
     document.getElementById('task-notes-add').addEventListener('click', () => {
         setNotesOpen(true);
@@ -2232,6 +2375,12 @@ function init() {
     // Escape key
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
+            // The theme modal can sit on top of the task modal; step back one
+            // layer at a time rather than closing both at once.
+            if (document.getElementById('theme-edit-modal').style.display === 'flex') {
+                closeThemeModal();
+                return;
+            }
             closeTaskModal(); closeThemeModal(); hideContextMenu(); closeSnoozeModal(); closeReviewModal();
             if (document.getElementById('filter-modal').style.display === 'flex') closeFilterModal();
             document.getElementById('settings-modal').style.display = 'none';
