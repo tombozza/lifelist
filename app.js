@@ -30,9 +30,17 @@ const EVENING_HOUR = 17; // 5pm
 
 function isEvening() { return new Date().getHours() >= EVENING_HOUR; }
 
-// The default backlog for newly added items: the one that's "active" right
-// now (Day during the day, Evening after 5pm).
-function defaultBacklogCol() { return isEvening() ? 'backlog-evening' : 'backlog-day'; }
+// Which backlog a task lands in when it goes on the board: work in the Day
+// column, everything else in the Evening one. "Work" means any theme with a
+// work focus (set per theme in Admin), so a second work-ish theme behaves the
+// same as the Work theme itself without needing to be named Work.
+function defaultBacklogCol(themeIds) {
+    const isWork = (themeIds || []).some(id => {
+        const t = getTheme(id);
+        return t && themeFocus(t) === 'work';
+    });
+    return isWork ? 'backlog-day' : 'backlog-evening';
+}
 
 // Board column order. The two backlog columns swap so the time-relevant one
 // always sits immediately left of "Next": Day during the day, Evening after 5pm.
@@ -47,6 +55,21 @@ function boardColumns() {
 const SIZE_POINTS = { xs:1, s:2, m:3, l:5, xl:8, xxl:13 };
 const SIZE_ORDER   = { xs:0, s:1, m:2, l:3, xl:4, xxl:5 };
 const PRIORITY_ORDER = { high:0, medium:1, low:2, '':3 };
+
+// Tags cut across themes: the same tag can sit on a Work task and a Life one.
+// They're grouped into categories (People, When, a holiday, …) so the filter
+// rows stay readable, and every category is editable in Admin > Tags.
+// The People category is seeded from the old People theme on first run —
+// see migratePeopleThemeToTags.
+const DEFAULT_TAG_CATEGORIES = [
+    { id:'people', name:'People', color:'#5856D6', tags:[] },
+    { id:'when',   name:'When',   color:'#30B0C7', tags:[
+        { id:'when-day', name:'Day' },
+        { id:'when-evening', name:'Evening' },
+        { id:'when-weekday', name:'Weekday' },
+        { id:'when-weekend', name:'Weekend' },
+    ] },
+];
 
 const DEFAULT_THEMES = [
     { id:'work',   name:'Work',   color:'#007AFF', subThemes:['Meetings','Proposals','Reports','Strategy','Calls'] },
@@ -65,6 +88,10 @@ let currentView = 'board';
 let currentThemeTab = 'all';
 let currentSort = 'priority';
 let currentFilters = { priority:'', size:'', status:'active', search:'', age:'' };
+// Tag filters are shared by Lists and Board and deliberately NOT persisted —
+// a filter that survives a reload is a filter you forget you switched on.
+let activeTagFilter = [];
+let tagFilterOpen = false;
 let staleBannerDismissed = false;
 let reviewBannerDismissed = false;
 let reopenReviewAfterTask = false;
@@ -82,6 +109,9 @@ let snoozeFromBulk = false;
 // Modal field state
 let modalThemeIds = [];      // a task can carry several themes
 let modalSubTheme = '';
+let modalTagIds = [];
+let modalSubtasks = [];
+let modalPane = 'details';
 let themeModalFromTask = false;  // theme modal opened over the task modal
 let modalPriority = '';
 let modalSize = 'm';
@@ -99,6 +129,8 @@ function defaultState() {
         settings: { theme: 'light' },
         deletedIds: [],
         themesUpdatedAt: 0,
+        tagCategories: DEFAULT_TAG_CATEGORIES.map(c => ({...c, tags: c.tags.map(t => ({...t}))})),
+        tagsUpdatedAt: 0,
     };
 }
 
@@ -129,6 +161,8 @@ function migrateColumns(tasks) {
             t.themeIds = [...new Set(t.themeIds.filter(Boolean))];
             t.themeId = t.themeIds[0] || '';
         }
+        if (!Array.isArray(t.tags)) t.tags = [];
+        if (!Array.isArray(t.subtasks)) t.subtasks = [];
     });
 }
 
@@ -138,6 +172,51 @@ function migrateThemes(themes) {
     (themes || []).forEach(t => {
         if (t.focus === undefined) t.focus = (t.name === 'Work') ? 'work' : 'home';
     });
+}
+
+// The People theme becomes the People tag category: its sub-themes are the
+// names, so they carry over as tags and every task filed under it keeps its
+// person. Runs once (guarded by peopleTagsMigrated) and stashes the original
+// theme in removedPeopleTheme so nothing is actually thrown away.
+function migratePeopleThemeToTags(p) {
+    if (p.peopleTagsMigrated) return false;
+    const theme = (p.themes || []).find(t => (t.name || '').trim().toLowerCase() === 'people');
+    p.peopleTagsMigrated = true;
+    if (!theme) return true;
+
+    const cat = (p.tagCategories || []).find(c => c.id === 'people');
+    if (!cat) return true;
+    // Names already in the category win, so re-running can't duplicate them
+    const byName = new Map(cat.tags.map(t => [t.name.toLowerCase(), t]));
+    (theme.subThemes || []).forEach(name => {
+        const key = String(name).trim().toLowerCase();
+        if (!key || byName.has(key)) return;
+        const tag = { id: newTagId('people'), name: String(name).trim() };
+        cat.tags.push(tag);
+        byName.set(key, tag);
+    });
+
+    // Move every task off the theme and onto the matching tag
+    (p.tasks || []).forEach(t => {
+        const ids = Array.isArray(t.themeIds) && t.themeIds.length
+            ? t.themeIds : (t.themeId ? [t.themeId] : []);
+        if (!ids.includes(theme.id)) return;
+        const tag = byName.get(String(t.subTheme || '').trim().toLowerCase());
+        if (tag) {
+            if (!Array.isArray(t.tags)) t.tags = [];
+            if (!t.tags.includes(tag.id)) t.tags.push(tag.id);
+            t.subTheme = '';
+        }
+        t.themeIds = ids.filter(id => id !== theme.id);
+        t.themeId = t.themeIds[0] || '';
+        t.updatedAt = Date.now();
+    });
+
+    p.removedPeopleTheme = theme;   // keep a copy rather than destroying it
+    p.themes = p.themes.filter(t => t.id !== theme.id);
+    p.themesUpdatedAt = Date.now();
+    p.tagsUpdatedAt = Date.now();
+    return true;
 }
 
 function loadState() {
@@ -154,7 +233,18 @@ function loadState() {
             if (!p.settings.reminderTime) p.settings.reminderTime = '09:00';
             if (!p.deletedIds) p.deletedIds = [];
             if (!p.themesUpdatedAt) p.themesUpdatedAt = 0;
+            if (!Array.isArray(p.tagCategories)) {
+                p.tagCategories = DEFAULT_TAG_CATEGORIES.map(c => ({...c, tags: c.tags.map(t => ({...t}))}));
+            }
+            if (!p.tagsUpdatedAt) p.tagsUpdatedAt = 0;
             migrateColumns(p.tasks);
+            // Persist straight away: saveState() can't run yet (it writes the
+            // `state` this function is still returning), and an unsaved
+            // migration would re-run on every load. The bumped tagsUpdatedAt
+            // makes the next sync pull push it out to the other devices.
+            if (migratePeopleThemeToTags(p)) {
+                try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch(e) {}
+            }
             return p;
         }
     } catch(e) {}
@@ -224,6 +314,79 @@ function primaryThemeId(t) {
 function withThemeIds(data, ids) {
     const clean = [...new Set((ids || []).filter(Boolean))];
     return { ...data, themeIds: clean, themeId: clean[0] || '' };
+}
+
+// A tag chip, tinted with its category's colour so People and When read as
+// different families at a glance.
+function tagChipEl(tag) {
+    const el = document.createElement('span');
+    el.className = 'chip chip-tag';
+    el.style.borderColor = tag.category.color;
+    el.style.color = tag.category.color;
+    el.textContent = tag.name;
+    el.title = tag.category.name + ' · ' + tag.name;
+    return el;
+}
+
+function progressChipEl(task) {
+    const p = subtaskProgress(task);
+    if (!p) return null;
+    const el = document.createElement('span');
+    el.className = 'chip chip-progress' + (p.done === p.total ? ' chip-progress-done' : '');
+    el.innerHTML = `<span class="chip-progress-bar"><span style="width:${p.pct}%"></span></span>${p.done}/${p.total}`;
+    el.title = p.pct + '% of sub-tasks done';
+    return el;
+}
+
+// ---- Sub-tasks ----
+
+// A long-running task's checklist: the card shows how far through it is.
+function subtaskProgress(t) {
+    const list = Array.isArray(t && t.subtasks) ? t.subtasks : [];
+    if (!list.length) return null;
+    const done = list.filter(st => st.done).length;
+    return { done, total: list.length, pct: Math.round((done / list.length) * 100) };
+}
+
+// ---- Tags ----
+
+function allTagCategories() { return state.tagCategories || []; }
+
+function getTagCategory(id) { return allTagCategories().find(c => c.id === id) || null; }
+
+function getTag(id) {
+    for (const c of allTagCategories()) {
+        const t = (c.tags || []).find(x => x.id === id);
+        if (t) return { ...t, category: c };
+    }
+    return null;
+}
+
+function taskTagIds(t) { return Array.isArray(t && t.tags) ? t.tags : []; }
+
+// Tag ids must survive being minted in a tight loop (a whole category pasted
+// in at once), so keep genId()'s random suffix — truncating it to the
+// timestamp alone hands every tag in the same millisecond an identical id.
+function newTagId(catId) { return catId + '-' + genId(); }
+
+function taskTags(t) { return taskTagIds(t).map(getTag).filter(Boolean); }
+
+// Facet semantics: OR within a category, AND across them. Picking Barney and
+// Harry shows either of them; adding Weekend narrows that to the weekend ones.
+function taskMatchesTagFilter(t, tagIds) {
+    if (!tagIds || !tagIds.length) return true;
+    const own = new Set(taskTagIds(t));
+    const byCat = new Map();
+    tagIds.forEach(id => {
+        const tag = getTag(id);
+        const key = tag ? tag.category.id : '__gone__';
+        if (!byCat.has(key)) byCat.set(key, []);
+        byCat.get(key).push(id);
+    });
+    for (const ids of byCat.values()) {
+        if (!ids.some(id => own.has(id))) return false;
+    }
+    return true;
 }
 
 // A task survives a theme filter as long as ONE of its themes is visible, so
@@ -413,6 +576,7 @@ function renderLists() {
     updateFiltersButton();
     renderStaleBanner();
     renderThemeTabs();
+    renderTagFilter('lists-tag-filter');
     renderListContent();
 }
 
@@ -597,6 +761,77 @@ function renderStaleBanner() {
     banner.appendChild(actions);
 }
 
+// One collapsible tag-filter block, rendered into whichever view is showing.
+// Collapsed by default so it costs a single line until it's wanted.
+function renderTagFilter(hostId) {
+    const host = document.getElementById(hostId);
+    if (!host) return;
+    host.innerHTML = '';
+    const cats = allTagCategories().filter(c => (c.tags || []).length);
+    if (!cats.length) return;
+
+    const head = document.createElement('div');
+    head.className = 'tag-filter-head';
+    const toggle = document.createElement('button');
+    toggle.className = 'tag-filter-toggle' + (tagFilterOpen ? ' open' : '');
+    toggle.innerHTML = `Tags <span class="tag-filter-caret">${tagFilterOpen ? '\u25be' : '\u25b8'}</span>`;
+    toggle.addEventListener('click', () => { tagFilterOpen = !tagFilterOpen; render(); });
+    head.appendChild(toggle);
+
+    if (activeTagFilter.length) {
+        const count = document.createElement('span');
+        count.className = 'tag-filter-count';
+        count.textContent = activeTagFilter.length + ' on';
+        head.appendChild(count);
+        // Name the active tags even when collapsed, so a filter can't hide
+        activeTagFilter.map(getTag).filter(Boolean).forEach(tag => {
+            const chip = tagChipEl(tag);
+            chip.classList.add('chip-tag-active');
+            chip.style.background = tag.category.color;
+            chip.style.color = contrastText(tag.category.color);
+            chip.addEventListener('click', () => toggleTagFilter(tag.id));
+            head.appendChild(chip);
+        });
+        const clear = document.createElement('button');
+        clear.className = 'btn-ghost tag-filter-clear';
+        clear.textContent = 'Clear';
+        clear.addEventListener('click', () => { activeTagFilter = []; render(); });
+        head.appendChild(clear);
+    }
+    host.appendChild(head);
+
+    if (!tagFilterOpen) return;
+    const body = document.createElement('div');
+    body.className = 'tag-filter-body';
+    cats.forEach(cat => {
+        const row = document.createElement('div');
+        row.className = 'tag-filter-row';
+        const label = document.createElement('span');
+        label.className = 'tag-cat-label';
+        label.textContent = cat.name;
+        row.appendChild(label);
+        [...cat.tags].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
+            const on = activeTagFilter.includes(tag.id);
+            const btn = document.createElement('button');
+            btn.className = 'tag-chip' + (on ? ' on' : '');
+            btn.textContent = tag.name;
+            btn.style.borderColor = cat.color;
+            if (on) { btn.style.background = cat.color; btn.style.color = contrastText(cat.color); }
+            else { btn.style.color = cat.color; }
+            btn.addEventListener('click', () => toggleTagFilter(tag.id));
+            row.appendChild(btn);
+        });
+        body.appendChild(row);
+    });
+    host.appendChild(body);
+}
+
+function toggleTagFilter(id) {
+    const i = activeTagFilter.indexOf(id);
+    if (i === -1) activeTagFilter.push(id); else activeTagFilter.splice(i, 1);
+    render();
+}
+
 function renderThemeTabs() {
     const container = document.getElementById('lists-theme-tabs');
     container.innerHTML = '';
@@ -628,10 +863,12 @@ function getFilteredTasks() {
         if (currentFilters.priority && t.priority !== currentFilters.priority) return false;
         if (currentFilters.size && t.size !== currentFilters.size) return false;
         if (currentFilters.age && daysSince(t.createdDate) < parseInt(currentFilters.age)) return false;
+        if (!taskMatchesTagFilter(t, activeTagFilter)) return false;
         if (currentThemeTab !== 'all' && !taskThemeIds(t).includes(currentThemeTab)) return false;
         if (currentFilters.search) {
             const q = currentFilters.search.toLowerCase();
-            if (!t.title.toLowerCase().includes(q) && !(t.subTheme||'').toLowerCase().includes(q)) return false;
+            const hay = [t.title, t.subTheme || '', ...taskTags(t).map(x => x.name)].join(' ').toLowerCase();
+            if (!hay.includes(q)) return false;
         }
         return true;
     });
@@ -831,6 +1068,9 @@ function createListItem(task, opts = {}) {
         tc.textContent = theme.name;
         chips.appendChild(tc);
     });
+    taskTags(task).forEach(tag => chips.appendChild(tagChipEl(tag)));
+    const listProg = progressChipEl(task);
+    if (listProg) chips.appendChild(listProg);
     if (task.subTheme) {
         const sc = document.createElement('span');
         sc.className = 'chip chip-sub';
@@ -1024,6 +1264,7 @@ function renderBoardFilter() {
 }
 
 function renderBoard() {
+    renderTagFilter('board-tag-filter');
     renderBoardWeekStat();
     renderReviewBanner();
     renderListReminder();
@@ -1037,7 +1278,8 @@ function renderBoard() {
     boardColumns().forEach(col => {
         const tasks = state.tasks.filter(t =>
             t.kanbanColumn === col.id && t.status !== 'wont-do'
-            && themesPass(t, hidden, weekendHidden, muted));
+            && themesPass(t, hidden, weekendHidden, muted)
+            && taskMatchesTagFilter(t, activeTagFilter));
         const colEl = document.createElement('div');
         colEl.className = 'board-col';
         colEl.dataset.col = col.id;
@@ -1128,6 +1370,9 @@ function createBoardCard(task) {
         tc.textContent = theme.name;
         footer.appendChild(tc);
     });
+    taskTags(task).forEach(tag => footer.appendChild(tagChipEl(tag)));
+    const cardProg = progressChipEl(task);
+    if (cardProg) footer.appendChild(cardProg);
     if (task.size) {
         const sz = document.createElement('span');
         sz.className = 'chip chip-size';
@@ -1166,6 +1411,7 @@ function renderAdmin() {
     document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('active', t.dataset.admin === currentAdminTab));
     const container = document.getElementById('admin-content');
     if (currentAdminTab === 'themes') renderAdminThemes(container);
+    else if (currentAdminTab === 'tags') renderAdminTags(container);
     else if (currentAdminTab === 'archive') renderAdminArchive(container);
     else renderAdminData(container);
 }
@@ -1219,6 +1465,229 @@ function renderAdminThemes(container) {
         list.appendChild(row);
     });
     container.appendChild(list);
+}
+
+// Admin > Tags: categories with their tags, both editable inline. Kept
+// deliberately plain — it's a list of words, not a design surface.
+function renderAdminTags(container) {
+    container.innerHTML = '';
+    const hdr = document.createElement('div');
+    hdr.className = 'admin-section-header';
+    hdr.innerHTML = '<h3>Tags</h3>';
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn-primary';
+    addBtn.textContent = '+ Add Category';
+    addBtn.addEventListener('click', () => openTagCatModal(null));
+    hdr.appendChild(addBtn);
+    container.appendChild(hdr);
+
+    const intro = document.createElement('div');
+    intro.className = 'form-hint admin-intro';
+    intro.innerHTML = 'Tags cut across themes, so one task can be Work <em>and</em> Barney <em>and</em> Weekend. A category groups related tags &mdash; people, when something fits, a trip you\u2019re planning.';
+    container.appendChild(intro);
+
+    const cats = allTagCategories();
+    if (!cats.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'No tag categories yet.';
+        container.appendChild(empty);
+        return;
+    }
+
+    cats.forEach(cat => {
+        const box = document.createElement('div');
+        box.className = 'tag-cat-box';
+
+        const head = document.createElement('div');
+        head.className = 'tag-cat-head';
+        const swatch = document.createElement('span');
+        swatch.className = 'theme-swatch tag-cat-swatch';
+        swatch.style.background = cat.color;
+        head.appendChild(swatch);
+        const name = document.createElement('div');
+        name.className = 'tag-cat-name';
+        name.textContent = cat.name;
+        head.appendChild(name);
+        const count = document.createElement('span');
+        count.className = 'tag-cat-count';
+        count.textContent = (cat.tags || []).length + ' tag' + ((cat.tags||[]).length === 1 ? '' : 's');
+        head.appendChild(count);
+        const edit = document.createElement('button');
+        edit.className = 'btn-ghost';
+        edit.textContent = 'Edit';
+        edit.style.padding = '5px 12px';
+        edit.style.fontSize = '12px';
+        edit.addEventListener('click', () => openTagCatModal(cat.id));
+        head.appendChild(edit);
+        box.appendChild(head);
+
+        const tagWrap = document.createElement('div');
+        tagWrap.className = 'tag-cat-tags';
+        [...(cat.tags || [])].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
+            const chip = document.createElement('span');
+            chip.className = 'tag-admin-chip';
+            chip.style.borderColor = cat.color;
+            chip.style.color = cat.color;
+            chip.textContent = tag.name;
+            const del = document.createElement('button');
+            del.className = 'tag-admin-del';
+            del.innerHTML = '&times;';
+            del.title = 'Delete "' + tag.name + '"';
+            del.addEventListener('click', () => deleteTag(cat.id, tag.id));
+            chip.appendChild(del);
+            tagWrap.appendChild(chip);
+        });
+        box.appendChild(tagWrap);
+
+        const add = document.createElement('div');
+        add.className = 'tag-cat-add';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-input';
+        input.placeholder = 'Add a tag to ' + cat.name + '\u2026';
+        const go = () => {
+            const v = input.value.trim();
+            if (!v) return;
+            addTag(cat.id, v);
+            input.value = '';
+            input.focus();
+        };
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+        add.appendChild(input);
+        const addTagBtn = document.createElement('button');
+        addTagBtn.className = 'btn-small';
+        addTagBtn.textContent = 'Add';
+        addTagBtn.addEventListener('click', go);
+        add.appendChild(addTagBtn);
+        box.appendChild(add);
+
+        container.appendChild(box);
+    });
+}
+
+function addTag(catId, name) {
+    const cat = getTagCategory(catId);
+    if (!cat) return;
+    if (!cat.tags) cat.tags = [];
+    if (cat.tags.some(t => t.name.toLowerCase() === name.toLowerCase())) return;
+    cat.tags.push({ id: newTagId(catId), name });
+    state.tagsUpdatedAt = Date.now();
+    saveState();
+    renderAdmin();
+}
+
+function deleteTag(catId, tagId) {
+    const cat = getTagCategory(catId);
+    if (!cat) return;
+    const tag = cat.tags.find(t => t.id === tagId);
+    const used = state.tasks.filter(t => taskTagIds(t).includes(tagId)).length;
+    if (used && !confirm(`${used} task(s) are tagged "${tag ? tag.name : ''}". Delete the tag and take it off them?`)) return;
+    cat.tags = cat.tags.filter(t => t.id !== tagId);
+    // Strip it off the tasks too — a dangling tag id is invisible but would
+    // linger in every export and sync payload
+    state.tasks.forEach(t => {
+        if (taskTagIds(t).includes(tagId)) {
+            t.tags = t.tags.filter(x => x !== tagId);
+            t.updatedAt = Date.now();
+        }
+    });
+    activeTagFilter = activeTagFilter.filter(x => x !== tagId);
+    state.tagsUpdatedAt = Date.now();
+    saveState();
+    renderAdmin();
+}
+
+// ---- Tag category modal ----
+
+let editingTagCatId = null;
+
+function openTagCatModal(catId) {
+    editingTagCatId = catId;
+    const cat = catId ? getTagCategory(catId) : null;
+    document.getElementById('tagcat-title').textContent = cat ? 'Edit Category' : 'Add Category';
+    document.getElementById('tagcat-delete').style.display = cat ? '' : 'none';
+    document.getElementById('tagcat-name').value = cat ? cat.name : '';
+    const color = cat ? cat.color : '#5856D6';
+    document.getElementById('tagcat-color').value = color;
+    document.getElementById('tagcat-color-hex').textContent = color;
+    document.getElementById('tagcat-tags').value = cat ? (cat.tags || []).map(t => t.name).join('\n') : '';
+    document.getElementById('tagcat-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('tagcat-name').focus(), 50);
+}
+
+function closeTagCatModal() {
+    document.getElementById('tagcat-modal').style.display = 'none';
+    editingTagCatId = null;
+}
+
+function stripTagsFromTasks(ids) {
+    if (!ids.length) return;
+    const gone = new Set(ids);
+    state.tasks.forEach(t => {
+        const kept = taskTagIds(t).filter(x => !gone.has(x));
+        if (kept.length !== taskTagIds(t).length) { t.tags = kept; t.updatedAt = Date.now(); }
+    });
+    activeTagFilter = activeTagFilter.filter(x => !gone.has(x));
+}
+
+function saveTagCatModal() {
+    const name = document.getElementById('tagcat-name').value.trim();
+    if (!name) { document.getElementById('tagcat-name').focus(); return; }
+    const color = document.getElementById('tagcat-color').value;
+    const lines = document.getElementById('tagcat-tags').value
+        .split('\n').map(x => x.trim()).filter(Boolean);
+
+    let cat = editingTagCatId ? getTagCategory(editingTagCatId) : null;
+    if (!cat) {
+        cat = { id: name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') + '-' + genId().slice(0,4), name, color, tags: [] };
+        state.tagCategories.push(cat);
+    } else {
+        cat.name = name;
+        cat.color = color;
+    }
+
+    // Reconcile the lines against the existing tags. Names that still match
+    // keep their id (and so stay on their tasks). Whatever is left over on
+    // each side is paired up in order, which is what makes renaming a line
+    // a rename rather than a delete-plus-add.
+    const existing = [...(cat.tags || [])];
+    const takenNames = new Map(existing.map(t => [t.name.toLowerCase(), t]));
+    const resolved = new Array(lines.length).fill(null);
+    const usedIds = new Set();
+    lines.forEach((line, i) => {
+        const hit = takenNames.get(line.toLowerCase());
+        if (hit && !usedIds.has(hit.id)) { resolved[i] = hit; usedIds.add(hit.id); }
+    });
+    const leftoverOld = existing.filter(t => !usedIds.has(t.id));
+    lines.forEach((line, i) => {
+        if (resolved[i]) return;
+        const reuse = leftoverOld.shift();
+        if (reuse) { reuse.name = line; resolved[i] = reuse; }
+        else resolved[i] = { id: newTagId(cat.id), name: line };
+    });
+    stripTagsFromTasks(leftoverOld.map(t => t.id));
+    cat.tags = resolved;
+
+    state.tagsUpdatedAt = Date.now();
+    saveState();
+    closeTagCatModal();
+    render();
+}
+
+function deleteTagCategory() {
+    if (!editingTagCatId) return;
+    const cat = getTagCategory(editingTagCatId);
+    if (!cat) return;
+    const ids = (cat.tags || []).map(t => t.id);
+    const used = state.tasks.filter(t => taskTagIds(t).some(x => ids.includes(x))).length;
+    if (!confirm(`Delete the "${cat.name}" category and its ${ids.length} tag(s)?` + (used ? ` ${used} task(s) will lose those tags.` : ''))) return;
+    stripTagsFromTasks(ids);
+    state.tagCategories = state.tagCategories.filter(c => c.id !== editingTagCatId);
+    state.tagsUpdatedAt = Date.now();
+    saveState();
+    closeTagCatModal();
+    render();
 }
 
 function renderAdminArchive(container) {
@@ -1298,6 +1767,8 @@ function createTask(data) {
         title: data.title || '',
         themeId: (data.themeIds && data.themeIds[0]) || data.themeId || '',
         themeIds: taskThemeIds(data),
+        tags: [...taskTagIds(data)],
+        subtasks: (data.subtasks || []).map(st => ({...st})),
         subTheme: data.subTheme || '',
         priority: data.priority || '',
         size: data.size || 'm',
@@ -1412,6 +1883,9 @@ function scheduleOccurrence(source, dateStr, runCount) {
         title: source.title,
         themeId: source.themeId,
         themeIds: taskThemeIds(source),
+        tags: [...taskTagIds(source)],
+        // A fresh occurrence starts with its checklist unticked
+        subtasks: (source.subtasks || []).map(st => ({ ...st, id: genId(), done: false })),
         subTheme: source.subTheme,
         priority: source.priority,
         size: source.size,
@@ -1448,7 +1922,8 @@ function moveToColumn(id, col) {
 }
 
 function moveToKanban(id) {
-    updateTask(id, { kanbanColumn: defaultBacklogCol(), reviewed: true, offKanban: false });
+    const task = state.tasks.find(t => t.id === id);
+    updateTask(id, { kanbanColumn: defaultBacklogCol(taskThemeIds(task)), reviewed: true, offKanban: false });
 }
 
 // Taken off the board — lands in the "Off board" tier of its themed list
@@ -1509,7 +1984,7 @@ function checkRecurring() {
         if (t.status !== 'scheduled') return;
         if ((t.scheduledFor || '9999-99-99') <= today) {
             t.status = 'active';
-            t.kanbanColumn = defaultBacklogCol();
+            t.kanbanColumn = defaultBacklogCol(taskThemeIds(t));
             t.createdDate = t.scheduledFor || today;
             t.scheduledFor = null;
             t.reviewed = true;
@@ -1529,7 +2004,7 @@ function checkAutoKanban() {
         const doDue = t.doDate && t.doDate <= today;
         const deadlineNear = t.dueDate && addDays(t.dueDate, -3) <= today;
         if (doDue || deadlineNear) {
-            t.kanbanColumn = defaultBacklogCol();
+            t.kanbanColumn = defaultBacklogCol(taskThemeIds(t));
             t.autoKanbaned = true;
             t.updatedAt = Date.now();
             changed = true;
@@ -1556,6 +2031,9 @@ function openTaskModal(taskId, defaultKanbanCol) {
     // Reset fields
     modalThemeIds = [];
     modalSubTheme = '';
+    modalTagIds = [];
+    modalSubtasks = [];
+    setTaskPane('details');
     modalPriority = '';
     modalSize = 'm';
     modalRecurType = 'daily';
@@ -1568,6 +2046,8 @@ function openTaskModal(taskId, defaultKanbanCol) {
         document.getElementById('task-title').value = t.title;
         modalThemeIds = [...taskThemeIds(t)];
         modalSubTheme = t.subTheme || '';
+        modalTagIds = [...taskTagIds(t)];
+        modalSubtasks = (t.subtasks || []).map(st => ({...st}));
         modalPriority = t.priority || '';
         modalSize = t.size || 'm';
         document.getElementById('task-due').value = t.dueDate || '';
@@ -1615,6 +2095,8 @@ function openTaskModal(taskId, defaultKanbanCol) {
 
     updateCountdownRow();
     renderThemePicker();
+    renderTagPicker();
+    renderSubtaskEditor();
     renderPriorityPicker();
     renderSizePicker();
     renderRecurTypeBtns();
@@ -1634,6 +2116,127 @@ function closeTaskModal() {
         reopenReviewAfterTask = false;
         if (reviewQueue().length) openReviewModal();
     }
+}
+
+function setTaskPane(pane) {
+    modalPane = pane;
+    document.querySelectorAll('#task-tabs .task-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.pane === pane);
+    });
+    document.getElementById('task-pane-details').style.display = pane === 'details' ? '' : 'none';
+    document.getElementById('task-pane-notes').style.display = pane === 'notes' ? '' : 'none';
+}
+
+// A dot on the Notes tab so content behind it isn't invisible
+function updateTaskTabBadge() {
+    const badge = document.getElementById('task-tab-badge');
+    const notes = document.getElementById('task-notes').value.trim();
+    const p = modalSubtasks.length ? `${modalSubtasks.filter(st => st.done).length}/${modalSubtasks.length}` : '';
+    const text = p || (notes ? '\u2022' : '');
+    badge.textContent = text;
+    badge.style.display = text ? '' : 'none';
+}
+
+function renderTagPicker() {
+    const container = document.getElementById('tag-picker');
+    container.innerHTML = '';
+    const cats = allTagCategories();
+    if (!cats.length) {
+        container.innerHTML = '<span class="form-hint">No tag categories yet &mdash; add one in Admin &rsaquo; Tags.</span>';
+        return;
+    }
+    cats.forEach(cat => {
+        const row = document.createElement('div');
+        row.className = 'tag-picker-row';
+        const label = document.createElement('span');
+        label.className = 'tag-cat-label';
+        label.textContent = cat.name;
+        row.appendChild(label);
+        if (!(cat.tags || []).length) {
+            const none = document.createElement('span');
+            none.className = 'tag-cat-empty';
+            none.textContent = 'none yet';
+            row.appendChild(none);
+        }
+        [...(cat.tags || [])].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
+            const on = modalTagIds.includes(tag.id);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'tag-chip' + (on ? ' on' : '');
+            btn.textContent = tag.name;
+            btn.style.borderColor = cat.color;
+            if (on) { btn.style.background = cat.color; btn.style.color = contrastText(cat.color); }
+            else { btn.style.color = cat.color; }
+            btn.addEventListener('click', () => {
+                const i = modalTagIds.indexOf(tag.id);
+                if (i === -1) modalTagIds.push(tag.id); else modalTagIds.splice(i, 1);
+                renderTagPicker();
+            });
+            row.appendChild(btn);
+        });
+        container.appendChild(row);
+    });
+}
+
+// ---- Sub-task editor ----
+
+function renderSubtaskEditor() {
+    const list = document.getElementById('subtask-list');
+    list.innerHTML = '';
+    modalSubtasks.forEach((st, idx) => {
+        const row = document.createElement('div');
+        row.className = 'subtask-row' + (st.done ? ' done' : '');
+
+        const check = document.createElement('div');
+        check.className = 'list-check subtask-check' + (st.done ? ' checked' : '');
+        check.addEventListener('click', () => {
+            modalSubtasks[idx].done = !modalSubtasks[idx].done;
+            renderSubtaskEditor();
+        });
+        row.appendChild(check);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'subtask-input';
+        input.value = st.title;
+        input.addEventListener('input', () => { modalSubtasks[idx].title = input.value; });
+        // Enter moves on to a new step rather than saving the whole task
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); document.getElementById('subtask-new-name').focus(); }
+        });
+        row.appendChild(input);
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'icon-btn subtask-del';
+        del.innerHTML = '&times;';
+        del.title = 'Remove this step';
+        del.addEventListener('click', () => { modalSubtasks.splice(idx, 1); renderSubtaskEditor(); });
+        row.appendChild(del);
+
+        list.appendChild(row);
+    });
+
+    const bar = document.getElementById('subtask-progress');
+    if (modalSubtasks.length) {
+        const done = modalSubtasks.filter(st => st.done).length;
+        const pct = Math.round((done / modalSubtasks.length) * 100);
+        bar.style.display = '';
+        bar.innerHTML = `<span class="subtask-progress-bar"><span style="width:${pct}%"></span></span><span class="subtask-progress-text">${done}/${modalSubtasks.length} &middot; ${pct}%</span>`;
+    } else {
+        bar.style.display = 'none';
+    }
+    updateTaskTabBadge();
+}
+
+function addSubtaskFromInput() {
+    const input = document.getElementById('subtask-new-name');
+    const title = input.value.trim();
+    if (!title) return;
+    modalSubtasks.push({ id: genId(), title, done: false });
+    input.value = '';
+    renderSubtaskEditor();
+    input.focus();
 }
 
 function renderThemePicker() {
@@ -1807,6 +2410,8 @@ function saveTaskModal() {
     const multiMode = !editingTaskId && document.getElementById('task-multi-toggle').checked;
     const addToKanban = document.getElementById('task-add-to-kanban').checked;
     const shared = withThemeIds({
+        tags: [...modalTagIds],
+        subtasks: modalSubtasks.filter(st => st.title.trim()).map(st => ({...st, title: st.title.trim()})),
         subTheme: modalSubTheme,
         priority: modalPriority,
         size: modalSize,
@@ -1823,7 +2428,7 @@ function saveTaskModal() {
         if (!titles.length) { document.getElementById('task-title-multi').focus(); return; }
         titles.forEach(title => addTask({
             ...shared, title,
-            kanbanColumn: addToKanban ? defaultBacklogCol() : null,
+            kanbanColumn: addToKanban ? defaultBacklogCol(modalThemeIds) : null,
         }));
         checkAutoKanban();
         closeTaskModal();
@@ -1840,7 +2445,7 @@ function saveTaskModal() {
         // A task already on the board keeps the column it's in: editing one
         // (to add a theme, say) must not tip it back into the backlog.
         kanbanColumn: addToKanban
-            ? (existingKanbanCol || defaultBacklogCol())
+            ? (existingKanbanCol || defaultBacklogCol(modalThemeIds))
             : (existingKanbanCol || null),
     };
     if (editingTaskId) {
@@ -2157,6 +2762,16 @@ function init() {
     document.getElementById('task-due').addEventListener('change', updateCountdownRow);
     document.getElementById('task-due').addEventListener('input', updateCountdownRow);
 
+    // Task modal tabs
+    document.querySelectorAll('#task-tabs .task-tab').forEach(btn => {
+        btn.addEventListener('click', () => setTaskPane(btn.dataset.pane));
+    });
+    document.getElementById('subtask-add-btn').addEventListener('click', addSubtaskFromInput);
+    document.getElementById('subtask-new-name').addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); addSubtaskFromInput(); }
+    });
+    document.getElementById('task-notes').addEventListener('input', updateTaskTabBadge);
+
     // Sub-themes can be created here rather than over in Admin
     document.getElementById('subtheme-add-btn').addEventListener('click', showNewSubTheme);
     document.getElementById('subtheme-new-cancel').addEventListener('click', hideNewSubTheme);
@@ -2198,6 +2813,16 @@ function init() {
     document.getElementById('theme-edit-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeThemeModal(); });
     document.getElementById('theme-edit-color').addEventListener('input', e => {
         document.getElementById('theme-edit-color-hex').textContent = e.target.value;
+    });
+
+    // Tag category modal
+    document.getElementById('tagcat-save').addEventListener('click', saveTagCatModal);
+    document.getElementById('tagcat-cancel').addEventListener('click', closeTagCatModal);
+    document.getElementById('tagcat-close').addEventListener('click', closeTagCatModal);
+    document.getElementById('tagcat-delete').addEventListener('click', deleteTagCategory);
+    document.getElementById('tagcat-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeTagCatModal(); });
+    document.getElementById('tagcat-color').addEventListener('input', e => {
+        document.getElementById('tagcat-color-hex').textContent = e.target.value;
     });
 
     // Context menu
@@ -2379,6 +3004,10 @@ function init() {
             // layer at a time rather than closing both at once.
             if (document.getElementById('theme-edit-modal').style.display === 'flex') {
                 closeThemeModal();
+                return;
+            }
+            if (document.getElementById('tagcat-modal').style.display === 'flex') {
+                closeTagCatModal();
                 return;
             }
             closeTaskModal(); closeThemeModal(); hideContextMenu(); closeSnoozeModal(); closeReviewModal();
@@ -2661,7 +3290,7 @@ saveState = function() {
 async function pushToCloud() {
     if (!syncEnabled || syncPaused) return;
     try {
-        const payload = { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt };
+        const payload = { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt, tagCategories: state.tagCategories, tagsUpdatedAt: state.tagsUpdatedAt };
         await apiPut(SYNC_CODE, payload);
     } catch(e) { if (String(e).indexOf('locked') === -1) console.error('Sync push failed:', e); }
 }
@@ -2695,6 +3324,7 @@ async function pullFromCloud() {
             if (!(d.deletedIds||[]).some(r => r.id === x.id)) localContrib = true;
         });
         if ((state.themesUpdatedAt||0) > (d.themesUpdatedAt||0)) localContrib = true;
+        if ((state.tagsUpdatedAt||0) > (d.tagsUpdatedAt||0)) localContrib = true;
 
         // --- Merge tasks: newest updatedAt wins per task ---
         const merged = new Map();
@@ -2711,6 +3341,12 @@ async function pullFromCloud() {
             state.themes = d.themes;
             state.themesUpdatedAt = d.themesUpdatedAt;
             migrateThemes(state.themes);
+        }
+
+        // --- Tag categories: same wholesale rule as themes ---
+        if ((d.tagsUpdatedAt||0) > (state.tagsUpdatedAt||0) && d.tagCategories) {
+            state.tagCategories = d.tagCategories;
+            state.tagsUpdatedAt = d.tagsUpdatedAt;
         }
 
         // --- Archive: merge weeks, union tasks within each week ---

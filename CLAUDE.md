@@ -58,9 +58,44 @@ off the task directly:
 has a `themeId` that isn't in its `themeIds`, an older device wrote it last and `themeId`
 wins — otherwise a stale array would mask the newer choice.
 
+## Tags
+
+Tags cut *across* themes — the same tag sits on a Work task and a Life one — so
+they're a separate axis, not a second level of theme. They live in
+`state.tagCategories` (`{id, name, color, tags:[{id,name}]}`) and a task holds
+`tags: [tagId]`. Filtering is faceted: **OR within a category, AND across them**
+(`taskMatchesTagFilter`), so Barney+Jim widens and +Weekend narrows.
+
+- Tag ids come from `newTagId()`. Do **not** truncate `genId()` to build one:
+  its first ~8 chars are the millisecond timestamp, so a whole category pasted
+  in at once would get identical ids. That bug silently mis-tagged tasks.
+- `state.tagsUpdatedAt` drives sync, wholesale, exactly like `themesUpdatedAt`.
+- Deleting a tag or a category strips it off every task (`stripTagsFromTasks`) —
+  a dangling id is invisible but would ride along in every sync payload forever.
+- Editing a category's tags via the textarea matches lines to existing tags by
+  name, then pairs up the leftovers *in order*. That is what makes renaming a
+  line a rename (id preserved, tasks keep it) rather than a delete-plus-add.
+
+The **People** theme was converted into the People tag category by
+`migratePeopleThemeToTags` — its sub-themes became the tags, tasks moved over,
+and the original theme is stashed in `state.removedPeopleTheme`. It persists
+itself directly to localStorage because `saveState()` cannot run during
+`loadState()`.
+
+## Sub-tasks
+
+`task.subtasks = [{id, title, done}]`, surfaced as a progress chip on the board
+card and list row (`subtaskProgress` / `progressChipEl`). They're edited on the
+task modal's second tab. A recurring occurrence copies the checklist with fresh
+ids and everything unticked.
+
 ## Board columns
 
-`KANBAN_COLS` holds every column; `boardColumns()` is what actually gets drawn. Completing
+`KANBAN_COLS` holds every column; `boardColumns()` is what actually gets drawn.
+`defaultBacklogCol(themeIds)` decides where a task lands when it goes on the
+board: **Day if any of its themes has a work focus, Evening otherwise**. It used
+to be the time of day — it isn't any more, so don't reintroduce `isEvening()`
+there (it still drives the column *order*). Completing
 a task still parks it in the `complete` column, but that column is marked `offBoard: true`
 and is never rendered — tasks leave via "Mark complete" or the list checkbox, and the
 week's tally sits above the board (`renderBoardWeekStat`). Don't delete the `complete`
