@@ -82,6 +82,22 @@ and the original theme is stashed in `state.removedPeopleTheme`. It persists
 itself directly to localStorage because `saveState()` cannot run during
 `loadState()`.
 
+## Notes (the parking list)
+
+`task.inNotes` parks a task in the Notes view: off the board and out of Lists,
+but never hidden — for things that aren't a priority at all yet shouldn't be
+snoozed. Parked tasks are excluded from `getFilteredTasks()`, `needsReview()`
+and `isStale()`, and `moveToKanban()` un-parks anything put on the board.
+Don't confuse it with `task.notes`, which is the free-text field.
+
+## Priority
+
+Five levels in `PRIORITY_LEVELS` / `PRIORITY_ORDER`: urgent, high, medium, low,
+minimal, plus '' for none, which always sorts last. urgent/minimal were added
+*either side* of the original three so nothing already prioritised had to be
+re-triaged. The list is the single source — the modal picker and the Lists
+filter dropdown are both built from it, so add a level in one place only.
+
 ## Sub-tasks
 
 `task.subtasks = [{id, title, done}]`, surfaced as a progress chip on the board
@@ -93,7 +109,9 @@ ids and everything unticked.
 
 `KANBAN_COLS` holds every column; `boardColumns()` is what actually gets drawn.
 `defaultBacklogCol(themeIds)` decides where a task lands when it goes on the
-board: **Day if any of its themes has a work focus, Evening otherwise**. It used
+board: **Day if any of its themes has a work focus, Evening otherwise** — but
+`modalKanbanCol` beats it, so a task created from a column's "+ Add task"
+lands in *that* column. It used
 to be the time of day — it isn't any more, so don't reintroduce `isEvening()`
 there (it still drives the column *order*). Completing
 a task still parks it in the `complete` column, but that column is marked `offBoard: true`

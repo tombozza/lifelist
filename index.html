@@ -20,6 +20,7 @@
     <nav class="view-tabs">
         <button class="tab active" data-view="board">Board</button>
         <button class="tab" data-view="lists">Lists</button>
+        <button class="tab" data-view="notes" id="tab-notes">Notes</button>
         <button class="tab" data-view="admin">Admin</button>
     </nav>
     <div class="header-right">
@@ -30,6 +31,24 @@
 </header>
 
 <main id="app-main">
+
+    <!-- Quick capture: one field, straight onto the review pile -->
+    <div class="quick-add" id="quick-add">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <input type="text" id="quick-add-input" placeholder="Quick add &mdash; lands in Review&hellip;">
+        <button class="btn-small" id="quick-add-btn">Add</button>
+        <span class="quick-add-flash" id="quick-add-flash"></span>
+    </div>
+
+    <!-- ============ NOTES VIEW ============ -->
+    <section id="view-notes" class="view">
+        <div class="notes-head">
+            <h3>Notes</h3>
+            <span class="notes-sub">Parked, not prioritised &mdash; things to buy, someday-maybes. Off the main list but never hidden.</span>
+        </div>
+        <div class="tag-filter" id="notes-tag-filter"></div>
+        <div id="notes-content" class="lists-content"></div>
+    </section>
 
     <!-- ============ LISTS VIEW ============ -->
     <section id="view-lists" class="view">
@@ -46,9 +65,7 @@
                 <div id="filter-controls" class="filter-controls">
                 <select id="list-filter-priority" class="filter-select">
                     <option value="">All Priorities</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <!-- the rest come from PRIORITY_LEVELS -->
                 </select>
                 <select id="list-filter-size" class="filter-select">
                     <option value="">All Sizes</option>
@@ -91,6 +108,7 @@
             <button class="btn-small" id="bulk-to-kanban">Add to Kanban</button>
             <button class="btn-small btn-ghost" id="bulk-from-kanban">Remove from Kanban</button>
             <button class="btn-small" id="bulk-snooze">Snooze</button>
+            <button class="btn-small" id="bulk-to-notes">To Notes</button>
             <button class="btn-ghost" id="bulk-cancel">Cancel</button>
         </div>
 
@@ -207,16 +225,12 @@
                 <span class="field-label">Priority &amp; size</span>
                 <div class="field-control">
                     <div class="ps-grid">
-                        <div class="btn-group" id="priority-picker">
-                            <button type="button" class="group-btn active" data-value="">None</button>
-                            <button type="button" class="group-btn low" data-value="low">Low</button>
-                            <button type="button" class="group-btn medium" data-value="medium">Medium</button>
-                            <button type="button" class="group-btn high" data-value="high">High</button>
-                        </div>
+                        <!-- filled from PRIORITY_LEVELS -->
+                        <div class="btn-group" id="priority-picker"></div>
                         <div class="size-picker" id="size-picker">
-                            <button type="button" class="size-btn" data-value="xs">XS</button>
+                            <button type="button" class="size-btn active" data-value="xs">XS</button>
                             <button type="button" class="size-btn" data-value="s">S</button>
-                            <button type="button" class="size-btn active" data-value="m">M</button>
+                            <button type="button" class="size-btn" data-value="m">M</button>
                             <button type="button" class="size-btn" data-value="l">L</button>
                             <button type="button" class="size-btn" data-value="xl">XL</button>
                             <button type="button" class="size-btn" data-value="xxl">XXL</button>
@@ -470,6 +484,8 @@
     <button data-action="move-to" style="display:none;">Move to…</button>
     <button data-action="from-kanban" style="display:none;">Take off board</button>
     <button data-action="to-list" style="display:none;">Move to themed list</button>
+    <button data-action="to-notes">Move to Notes</button>
+    <button data-action="from-notes" style="display:none;">Move back to list</button>
     <button data-action="snooze">Snooze…</button>
     <button data-action="unsnooze" style="display:none;">Unsnooze</button>
     <div class="ctx-divider"></div>

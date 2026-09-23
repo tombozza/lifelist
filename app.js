@@ -54,7 +54,17 @@ function boardColumns() {
 
 const SIZE_POINTS = { xs:1, s:2, m:3, l:5, xl:8, xxl:13 };
 const SIZE_ORDER   = { xs:0, s:1, m:2, l:3, xl:4, xxl:5 };
-const PRIORITY_ORDER = { high:0, medium:1, low:2, '':3 };
+// Five levels, with urgent/minimal added either side of the original three so
+// existing tasks keep the priority they already had. '' (none) sorts last.
+const PRIORITY_ORDER = { urgent:0, high:1, medium:2, low:3, minimal:4, '':5 };
+const PRIORITY_LEVELS = [
+    { value:'',        label:'None' },
+    { value:'minimal', label:'Minimal' },
+    { value:'low',     label:'Low' },
+    { value:'medium',  label:'Medium' },
+    { value:'high',    label:'High' },
+    { value:'urgent',  label:'Urgent' },
+];
 
 // Tags cut across themes: the same tag can sit on a Work task and a Life one.
 // They're grouped into categories (People, When, a holiday, …) so the filter
@@ -114,7 +124,11 @@ let modalSubtasks = [];
 let modalPane = 'details';
 let themeModalFromTask = false;  // theme modal opened over the task modal
 let modalPriority = '';
-let modalSize = 'm';
+let modalSize = 'xs';
+// The column "+ Add task" was clicked in, so a new task lands there rather
+// than in whichever backlog its theme would have chosen.
+let modalKanbanCol = null;
+let quickAddFlashTimer = null;
 let modalRecurType = 'daily';
 let modalRecurDow = new Set();
 let modalMonthlyMode = 'date';
@@ -399,16 +413,21 @@ function themesPass(t, ...excluded) {
 
 function prioRank(t) {
     const v = PRIORITY_ORDER[t.priority];
-    return v === undefined ? 3 : v;
+    return v === undefined ? PRIORITY_ORDER[''] : v;
 }
 
 // Spotlighted tasks outrank everything, ahead of even High priority
 function spotRank(t) { return t.spotlight ? 0 : 1; }
 
-// Active list captures not yet triaged onto the board (or explicitly kept)
+// Active list captures not yet triaged onto the board (or explicitly kept).
+// Anything parked in Notes is deliberately untriaged, so it stays out.
 function needsReview(t) {
-    return t.status === 'active' && !t.kanbanColumn && !t.reviewed && !isSnoozed(t);
+    return t.status === 'active' && !t.kanbanColumn && !t.reviewed && !isSnoozed(t) && !t.inNotes;
 }
+
+// Notes is a parking list for things that aren't a priority at all but
+// shouldn't be snoozed or hidden either — they just shouldn't clutter Lists.
+function inNotes(t) { return !!t.inNotes; }
 
 function isSnoozed(t) { return !!(t.snoozedUntil && t.snoozedUntil > todayStr()); }
 
@@ -453,7 +472,7 @@ function isWeekend() {
 // Active list items (not on board, not snoozed, not done) that have been
 // sitting around longer than the stale threshold — candidates for snoozing.
 function isStale(t) {
-    if (t.status !== 'active' || t.kanbanColumn || isSnoozed(t)) return false;
+    if (t.status !== 'active' || t.kanbanColumn || isSnoozed(t) || t.inNotes) return false;
     return daysSince(t.createdDate) >= STALE_DAYS;
 }
 
@@ -541,9 +560,16 @@ function isScheduled(t) { return t.status === 'scheduled'; }
 
 // ============ RENDERING ============
 
+// Nothing to capture into on the Admin screens
+function syncQuickAddVisibility() {
+    document.getElementById('quick-add').style.display = currentView === 'admin' ? 'none' : '';
+}
+
 function render() {
+    updateNotesTabCount();
     if (currentView === 'lists') renderLists();
     else if (currentView === 'board') renderBoard();
+    else if (currentView === 'notes') renderNotes();
     else if (currentView === 'admin') renderAdmin();
     if (document.getElementById('review-modal').style.display === 'flex') {
         if (reviewQueue().length) renderReviewList();
@@ -857,6 +883,7 @@ function getFilteredTasks() {
     const hidden = hiddenThemeIds();
     return state.tasks.filter(t => {
         if (t.status === 'scheduled') return false; // dormant recurrence
+        if (t.inNotes) return false;               // parked over in Notes
         if (!themesPass(t, hidden)) return false;
         if (currentFilters.status === 'active' && (t.status === 'complete' || t.status === 'wont-do')) return false;
         if (currentFilters.status === 'complete' && t.status !== 'complete') return false;
@@ -924,6 +951,52 @@ function sortKanbanFirst(tasks) {
             return (a.title || '').localeCompare(b.title || '');
         }
         return chosenSortCompare(a, b);
+    });
+}
+
+// Everything parked in Notes, grouped by theme like Lists and honouring the
+// same tag filter — but without the priority/age machinery, which is the
+// whole point of the list.
+function notesTasks() {
+    const hidden = hiddenThemeIds();
+    return state.tasks.filter(t =>
+        t.inNotes && t.status !== 'complete' && t.status !== 'wont-do'
+        && themesPass(t, hidden) && taskMatchesTagFilter(t, activeTagFilter));
+}
+
+function updateNotesTabCount() {
+    const tab = document.getElementById('tab-notes');
+    if (!tab) return;
+    const n = state.tasks.filter(t => t.inNotes && t.status === 'active').length;
+    tab.textContent = n ? `Notes ${n}` : 'Notes';
+}
+
+function renderNotes() {
+    renderTagFilter('notes-tag-filter');
+    const container = document.getElementById('notes-content');
+    container.innerHTML = '';
+    const all = notesTasks();
+    if (!all.length) {
+        container.innerHTML = '<div class="empty-state"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><path d="M4 4h16v12l-4 4H4z"/><path d="M8 9h8M8 13h5"/></svg><p>Nothing parked here yet</p><p class="empty-hint">Use a card\u2019s \u22ef menu &rsaquo; <strong>Move to Notes</strong> to park it.</p></div>';
+        return;
+    }
+    const grouped = {};
+    all.forEach(t => {
+        const key = primaryThemeId(t) || '__none__';
+        (grouped[key] = grouped[key] || []).push(t);
+    });
+    const order = [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).map(th => th.id);
+    order.unshift('__none__');
+    order.forEach(tid => {
+        if (!grouped[tid] || !grouped[tid].length) return;
+        const theme = getTheme(tid);
+        const label = document.createElement('div');
+        label.className = 'list-group-label';
+        label.textContent = theme ? theme.name : 'No Theme';
+        container.appendChild(label);
+        grouped[tid]
+            .sort((a,b) => (a.title||'').localeCompare(b.title||''))
+            .forEach(t => container.appendChild(createListItem(t)));
     });
 }
 
@@ -1771,7 +1844,7 @@ function createTask(data) {
         subtasks: (data.subtasks || []).map(st => ({...st})),
         subTheme: data.subTheme || '',
         priority: data.priority || '',
-        size: data.size || 'm',
+        size: data.size || 'xs',
         kanbanColumn: data.kanbanColumn || null,
         status: data.status || 'active',
         dueDate: data.dueDate || '',
@@ -1923,7 +1996,17 @@ function moveToColumn(id, col) {
 
 function moveToKanban(id) {
     const task = state.tasks.find(t => t.id === id);
-    updateTask(id, { kanbanColumn: defaultBacklogCol(taskThemeIds(task)), reviewed: true, offKanban: false });
+    updateTask(id, { kanbanColumn: defaultBacklogCol(taskThemeIds(task)), reviewed: true, offKanban: false, inNotes: false });
+}
+
+// Parked in Notes: off the board and out of Lists, but still right there.
+// Marked reviewed so it can't come back through the review queue.
+function moveToNotes(id) {
+    updateTask(id, { inNotes: true, kanbanColumn: null, offKanban: false, reviewed: true });
+}
+
+function moveOutOfNotes(id) {
+    updateTask(id, { inNotes: false });
 }
 
 // Taken off the board — lands in the "Off board" tier of its themed list
@@ -2035,7 +2118,8 @@ function openTaskModal(taskId, defaultKanbanCol) {
     modalSubtasks = [];
     setTaskPane('details');
     modalPriority = '';
-    modalSize = 'm';
+    modalSize = 'xs';
+    modalKanbanCol = defaultKanbanCol || null;
     modalRecurType = 'daily';
     modalRecurDow = new Set();
     modalMonthlyMode = 'date';
@@ -2049,7 +2133,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
         modalTagIds = [...taskTagIds(t)];
         modalSubtasks = (t.subtasks || []).map(st => ({...st}));
         modalPriority = t.priority || '';
-        modalSize = t.size || 'm';
+        modalSize = t.size || 'xs';
         document.getElementById('task-due').value = t.dueDate || '';
         document.getElementById('task-countdown').checked = !!t.countdown;
         document.getElementById('task-do').value = t.doDate || '';
@@ -2268,8 +2352,17 @@ function renderThemePicker() {
 }
 
 function renderPriorityPicker() {
-    document.querySelectorAll('#priority-picker .group-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.value === modalPriority);
+    const container = document.getElementById('priority-picker');
+    container.innerHTML = '';
+    PRIORITY_LEVELS.forEach(lv => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'group-btn' + (lv.value ? ' ' + lv.value : '')
+            + (modalPriority === lv.value ? ' active' : '');
+        btn.dataset.value = lv.value;
+        btn.textContent = lv.label;
+        btn.addEventListener('click', () => { modalPriority = lv.value; renderPriorityPicker(); });
+        container.appendChild(btn);
     });
 }
 
@@ -2428,7 +2521,7 @@ function saveTaskModal() {
         if (!titles.length) { document.getElementById('task-title-multi').focus(); return; }
         titles.forEach(title => addTask({
             ...shared, title,
-            kanbanColumn: addToKanban ? defaultBacklogCol(modalThemeIds) : null,
+            kanbanColumn: addToKanban ? (modalKanbanCol || defaultBacklogCol(modalThemeIds)) : null,
         }));
         checkAutoKanban();
         closeTaskModal();
@@ -2445,7 +2538,7 @@ function saveTaskModal() {
         // A task already on the board keeps the column it's in: editing one
         // (to add a theme, say) must not tip it back into the backlog.
         kanbanColumn: addToKanban
-            ? (existingKanbanCol || defaultBacklogCol(modalThemeIds))
+            ? (existingKanbanCol || modalKanbanCol || defaultBacklogCol(modalThemeIds))
             : (existingKanbanCol || null),
     };
     if (editingTaskId) {
@@ -2579,6 +2672,9 @@ function openContextMenu(e, taskId) {
         fromKanban.style.display = 'none';
         toList.style.display = offBoard ? '' : 'none';
     }
+    const parked = inNotes(task);
+    menu.querySelector('[data-action="to-notes"]').style.display = parked ? 'none' : '';
+    menu.querySelector('[data-action="from-notes"]').style.display = parked ? '' : 'none';
     menu.querySelector('[data-action="snooze"]').style.display = isSnoozed(task) ? 'none' : '';
     menu.querySelector('[data-action="unsnooze"]').style.display = isSnoozed(task) ? '' : 'none';
     menu.querySelector('[data-action="spotlight"]').style.display = task.spotlight ? 'none' : '';
@@ -2706,6 +2802,7 @@ function init() {
             document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
             document.getElementById('view-'+currentView).classList.add('active');
             if (currentView === 'lists') markListsVisited();
+            syncQuickAddVisibility();
             render();
         });
     });
@@ -2720,6 +2817,27 @@ function init() {
 
     // FAB
     document.getElementById('fab').addEventListener('click', () => openTaskModal(null));
+
+    // Quick add — a title and nothing else, left unreviewed so it surfaces in
+    // the review queue rather than silently joining the list.
+    const doQuickAdd = () => {
+        const input = document.getElementById('quick-add-input');
+        const title = input.value.trim();
+        if (!title) { input.focus(); return; }
+        addTask({ title, reviewed: false, kanbanColumn: null });
+        input.value = '';
+        reviewBannerDismissed = false;
+        render();
+        const flash = document.getElementById('quick-add-flash');
+        flash.textContent = 'Added to Review';
+        clearTimeout(quickAddFlashTimer);
+        quickAddFlashTimer = setTimeout(() => { flash.textContent = ''; }, 2200);
+        input.focus();
+    };
+    document.getElementById('quick-add-btn').addEventListener('click', doQuickAdd);
+    document.getElementById('quick-add-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); doQuickAdd(); }
+    });
 
     // Task modal
     document.getElementById('task-modal-save').addEventListener('click', saveTaskModal);
@@ -2744,8 +2862,12 @@ function init() {
     });
 
     // Priority picker
-    document.querySelectorAll('#priority-picker .group-btn').forEach(btn => {
-        btn.addEventListener('click', () => { modalPriority = btn.dataset.value; renderPriorityPicker(); });
+    // Priority options on the Lists filter come from the same list
+    const prioSel = document.getElementById('list-filter-priority');
+    PRIORITY_LEVELS.filter(lv => lv.value).slice().reverse().forEach(lv => {
+        const opt = document.createElement('option');
+        opt.value = lv.value; opt.textContent = lv.label;
+        prioSel.appendChild(opt);
     });
 
     // Size picker
@@ -2837,6 +2959,8 @@ function init() {
         else if (action === 'spotlight' || action === 'unspotlight') toggleSpotlight(ctxTaskId);
         else if (action === 'from-kanban') backToList(ctxTaskId);
         else if (action === 'to-list') moveToThemedList(ctxTaskId);
+        else if (action === 'to-notes') moveToNotes(ctxTaskId);
+        else if (action === 'from-notes') moveOutOfNotes(ctxTaskId);
         else if (action === 'complete') completeTask(ctxTaskId);
         else if (action === 'wont-do') markWontDo(ctxTaskId);
         else if (action === 'delete') { if(confirm('Delete this task?')) deleteTask(ctxTaskId); }
@@ -2870,6 +2994,11 @@ function init() {
     });
     document.getElementById('bulk-to-kanban').addEventListener('click', () => {
         selectedIds.forEach(id => moveToKanban(id));
+        selectedIds.clear(); document.getElementById('bulk-count').textContent = '0 selected';
+        renderLists();
+    });
+    document.getElementById('bulk-to-notes').addEventListener('click', () => {
+        selectedIds.forEach(id => moveToNotes(id));
         selectedIds.clear(); document.getElementById('bulk-count').textContent = '0 selected';
         renderLists();
     });
@@ -3198,6 +3327,7 @@ function init() {
 
     document.addEventListener('touchcancel', () => { cancelHold(); clearTouchDrag(); });
 
+    syncQuickAddVisibility();
     render();
 }
 
