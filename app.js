@@ -893,9 +893,7 @@ function getFilteredTasks() {
         if (!taskMatchesTagFilter(t, activeTagFilter)) return false;
         if (currentThemeTab !== 'all' && !taskThemeIds(t).includes(currentThemeTab)) return false;
         if (currentFilters.search) {
-            const q = currentFilters.search.toLowerCase();
-            const hay = [t.title, t.subTheme || '', ...taskTags(t).map(x => x.name)].join(' ').toLowerCase();
-            if (!hay.includes(q)) return false;
+            if (!fuzzyMatch(currentFilters.search, t.title, t.subTheme || '', ...taskTags(t).map(x => x.name))) return false;
         }
         return true;
     });

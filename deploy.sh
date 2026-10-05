@@ -17,6 +17,7 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 cp index.html app.js styles.css sw.js manifest.json "$STAGE"/
 cp -R icons "$STAGE"/icons
+cp -R vendor "$STAGE"/vendor
 # Pages Functions (the /api backend that replaced Supabase) must ship too.
 cp -R functions "$STAGE"/functions
 
