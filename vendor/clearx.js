@@ -20,7 +20,7 @@
     if (el.style.width) box.style.width = el.style.width;
     if (el.style.maxWidth) box.style.maxWidth = el.style.maxWidth;
     if (el.style.flex) box.style.flex = el.style.flex;
-    el.parentNode.insertBefore(box, el); box.appendChild(el);
+    var focused = document.activeElement === el, s0 = el.selectionStart, s1 = el.selectionEnd; el.parentNode.insertBefore(box, el); box.appendChild(el); if (focused) { el.focus(); try { el.setSelectionRange(s0, s1); } catch (e) {} }
     var x = document.createElement('button'); x.type = 'button'; x.className = 'clearx-btn'; x.tabIndex = -1;
     x.setAttribute('aria-label', 'Clear'); x.textContent = '×'; box.appendChild(x);
     var sync = function () { box.classList.toggle('has-text', !!el.value); };
