@@ -14,7 +14,7 @@
     d && d.set ? d.set.call(el, v) : (el.value = v);   // React tracks the native setter
   }
   function wrap(el) {
-    if (el.dataset.clearx || el.readOnly || el.disabled || el.type === 'hidden' || el.closest('.clearx-wrap') || el.hasAttribute('data-no-clear')) return;
+    if (el.dataset.clearx || el.inputMode === 'decimal' || el.inputMode === 'numeric' || el.readOnly || el.disabled || el.type === 'hidden' || el.closest('.clearx-wrap') || el.hasAttribute('data-no-clear')) return;
     el.dataset.clearx = '1';
     var box = document.createElement('span'); box.className = 'clearx-wrap';
     if (el.style.width) box.style.width = el.style.width;
