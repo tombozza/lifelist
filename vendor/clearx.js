@@ -1,4 +1,5 @@
 /* Clear (×) button on every text/search input. Vendored; no dependencies.
+   v3 (2026-10-09): centred on the input itself (its margin moves to the wrapper), smaller, immune to app button styles.
    Clearing fires input + change so the page's own handlers (React included) see it. */
 (function () {
   if (window.__clearX) return; window.__clearX = true;
@@ -6,8 +7,8 @@
   var css = '.clearx-wrap{position:relative;display:inline-flex;align-items:center;width:100%;min-width:0}' +
     '.clearx-wrap>input{width:100%;padding-right:34px !important}' +
     '.clearx-wrap>input::-webkit-search-cancel-button{-webkit-appearance:none;display:none}' +
-    '.clearx-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:24px;height:24px;border:0;border-radius:50%;' +
-    'background:rgba(127,127,127,.25);color:inherit;font-size:16px;line-height:1;padding:0;cursor:pointer;display:none}' +
+    '.clearx-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);width:20px;height:20px;min-width:0;min-height:0;margin:0;border:0;border-radius:50%;' +
+    'background:rgba(127,127,127,.18);color:inherit;opacity:.7;font-size:14px;font-weight:600;line-height:20px;text-align:center;padding:0;cursor:pointer;display:none;box-shadow:none}' +
     '.clearx-wrap.has-text .clearx-btn{display:block}';
   function setNative(el, v) {
     var d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
@@ -20,7 +21,10 @@
     if (el.style.width) box.style.width = el.style.width;
     if (el.style.maxWidth) box.style.maxWidth = el.style.maxWidth;
     if (el.style.flex) box.style.flex = el.style.flex;
-    var focused = document.activeElement === el, s0 = el.selectionStart, s1 = el.selectionEnd; el.parentNode.insertBefore(box, el); box.appendChild(el); if (focused) { el.focus(); try { el.setSelectionRange(s0, s1); } catch (e) {} }
+    var focused = document.activeElement === el, s0 = el.selectionStart, s1 = el.selectionEnd; el.parentNode.insertBefore(box, el); box.appendChild(el);
+    // the input's margin belongs to the wrapper, or the × centres on the margin rather than the box
+    var cs = getComputedStyle(el); ['Top', 'Right', 'Bottom', 'Left'].forEach(function (k) { var m = cs['margin' + k]; if (m && m !== '0px') { box.style['margin' + k] = m; el.style['margin' + k] = '0'; } });
+    if (focused) { el.focus(); try { el.setSelectionRange(s0, s1); } catch (e) {} }
     var x = document.createElement('button'); x.type = 'button'; x.className = 'clearx-btn'; x.tabIndex = -1;
     x.setAttribute('aria-label', 'Clear'); x.textContent = '×'; box.appendChild(x);
     var sync = function () { box.classList.toggle('has-text', !!el.value); };
