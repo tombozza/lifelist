@@ -21,6 +21,12 @@
     if (el.style.width) box.style.width = el.style.width;
     if (el.style.maxWidth) box.style.maxWidth = el.style.maxWidth;
     if (el.style.flex) box.style.flex = el.style.flex;
+    // a fixed-width box (an emoji picker, a short code) keeps its width — stretched to fill the
+    // wrapper, its × would end up far off to the right of it
+    var cs0 = getComputedStyle(el), vis = !!el.offsetParent, w0 = el.offsetWidth, pw = el.parentElement ? el.parentElement.clientWidth : 0;
+    if (cs0.maxWidth && cs0.maxWidth !== 'none') { box.style.maxWidth = cs0.maxWidth; el.style.maxWidth = 'none'; }   // e.g. max-width: 90px
+    if (parseFloat(cs0.flexGrow) > 0) box.style.flex = cs0.flexGrow + ' ' + cs0.flexShrink + ' ' + cs0.flexBasis;
+    else if (vis ? (w0 > 0 && pw > 0 && w0 < pw - 4) : (/px$/.test(cs0.width) && cs0.width !== '0px')) { box.style.width = vis ? w0 + 'px' : cs0.width; box.style.flex = '0 0 auto'; }
     var focused = document.activeElement === el, s0 = el.selectionStart, s1 = el.selectionEnd; el.parentNode.insertBefore(box, el); box.appendChild(el);
     // the input's margin belongs to the wrapper, or the × centres on the margin rather than the box
     var cs = getComputedStyle(el); ['Top', 'Right', 'Bottom', 'Left'].forEach(function (k) { var m = cs['margin' + k]; if (m && m !== '0px') { box.style['margin' + k] = m; el.style['margin' + k] = '0'; } });
