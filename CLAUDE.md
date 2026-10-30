@@ -82,6 +82,34 @@ and the original theme is stashed in `state.removedPeopleTheme`. It persists
 itself directly to localStorage because `saveState()` cannot run during
 `loadState()`.
 
+### The 8 Oct 2026 tag wipe — don't rebuild this trap
+
+Four whole categories (How, Where, People work, Tools) and ten People tags
+vanished. Cause: `peopleTagsMigrated` is a **per-device** flag guarding a change
+to **shared** data, and the migration stamped `tagsUpdatedAt = Date.now()`. A
+device opening late (or after a storage wipe) re-ran the migration against
+freshly-*seeded defaults*, stamped them as the newest edit in the world, and its
+wholesale push replaced everyone's real categories. Tasks merge per-task, so
+they kept their tag ids — which is the only reason it was recoverable.
+
+Three rules fall out of it, all load-bearing:
+
+1. **A migration must never stamp `*UpdatedAt` with `Date.now()`.** Seeded
+   defaults are not an edit. Leave the timestamps alone and let the first pull win.
+2. **Never let a device that has not edited a wholesale-synced field push its
+   defaults over the cloud's copy.** The pull guard is
+   `remote newer || !state.tagsUpdatedAt`, not just `remote newer`.
+3. **A per-device "already migrated" flag cannot guard shared data.** The
+   migration now also bails out if any task already carries a tag.
+
+`recoverOrphanTags()` is the safety net and runs after every sync merge: a tag id
+still on a task but absent from every category can only have come from a
+wholesale overwrite (deleting a tag *strips* it from tasks), so it rebuilds the
+category from the id — `"<categoryId>-<genId>"`, and genId has no dash — and
+hands the tag back as `Recovered N` for renaming, which preserves the id. It sets
+`localContrib` itself, because that flag is computed *before* the merge. The
+pre-repair blob is in `.backups/` (gitignored via `.git/info/exclude`).
+
 ## Notes (the parking list)
 
 `task.inNotes` parks a task in the Notes view: off the board and out of Lists,

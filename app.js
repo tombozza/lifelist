@@ -194,6 +194,15 @@ function migrateThemes(themes) {
 // theme in removedPeopleTheme so nothing is actually thrown away.
 function migratePeopleThemeToTags(p) {
     if (p.peopleTagsMigrated) return false;
+    // peopleTagsMigrated is per-device, but this edits SHARED data. A device
+    // opening late (or after a storage wipe) would otherwise re-run the whole
+    // migration against freshly-seeded defaults. If any task already carries a
+    // tag, the migration has happened elsewhere and this device just needs the
+    // real categories from the next sync pull.
+    if ((p.tasks || []).some(t => Array.isArray(t.tags) && t.tags.length)) {
+        p.peopleTagsMigrated = true;
+        return true;
+    }
     const theme = (p.themes || []).find(t => (t.name || '').trim().toLowerCase() === 'people');
     p.peopleTagsMigrated = true;
     if (!theme) return true;
@@ -228,8 +237,10 @@ function migratePeopleThemeToTags(p) {
 
     p.removedPeopleTheme = theme;   // keep a copy rather than destroying it
     p.themes = p.themes.filter(t => t.id !== theme.id);
-    p.themesUpdatedAt = Date.now();
-    p.tagsUpdatedAt = Date.now();
+    // Deliberately NOT stamped with Date.now(). Stamping made a just-seeded
+    // set of defaults look like the newest edit in the world, so a late
+    // migration beat — and wholesale replaced — every real category the user
+    // had built. Leaving the timestamps alone lets the first pull win instead.
     return true;
 }
 
@@ -382,6 +393,69 @@ function taskTagIds(t) { return Array.isArray(t && t.tags) ? t.tags : []; }
 // in at once), so keep genId()'s random suffix — truncating it to the
 // timestamp alone hands every tag in the same millisecond an identical id.
 function newTagId(catId) { return catId + '-' + genId(); }
+
+// A tag id is "<categoryId>-<genId>", and genId never contains a dash, so the
+// category it belonged to can always be read back off the id.
+function categoryIdFromTagId(tagId) {
+    const parts = String(tagId).split('-');
+    return parts.length > 1 ? parts.slice(0, -1).join('-') : '';
+}
+
+// Category ids are "<slug>-<4 chars>"; turn one back into something readable.
+function categoryNameFromId(catId) {
+    const parts = catId.split('-');
+    if (parts.length > 1 && parts[parts.length - 1].length === 4) parts.pop();
+    const words = parts.join(' ').trim();
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Recovered';
+}
+
+// Self-heal: a tag id still sitting on a task but missing from every category
+// means the category was lost rather than deleted — deleting one strips the id
+// off the tasks, so an orphan can only come from a wholesale sync overwrite.
+// Rebuild the category from the id and hand the tag back, so the loss shows up
+// on screen instead of silently taking every chip with it. Names can't be
+// recovered, so they come back as placeholders for renaming (which preserves
+// the id, and so the tasks keep the tag).
+// A silent repair is nearly as bad as a silent loss — say it happened.
+function markTagRecovery() {
+    state.settings.tagRecoveryNotice = true;
+}
+
+function recoverOrphanTags() {
+    const known = new Set();
+    allTagCategories().forEach(c => (c.tags || []).forEach(t => known.add(t.id)));
+
+    const orphans = new Map();   // tagId -> how many live tasks use it
+    state.tasks.forEach(t => {
+        if (t.status === 'complete' || t.status === 'wont-do') return;
+        taskTagIds(t).forEach(id => {
+            if (known.has(id)) return;
+            orphans.set(id, (orphans.get(id) || 0) + 1);
+        });
+    });
+    if (!orphans.size) return 0;
+
+    // Busiest first, so the placeholder numbering tracks how much a tag is used
+    const ordered = [...orphans.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+    let added = 0;
+    ordered.forEach(id => {
+        const catId = categoryIdFromTagId(id);
+        if (!catId) return;
+        let cat = getTagCategory(catId);
+        if (!cat) {
+            cat = { id: catId, name: categoryNameFromId(catId), color: '#8e8e93', tags: [], recovered: true };
+            state.tagCategories.push(cat);
+        }
+        if (!cat.tags) cat.tags = [];
+        cat.tags.push({ id, name: 'Recovered ' + (cat.tags.filter(t => /^Recovered /.test(t.name)).length + 1), recovered: true });
+        added++;
+    });
+    if (added) {
+        state.tagsUpdatedAt = Date.now();
+        console.info('[life-kanban] recovered ' + added + ' orphaned tag(s)');
+    }
+    return added;
+}
 
 function taskTags(t) { return taskTagIds(t).map(getTag).filter(Boolean); }
 
@@ -1552,6 +1626,26 @@ function renderAdminTags(container) {
     hdr.appendChild(addBtn);
     container.appendChild(hdr);
 
+    if (state.settings.tagRecoveryNotice) {
+        const note = document.createElement('div');
+        note.className = 'tag-recovery-note';
+        const n = allTagCategories().reduce((sum, c) => sum + (c.tags || []).filter(t => t.recovered).length, 0);
+        note.innerHTML = `<strong>${n} tag${n === 1 ? '' : 's'} recovered.</strong> They were still on your cards but their
+            category had been overwritten by a sync, so they'd stopped showing. The names couldn't be recovered \u2014
+            rename each <em>Recovered&nbsp;N</em> below and the tasks keep it. Delete one instead and it comes off those tasks properly.`;
+        const dismiss = document.createElement('button');
+        dismiss.className = 'btn-ghost';
+        dismiss.textContent = 'Dismiss';
+        dismiss.addEventListener('click', () => {
+            state.settings.tagRecoveryNotice = false;
+            allTagCategories().forEach(c => { delete c.recovered; (c.tags||[]).forEach(t => delete t.recovered); });
+            saveState();
+            renderAdmin();
+        });
+        note.appendChild(dismiss);
+        container.appendChild(note);
+    }
+
     const intro = document.createElement('div');
     intro.className = 'form-hint admin-intro';
     intro.innerHTML = 'Tags cut across themes, so one task can be Work <em>and</em> Barney <em>and</em> Weekend. A category groups related tags &mdash; people, when something fits, a trip you\u2019re planning.';
@@ -1568,7 +1662,7 @@ function renderAdminTags(container) {
 
     cats.forEach(cat => {
         const box = document.createElement('div');
-        box.className = 'tag-cat-box';
+        box.className = 'tag-cat-box' + (cat.recovered ? ' tag-cat-recovered' : '');
 
         const head = document.createElement('div');
         head.className = 'tag-cat-head';
@@ -1597,7 +1691,7 @@ function renderAdminTags(container) {
         tagWrap.className = 'tag-cat-tags';
         [...(cat.tags || [])].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
             const chip = document.createElement('span');
-            chip.className = 'tag-admin-chip';
+            chip.className = 'tag-admin-chip' + (tag.recovered ? ' tag-admin-recovered' : '');
             chip.style.borderColor = cat.color;
             chip.style.color = cat.color;
             chip.textContent = tag.name;
@@ -3471,10 +3565,13 @@ async function pullFromCloud() {
             migrateThemes(state.themes);
         }
 
-        // --- Tag categories: same wholesale rule as themes ---
-        if ((d.tagsUpdatedAt||0) > (state.tagsUpdatedAt||0) && d.tagCategories) {
+        // --- Tag categories: wholesale, newest wins — but seeded defaults
+        // are not an edit. A device that has never touched its tags must take
+        // whatever the cloud has, or it would push its defaults back over the
+        // real thing the moment anything else got saved. ---
+        if (d.tagCategories && ((d.tagsUpdatedAt||0) > (state.tagsUpdatedAt||0) || !state.tagsUpdatedAt)) {
             state.tagCategories = d.tagCategories;
-            state.tagsUpdatedAt = d.tagsUpdatedAt;
+            state.tagsUpdatedAt = d.tagsUpdatedAt || 0;
         }
 
         // --- Archive: merge weeks, union tasks within each week ---
@@ -3490,6 +3587,9 @@ async function pullFromCloud() {
 
         if (d.completionLog) state.completionLog = Object.assign({}, d.completionLog, state.completionLog);
 
+        // localContrib was worked out before the merge, so a recovery has to
+        // flag itself or the repaired categories would never leave this device
+        if (recoverOrphanTags()) { markTagRecovery(); localContrib = true; }
         _baseSave();
         render();
         syncPaused = false;

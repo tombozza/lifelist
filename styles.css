@@ -816,3 +816,15 @@ main { margin:0 auto; padding:20px; }
     /* 16px keeps iOS from zooming the page when the field takes focus */
     .quick-add input { font-size:16px; }
 }
+
+/* ---- Recovered tags (see recoverOrphanTags) ---- */
+.tag-recovery-note {
+    display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap;
+    padding:10px 12px; margin-bottom:14px; font-size:12px; line-height:1.5;
+    background:rgba(255,149,0,0.10); border:1px solid rgba(255,149,0,0.3);
+    border-radius:var(--r-sm);
+}
+.tag-recovery-note strong { font-weight:600; }
+.tag-recovery-note .btn-ghost { margin-left:auto; padding:4px 12px; font-size:12px; flex-shrink:0; }
+.tag-cat-recovered { border-style:dashed; border-color:var(--p-med); }
+.tag-admin-recovered { border-style:dashed; font-style:italic; }
