@@ -11,6 +11,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# Two Cloudflare accounts are now signed in, and wrangler refuses to guess in a
+# non-interactive shell. Pin Tom's (see the root CLAUDE.md) or every deploy stops
+# with "More than one account available".
+export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-a5ff0413b8715c423a0aef7438557f54}"
+
 # Stage only the site files — deploying the repo root would also upload .claude
 # (wrangler ignores .gitignore, and Pages direct upload ignores .assetsignore).
 STAGE="$(mktemp -d)"
