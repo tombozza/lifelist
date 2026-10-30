@@ -102,6 +102,15 @@ Three rules fall out of it, all load-bearing:
 3. **A per-device "already migrated" flag cannot guard shared data.** The
    migration now also bails out if any task already carries a tag.
 
+`recoverOrphanThemes()` is the same safety net for themes, with one difference
+worth keeping: a stale theme id usually has a *living namesake*, because the
+theme was renamed or rebuilt and took a new id with it (`tech-mq71` → `tech-mq87`).
+So it matches an existing theme by slug or name and **remaps the task onto it**
+rather than creating a same-named twin, and only rebuilds a theme when nothing
+matches *and* a live task still needs it — a dangling id on finished work just
+wants pointing at the right theme. Only a rebuild stamps `themesUpdatedAt`; a
+remap rewrites tasks, which carry their own `updatedAt`.
+
 `recoverOrphanTags()` is the safety net and runs after every sync merge: a tag id
 still on a task but absent from every category can only have come from a
 wholesale overwrite (deleting a tag *strips* it from tasks), so it rebuilds the

@@ -402,12 +402,20 @@ function categoryIdFromTagId(tagId) {
 }
 
 // Category ids are "<slug>-<4 chars>"; turn one back into something readable.
-function categoryNameFromId(catId) {
-    const parts = catId.split('-');
+// Theme and category ids are both "<slug>-<4 chars>", so the slug — and with
+// it the name it was built from — survives in the id.
+function idSlug(id) {
+    const parts = String(id).split('-');
     if (parts.length > 1 && parts[parts.length - 1].length === 4) parts.pop();
-    const words = parts.join(' ').trim();
+    return parts.join('-');
+}
+
+function titleFromSlug(slug) {
+    const words = slug.replace(/-/g, ' ').trim();
     return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Recovered';
 }
+
+function categoryNameFromId(catId) { return titleFromSlug(idSlug(catId)); }
 
 // Self-heal: a tag id still sitting on a task but missing from every category
 // means the category was lost rather than deleted — deleting one strips the id
@@ -416,9 +424,110 @@ function categoryNameFromId(catId) {
 // on screen instead of silently taking every chip with it. Names can't be
 // recovered, so they come back as placeholders for renaming (which preserves
 // the id, and so the tasks keep the tag).
+// The same repair for themes, with one important difference: a stale theme id
+// usually has a living namesake, because the theme was renamed or rebuilt and
+// took a new id with it. Remapping the task onto that theme beats creating a
+// duplicate called the same thing. Only when nothing matches is the theme
+// rebuilt — and then only if a task that's still live needs it, since a
+// dangling id on finished work just wants pointing at the right theme.
+function recoverOrphanThemes() {
+    const known = new Set(state.themes.map(t => t.id));
+    const bySlug = new Map();
+    state.themes.forEach(t => {
+        const slug = idSlug(t.id);
+        if (slug && !bySlug.has(slug)) bySlug.set(slug, t);
+        const name = String(t.name || '').trim().toLowerCase();
+        if (name && !bySlug.has(name)) bySlug.set(name, t);
+    });
+
+    const orphans = new Map();   // id -> { live }
+    state.tasks.forEach(t => {
+        const live = t.status !== 'complete' && t.status !== 'wont-do';
+        taskThemeIds(t).forEach(id => {
+            if (known.has(id)) return;
+            const entry = orphans.get(id) || { live: false };
+            if (live) entry.live = true;
+            orphans.set(id, entry);
+        });
+    });
+    if (!orphans.size) return 0;
+
+    const remap = new Map();
+    let created = 0;
+    orphans.forEach((info, id) => {
+        const slug = idSlug(id);
+        const hit = bySlug.get(slug);
+        if (hit) { remap.set(id, hit.id); return; }
+        if (!info.live) return;
+        const theme = { id, name: titleFromSlug(slug), color: '#8e8e93',
+                        subThemes: [], focus: 'home', recovered: true };
+        state.themes.push(theme);
+        known.add(id);
+        bySlug.set(slug, theme);
+        created++;
+    });
+
+    let remapped = 0;
+    if (remap.size) {
+        state.tasks.forEach(t => {
+            const ids = taskThemeIds(t);
+            if (!ids.some(x => remap.has(x))) return;
+            const next = [...new Set(ids.map(x => remap.get(x) || x))];
+            t.themeIds = next;
+            t.themeId = next[0] || '';
+            t.updatedAt = Date.now();
+            remapped++;
+        });
+    }
+    // Only a rebuilt theme is a change to the shared themes list; a remap just
+    // rewrites tasks, which carry their own updatedAt.
+    if (created) state.themesUpdatedAt = Date.now();
+    if (created || remapped) {
+        console.info('[life-kanban] themes: rebuilt ' + created + ', remapped ' + remapped + ' task(s)');
+    }
+    return created + remapped;
+}
+
 // A silent repair is nearly as bad as a silent loss — say it happened.
 function markTagRecovery() {
     state.settings.tagRecoveryNotice = true;
+}
+
+function recoveredTagCount() {
+    return allTagCategories().reduce((sum, c) => sum + (c.tags || []).filter(t => t.recovered).length, 0);
+}
+
+function recoveredThemeCount() {
+    return state.themes.filter(t => t.recovered).length;
+}
+
+function renderRecoveryNotice(container, kind) {
+    if (!state.settings.tagRecoveryNotice) return;
+    const n = kind === 'tags' ? recoveredTagCount() : recoveredThemeCount();
+    if (!n) return;
+    const note = document.createElement('div');
+    note.className = 'tag-recovery-note';
+    note.innerHTML = kind === 'tags'
+        ? `<strong>${n} tag${n === 1 ? '' : 's'} recovered.</strong> They were still on your cards but their
+           category had been overwritten by a sync, so they'd stopped showing. The names couldn't be recovered \u2014
+           rename each <em>Recovered&nbsp;N</em> below and the tasks keep it. Delete one instead and it comes off
+           those tasks properly.`
+        : `<strong>${n} theme${n === 1 ? '' : 's'} rebuilt.</strong> ${n === 1 ? 'A task was' : 'Tasks were'} still
+           filed under ${n === 1 ? 'a theme' : 'themes'} that had gone missing, so ${n === 1 ? 'it has' : 'they have'}
+           been put back from the name in the id. Rename or recolour as you like \u2014 the tasks stay attached.`;
+    const dismiss = document.createElement('button');
+    dismiss.className = 'btn-ghost';
+    dismiss.textContent = 'Dismiss';
+    dismiss.addEventListener('click', () => {
+        // One dismissal clears the lot, so it can't reappear on the other tab
+        state.settings.tagRecoveryNotice = false;
+        allTagCategories().forEach(c => { delete c.recovered; (c.tags || []).forEach(t => delete t.recovered); });
+        state.themes.forEach(t => { delete t.recovered; });
+        saveState();
+        renderAdmin();
+    });
+    note.appendChild(dismiss);
+    container.appendChild(note);
 }
 
 function recoverOrphanTags() {
@@ -441,7 +550,14 @@ function recoverOrphanTags() {
     ordered.forEach(id => {
         const catId = categoryIdFromTagId(id);
         if (!catId) return;
+        // Match an existing category by id first, then by the name the id was
+        // built from, so a category that was rebuilt under a new id doesn't end
+        // up with a same-named twin.
         let cat = getTagCategory(catId);
+        if (!cat) {
+            const want = categoryNameFromId(catId).toLowerCase();
+            cat = allTagCategories().find(c => String(c.name || '').trim().toLowerCase() === want) || null;
+        }
         if (!cat) {
             cat = { id: catId, name: categoryNameFromId(catId), color: '#8e8e93', tags: [], recovered: true };
             state.tagCategories.push(cat);
@@ -1573,12 +1689,15 @@ function renderAdminThemes(container) {
     hdr.appendChild(addBtn);
     container.appendChild(hdr);
 
+    renderRecoveryNotice(container, 'themes');
+
     const list = document.createElement('div');
     list.className = 'theme-list';
     [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const row = document.createElement('div');
         row.className = 'theme-row';
         if (theme.hidden) row.classList.add('theme-row-hidden');
+        if (theme.recovered) row.classList.add('theme-row-recovered');
         const swatch = document.createElement('div');
         swatch.className = 'theme-swatch';
         swatch.style.background = theme.color;
@@ -1626,25 +1745,7 @@ function renderAdminTags(container) {
     hdr.appendChild(addBtn);
     container.appendChild(hdr);
 
-    if (state.settings.tagRecoveryNotice) {
-        const note = document.createElement('div');
-        note.className = 'tag-recovery-note';
-        const n = allTagCategories().reduce((sum, c) => sum + (c.tags || []).filter(t => t.recovered).length, 0);
-        note.innerHTML = `<strong>${n} tag${n === 1 ? '' : 's'} recovered.</strong> They were still on your cards but their
-            category had been overwritten by a sync, so they'd stopped showing. The names couldn't be recovered \u2014
-            rename each <em>Recovered&nbsp;N</em> below and the tasks keep it. Delete one instead and it comes off those tasks properly.`;
-        const dismiss = document.createElement('button');
-        dismiss.className = 'btn-ghost';
-        dismiss.textContent = 'Dismiss';
-        dismiss.addEventListener('click', () => {
-            state.settings.tagRecoveryNotice = false;
-            allTagCategories().forEach(c => { delete c.recovered; (c.tags||[]).forEach(t => delete t.recovered); });
-            saveState();
-            renderAdmin();
-        });
-        note.appendChild(dismiss);
-        container.appendChild(note);
-    }
+    renderRecoveryNotice(container, 'tags');
 
     const intro = document.createElement('div');
     intro.className = 'form-hint admin-intro';
@@ -3589,7 +3690,7 @@ async function pullFromCloud() {
 
         // localContrib was worked out before the merge, so a recovery has to
         // flag itself or the repaired categories would never leave this device
-        if (recoverOrphanTags()) { markTagRecovery(); localContrib = true; }
+        if (recoverOrphanTags() + recoverOrphanThemes()) { markTagRecovery(); localContrib = true; }
         _baseSave();
         render();
         syncPaused = false;

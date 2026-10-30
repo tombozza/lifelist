@@ -828,3 +828,4 @@ main { margin:0 auto; padding:20px; }
 .tag-recovery-note .btn-ghost { margin-left:auto; padding:4px 12px; font-size:12px; flex-shrink:0; }
 .tag-cat-recovered { border-style:dashed; border-color:var(--p-med); }
 .tag-admin-recovered { border-style:dashed; font-style:italic; }
+.theme-row-recovered { border-style:dashed; border-color:var(--p-med); }
