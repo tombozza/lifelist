@@ -119,6 +119,17 @@ hands the tag back as `Recovered N` for renaming, which preserves the id. It set
 `localContrib` itself, because that flag is computed *before* the merge. The
 pre-repair blob is in `.backups/` (gitignored via `.git/info/exclude`).
 
+**Recovering the id is only half the job.** Shipping 19 tags called
+`Recovered 3` with no way to tell what they were made the repair useless in
+practice — the evidence (which tasks still carry the tag) only existed outside
+the app. `recoveredTagFixer()` now puts a row under each category listing those
+task titles, with a name box and a **Merge into…** picker. Merging matters as
+much as renaming: a lost tag's name is often still sitting in the same category
+unused, because the People migration re-seeded the names from the old theme — so
+renaming would leave two `Dad`s where `mergeTag()` collapses them into one.
+Recovery skips tags only used by completed tasks, so a few dangling ids stay in
+the archive by design (the old `Tools` category is one).
+
 ## Notes (the parking list)
 
 `task.inNotes` parks a task in the Notes view: off the board and out of Lists,

@@ -1806,6 +1806,9 @@ function renderAdminTags(container) {
         });
         box.appendChild(tagWrap);
 
+        const needFixing = (cat.tags || []).filter(t => t.recovered);
+        if (needFixing.length) box.appendChild(recoveredTagFixer(cat, needFixing));
+
         const add = document.createElement('div');
         add.className = 'tag-cat-add';
         const input = document.createElement('input');
@@ -1830,6 +1833,121 @@ function renderAdminTags(container) {
 
         container.appendChild(box);
     });
+}
+
+// The tasks a tag is on, which is the only evidence of what a recovered tag
+// used to be called.
+function tasksWithTag(tagId) {
+    return state.tasks.filter(t =>
+        t.status !== 'complete' && t.status !== 'wont-do' && taskTagIds(t).includes(tagId));
+}
+
+function renameTag(catId, tagId, name) {
+    const cat = getTagCategory(catId);
+    const tag = cat && (cat.tags || []).find(t => t.id === tagId);
+    if (!tag || !name.trim()) return;
+    tag.name = name.trim();
+    delete tag.recovered;                       // named, so no longer needs attention
+    if (!(cat.tags || []).some(t => t.recovered)) delete cat.recovered;
+    state.tagsUpdatedAt = Date.now();
+    saveState();
+    renderAdmin();
+}
+
+// Fold one tag into another: every task on `fromId` moves to `toId`, then the
+// old tag goes. This is what a recovered tag usually needs — the name it was
+// is often still sitting in the same category, unused.
+function mergeTag(catId, fromId, toId) {
+    const cat = getTagCategory(catId);
+    if (!cat || fromId === toId) return;
+    const to = (cat.tags || []).find(t => t.id === toId);
+    if (!to) return;
+    state.tasks.forEach(t => {
+        const ids = taskTagIds(t);
+        if (!ids.includes(fromId)) return;
+        const next = ids.filter(x => x !== fromId);
+        if (!next.includes(toId)) next.push(toId);
+        t.tags = next;
+        t.updatedAt = Date.now();
+    });
+    cat.tags = cat.tags.filter(t => t.id !== fromId);
+    if (!cat.tags.some(t => t.recovered)) delete cat.recovered;
+    activeTagFilter = activeTagFilter.filter(x => x !== fromId);
+    state.tagsUpdatedAt = Date.now();
+    saveState();
+    renderAdmin();
+}
+
+// One row per recovered tag: the tasks carrying it, a box to name it, and a
+// merge into whichever real tag it turns out to be.
+function recoveredTagFixer(cat, tags) {
+    const wrap = document.createElement('div');
+    wrap.className = 'tag-fix';
+    const head = document.createElement('div');
+    head.className = 'tag-fix-head';
+    head.textContent = tags.length + ' to sort out \u2014 named from the tasks still carrying them';
+    wrap.appendChild(head);
+
+    const targets = (cat.tags || []).filter(t => !t.recovered);
+    tags.forEach(tag => {
+        const row = document.createElement('div');
+        row.className = 'tag-fix-row';
+
+        const titles = tasksWithTag(tag.id).map(t => t.title);
+        // A few examples are enough to recognise a tag; sixteen is a wall
+        const SHOWN = 6;
+        const shown = titles.slice(0, SHOWN);
+        const on = document.createElement('div');
+        on.className = 'tag-fix-on';
+        on.innerHTML = `<span class="tag-fix-count">${titles.length}</span> ` +
+            (titles.length ? shown.map(() => '<span class="tag-fix-task"></span>').join('') : '<em>no live tasks</em>') +
+            (titles.length > SHOWN ? `<span class="tag-fix-more">+${titles.length - SHOWN} more</span>` : '');
+        // set titles as text so nothing in a task name can be read as markup
+        [...on.querySelectorAll('.tag-fix-task')].forEach((el, i) => { el.textContent = shown[i]; });
+        if (titles.length) on.title = titles.join('\n');
+        row.appendChild(on);
+
+        const actions = document.createElement('div');
+        actions.className = 'tag-fix-actions';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-input';
+        input.placeholder = 'Name it\u2026';
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); renameTag(cat.id, tag.id, input.value); }
+        });
+        actions.appendChild(input);
+
+        const save = document.createElement('button');
+        save.className = 'btn-small';
+        save.textContent = 'Rename';
+        save.addEventListener('click', () => renameTag(cat.id, tag.id, input.value));
+        actions.appendChild(save);
+
+        if (targets.length) {
+            const sel = document.createElement('select');
+            sel.className = 'form-select form-select-sm';
+            sel.innerHTML = '<option value="">Merge into\u2026</option>';
+            [...targets].sort((a,b) => a.name.localeCompare(b.name)).forEach(t => {
+                const o = document.createElement('option');
+                o.value = t.id; o.textContent = t.name;
+                sel.appendChild(o);
+            });
+            sel.addEventListener('change', () => {
+                if (!sel.value) return;
+                const to = targets.find(t => t.id === sel.value);
+                if (confirm(`Move ${titles.length} task(s) onto "${to.name}" and drop this one?`)) {
+                    mergeTag(cat.id, tag.id, sel.value);
+                } else { sel.value = ''; }
+            });
+            actions.appendChild(sel);
+        }
+
+        row.appendChild(actions);
+        wrap.appendChild(row);
+    });
+    return wrap;
 }
 
 function addTag(catId, name) {

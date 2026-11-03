@@ -829,3 +829,32 @@ main { margin:0 auto; padding:20px; }
 .tag-cat-recovered { border-style:dashed; border-color:var(--p-med); }
 .tag-admin-recovered { border-style:dashed; font-style:italic; }
 .theme-row-recovered { border-style:dashed; border-color:var(--p-med); }
+
+/* ---- Sorting out recovered tags (see recoveredTagFixer) ---- */
+.tag-fix {
+    border-top:1px dashed var(--border); margin-top:4px; padding-top:10px;
+    display:flex; flex-direction:column; gap:10px;
+}
+.tag-fix-head {
+    font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;
+    color:var(--p-med);
+}
+.tag-fix-row { display:flex; flex-direction:column; gap:6px; }
+.tag-fix-on { font-size:12px; color:var(--text-2); display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
+.tag-fix-count {
+    font-size:10px; font-weight:700; background:var(--bg-input); color:var(--text-2);
+    border-radius:10px; padding:1px 7px;
+}
+.tag-fix-task {
+    background:var(--bg-input); border-radius:var(--r-sm); padding:2px 7px;
+    font-size:11.5px; color:var(--text);
+}
+.tag-fix-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.tag-fix-actions .form-input { flex:1; min-width:110px; }
+.tag-fix-actions .btn-small, .tag-fix-actions .form-select { flex-shrink:0; }
+.tag-fix-actions .form-select { width:auto; max-width:46%; }
+
+@media (max-width: 768px) {
+    .tag-fix-actions .form-input { font-size:16px; }
+}
+.tag-fix-more { font-size:11px; color:var(--text-3); font-style:italic; }
