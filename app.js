@@ -118,6 +118,8 @@ let snoozedExpanded = new Set();
 let snoozeTargetIds = null;
 let snoozeFromBulk = false;
 // Today view
+let todayDay = todayStr();          // the day Today is showing (arrows step through days)
+let todayAnchor = todayDay;         // the real date when todayDay was last in step with it
 let todayOrderEdit = false;
 let todayOpenId = null;             // the row with its action strip open
 let todayDoneOpen = false;
@@ -772,17 +774,17 @@ function syncQuickAddVisibility() {
     const target = quickAddPlanTarget();
     document.getElementById('quick-add-input').placeholder = target === undefined
         ? 'Quick add \u2014 lands in Review\u2026'
-        : 'Add to today\u2026';
+        : 'Add to ' + (target === todayStr() ? 'today' : longDay(target)) + '\u2026';
 }
 
 // On Today, quick add plans straight onto today. undefined = not on Today,
 // so it goes to Review as usual.
 function quickAddPlanTarget() {
-    return currentView === 'today' ? todayStr() : undefined;
+    if (currentView !== 'today') return undefined;
+    return todayDay < todayStr() ? todayStr() : todayDay;   // nothing gets added to the past
 }
 
 function render() {
-    updateNotesTabCount();
     if (currentView === 'lists') renderLists();
     else if (currentView === 'today') renderToday();
     else if (currentView === 'board') renderBoard();
@@ -1177,13 +1179,6 @@ function notesTasks() {
     return state.tasks.filter(t =>
         t.inNotes && t.status !== 'complete' && t.status !== 'wont-do'
         && themesPass(t, hidden) && taskMatchesTagFilter(t, activeTagFilter));
-}
-
-function updateNotesTabCount() {
-    const tab = document.getElementById('tab-notes');
-    if (!tab) return;
-    const n = state.tasks.filter(t => t.inNotes && t.status === 'active').length;
-    tab.textContent = n ? `Notes ${n}` : 'Notes';
 }
 
 function renderNotes() {
@@ -1797,6 +1792,11 @@ function todoBtn(label, cls, fn, title) {
     return b;
 }
 
+function longDay(day) {
+    const l = dayLabel(day);
+    if (/^(Today|Tomorrow|Yesterday)$/.test(l)) return l.toLowerCase();
+    return new Date(day + 'T00:00:00').toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'short' });
+}
 function shortDay(day) { return dayLabel(day).replace(/ \d+ \w+$/, ''); }
 
 // One to-do row. where: 'day' | 'ready' | 'backlog' | 'done'.
@@ -1852,7 +1852,7 @@ function todoRow(task, where, list) {
             up.disabled = i <= 0; down.disabled = i >= list.length - 1;
             side.append(up, down);
         } else if (where === 'ready' || where === 'backlog') {
-            side.appendChild(todoBtn('+ Today', 'todo-add', () => planFor(task.id, today), 'Add to today'));
+            side.appendChild(todoBtn('+ ' + shortDay(todayDay), 'todo-add', () => planFor(task.id, todayDay), 'Add to ' + longDay(todayDay)));
         }
         if (side.childNodes.length) main.appendChild(side);
     }
@@ -1862,8 +1862,12 @@ function todoRow(task, where, list) {
         const strip = document.createElement('div');
         strip.className = 'todo-actions';
         const add = (label, fn, cls) => strip.appendChild(todoBtn(label, 'todo-act' + (cls ? ' ' + cls : ''), fn));
-        add(where === 'day' ? 'Tomorrow →' : '+ Tomorrow', () => planFor(task.id, addDays(today, 1)));
-        if (where !== 'ready') add(where === 'day' ? 'Not today' : '+ Ready', () => planFor(task.id, null));
+        if (where === 'day') add(todayDay === today ? 'Tomorrow →' : 'Next day →', () => planFor(task.id, addDays(todayDay, 1)));
+        else {
+            if (todayDay !== today) add('+ Today', () => planFor(task.id, today));
+            if (todayDay !== addDays(today, 1)) add('+ Tomorrow', () => planFor(task.id, addDays(today, 1)));
+        }
+        if (where !== 'ready') add(where === 'day' ? (todayDay === today ? 'Not today' : 'To Ready') : '+ Ready', () => planFor(task.id, null));
         const pick = document.createElement('label');
         pick.className = 'todo-act todo-pick';
         pick.textContent = 'Pick a day…';
@@ -1915,17 +1919,32 @@ function renderToday() {
     if (rollOverPlan()) saveState();
     host.innerHTML = '';
     const today = todayStr();
+    // Left open past midnight: follow the date, unless they'd moved off today
+    if (todayAnchor !== today) {
+        if (todayDay === todayAnchor) todayDay = today;
+        todayAnchor = today;
+    }
+    const day = todayDay;
+    const goTo = d => { todayDay = d; todayOpenId = null; todayOrderEdit = false; render(); };
 
     const top = document.createElement('div');
     top.className = 'today-top';
-    const d = new Date(today + 'T00:00:00');
+    const d = new Date(day + 'T00:00:00');
     const date = document.createElement('div');
     date.className = 'today-date';
     date.innerHTML = '<div class="today-date-big"></div><div class="today-date-small"></div>';
     date.firstChild.textContent = d.toLocaleDateString('en-GB', { weekday:'long' });
-    date.lastChild.textContent = d.toLocaleDateString('en-GB', { day:'numeric', month:'long' });
+    const rel = dayLabel(day);
+    date.lastChild.textContent = d.toLocaleDateString('en-GB', { day:'numeric', month:'long' }) +
+        (/^(Today|Tomorrow|Yesterday)$/.test(rel) && rel !== 'Today' ? ' · ' + rel : '');
+    if (day !== today) date.lastChild.appendChild(todoBtn('Back to today', 'today-jump', () => goTo(today)));
     top.appendChild(date);
-    const tasks = planTasks(today);
+    const arrows = document.createElement('div');
+    arrows.className = 'today-arrows';
+    arrows.append(
+        todoBtn('‹', 'today-arrow', () => goTo(addDays(day, -1)), 'Previous day'),
+        todoBtn('›', 'today-arrow', () => goTo(addDays(day, 1)), 'Next day'));
+    const tasks = planTasks(day);
     if (tasks.length > 1 || todayOrderEdit) {
         const b = todoBtn('', 'icon-btn todo-order-btn' + (todayOrderEdit ? ' on' : ''), () => {
             todayOrderEdit = !todayOrderEdit; todayOpenId = null; render();
@@ -1935,22 +1954,29 @@ function renderToday() {
             : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg>';
         top.appendChild(b);
     }
+    top.appendChild(arrows);
     host.appendChild(top);
 
     const list = document.createElement('div');
     list.className = 'todo-list';
     tasks.forEach(t => list.appendChild(todoRow(t, 'day', tasks)));
-    if (!tasks.length) list.appendChild(todoEmpty(doneOn(today).length ? 'All done for today.' : 'Nothing on today yet.'));
+    if (!tasks.length) {
+        const past = day < today;
+        list.appendChild(todoEmpty(past ? 'Anything unfinished from this day rolled forward to today.'
+            : doneOn(day).length ? 'All done.' : 'Nothing planned' + (day === today ? ' for today yet.' : '.')));
+    }
     host.appendChild(list);
 
-    todoSection(host, 'Done', doneOn(today), todayDoneOpen, () => { todayDoneOpen = !todayDoneOpen; render(); }, 'done');
+    todoSection(host, 'Done', doneOn(day), todayDoneOpen, () => { todayDoneOpen = !todayDoneOpen; render(); }, 'done');
 
-    // Ready lives behind this one quiet button
-    const n = readyTasks().length;
-    const pull = todoBtn(n ? 'Add from Ready · ' + n : 'Add from Ready', 'today-pull', openReadySheet);
-    host.appendChild(pull);
+    // Ready lives behind this one quiet button (nothing to add to a past day)
+    if (day >= today) {
+        const n = readyTasks().length;
+        host.appendChild(todoBtn(n ? 'Add from Ready · ' + n : 'Add from Ready', 'today-pull', openReadySheet));
+    }
 
     if (document.getElementById('ready-modal').style.display === 'flex') renderReadySheet();
+    syncQuickAddVisibility();   // its placeholder names the day being shown
     if (window.scrollY !== y) window.scrollTo(0, y);
 }
 
@@ -1969,6 +1995,7 @@ function renderReadySheet() {
     const host = document.getElementById('ready-list');
     const y = host.scrollTop;
     host.innerHTML = '';
+    document.getElementById('ready-title').textContent = 'Add to ' + longDay(todayDay);
     const ready = readyTasks();
     const list = document.createElement('div');
     list.className = 'todo-list';
@@ -3425,6 +3452,19 @@ function applyTheme() {
     document.documentElement.setAttribute('data-theme', state.settings.theme || 'light');
 }
 
+// Switch the main view. Admin has no tab (it opens from Settings), so on
+// Admin no tab is highlighted.
+function showView(view) {
+    currentView = view;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + view).classList.add('active');
+    if (view === 'lists') markListsVisited();
+    syncQuickAddVisibility();
+    window.scrollTo(0, 0);   // a new page opens at the top
+    render();
+}
+
 // ============ INIT ============
 
 function init() {
@@ -3436,15 +3476,14 @@ function init() {
 
     // View tabs
     document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-            tab.classList.add('active');
-            currentView = tab.dataset.view;
-            document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-            document.getElementById('view-'+currentView).classList.add('active');
-            if (currentView === 'lists') markListsVisited();
-            syncQuickAddVisibility();
-            render();
+        tab.addEventListener('click', () => showView(tab.dataset.view));
+    });
+    // Admin has no tab of its own any more: it opens from Settings
+    document.querySelectorAll('[data-admin-open]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentAdminTab = btn.dataset.adminOpen;
+            document.getElementById('settings-modal').style.display = 'none';
+            showView('admin');
         });
     });
 

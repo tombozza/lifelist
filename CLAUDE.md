@@ -188,11 +188,11 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
 - A day only means something while the task is Live: `updateTask()` and
   `migrateColumns()` clear `planDay` the moment a task leaves Live. Completing keeps
   it, re-stamped to the completion day, so that day's "Done" section shows it.
-- **Today shows today and nothing else**, on every screen size. A week view and
-  a Day/Ready toggle with day arrows were built first and removed the same day at
-  Tom's request ("so focused on what is today's tasks") — don't bring them back
-  unasked. Future days are reached only through a task's "Tomorrow →" / "Pick a
-  day…" actions, and show up on their own when the day arrives.
+- **Today shows one day**, on every screen size, with ‹ › arrows to step to other
+  days (`todayDay`). Tom asked for no week view ("I just don't want a full week
+  view") and for Ready hidden away — don't bring either back unasked. Ready and
+  quick add work on the day being shown; past days are read-only (their work has
+  rolled forward), so quick add there goes to today.
 - **Ready is hidden on purpose**: it lives in a sheet (`#ready-modal`,
   `renderReadySheet`) behind the quiet "Add from Ready · N" button, along with the
   board backlog. Keep it off the main screen.
@@ -200,6 +200,12 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
   Backlog, Edit), so it's all taps, no dragging.
 - On Today, quick add and the + button plan straight onto today
   (`quickAddPlanTarget`, `modalPlanDay`) instead of going to Review.
+
+## Navigation
+
+Tabs are Today, Board, Lists, Notes. **Admin has no tab**: Settings (the gear) has
+Themes / Tags / Archive / Data buttons that open it (`data-admin-open`, `showView`).
+The Notes tab deliberately shows no count.
 
 ## Auth
 
