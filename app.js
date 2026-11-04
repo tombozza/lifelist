@@ -362,8 +362,20 @@ function progressChipEl(task) {
     if (!p) return null;
     const el = document.createElement('span');
     el.className = 'chip chip-progress' + (p.done === p.total ? ' chip-progress-done' : '');
-    el.innerHTML = `<span class="chip-progress-bar"><span style="width:${p.pct}%"></span></span>${p.done}/${p.total}`;
-    el.title = p.pct + '% of sub-tasks done';
+    el.innerHTML = `<span class="chip-progress-bar"><span style="width:${p.pct}%"></span></span>${p.pct}%`;
+    el.title = `${p.done} of ${p.total} sub-tasks done`;
+    return el;
+}
+
+// On a card split out of another task's checklist: a quiet pointer back to
+// the task it belongs to.
+function parentChipEl(task) {
+    const parent = task.parentId && state.tasks.find(t => t.id === task.parentId);
+    if (!parent) return null;
+    const el = document.createElement('span');
+    el.className = 'chip chip-parent';
+    el.textContent = '\u21B3 ' + parent.title;
+    el.title = 'A step of: ' + parent.title;
     return el;
 }
 
@@ -373,8 +385,57 @@ function progressChipEl(task) {
 function subtaskProgress(t) {
     const list = Array.isArray(t && t.subtasks) ? t.subtasks : [];
     if (!list.length) return null;
-    const done = list.filter(st => st.done).length;
+    const done = list.filter(subtaskDone).length;
     return { done, total: list.length, pct: Math.round((done / list.length) * 100) };
+}
+
+// A step split out into its own board card (st.cardId) is done when that
+// card is complete — the card is the source of truth, so a parent's % is right
+// even if the two records synced from different devices. If the card has been
+// deleted, the step falls back to its own tick.
+function subtaskCard(st) {
+    return st && st.cardId ? state.tasks.find(t => t.id === st.cardId && t.status !== 'scheduled') || null : null;
+}
+function subtaskDone(st) {
+    const card = subtaskCard(st);
+    return card ? card.status === 'complete' : !!st.done;
+}
+
+// Split one step of a task out onto the board as a card of its own. It keeps
+// the parent's themes and tags, starts in the Backlog, and stays on the
+// parent's checklist, linked, so finishing it moves the parent's %.
+function splitSubtaskToCard(parentId, subtaskId, title) {
+    const parent = state.tasks.find(t => t.id === parentId);
+    if (!parent) return null;
+    const st = (parent.subtasks || []).find(x => x.id === subtaskId);
+    if (!st || subtaskCard(st)) return subtaskCard(st);
+    const card = createTask(withThemeIds({
+        title: (title || st.title || '').trim(),
+        tags: [...taskTagIds(parent)],
+        kanbanColumn: st.done ? 'complete' : 'backlog',
+        status: st.done ? 'complete' : 'active',
+        reviewed: true,
+        parentId: parent.id,
+    }, taskThemeIds(parent)));
+    if (st.done) { card.completedDate = todayStr(); card._prevKanban = 'backlog'; }
+    card.parentId = parent.id;
+    state.tasks.push(card);
+    st.cardId = card.id;
+    parent.updatedAt = Date.now();
+    saveState();
+    render();
+    return card;
+}
+
+// Keep the parent's own tick in step with its split-out card, for anything
+// that reads st.done directly (and for older devices).
+function syncParentStep(card) {
+    if (!card.parentId) return;
+    const parent = state.tasks.find(t => t.id === card.parentId);
+    const st = parent && (parent.subtasks || []).find(x => x.cardId === card.id);
+    if (!st) return;
+    const done = card.status === 'complete';
+    if (st.done !== done) { st.done = done; parent.updatedAt = Date.now(); }
 }
 
 // ---- Tags ----
@@ -1336,6 +1397,8 @@ function createListItem(task, opts = {}) {
 
     // No theme chips on cards (Tom, 4 Nov 2026): the filters do the sorting, and
     // the solid colour pulled the eye away from the title. Tags stay.
+    const listParent = parentChipEl(task);
+    if (listParent) chips.appendChild(listParent);
     taskTags(task).forEach(tag => chips.appendChild(tagChipEl(tag)));
     const listProg = progressChipEl(task);
     if (listProg) chips.appendChild(listProg);
@@ -1646,6 +1709,8 @@ function createBoardCard(task) {
     // the sorting, and the solid colour pulled the eye away from the title.
     const footer = document.createElement('div');
     footer.className = 'board-card-footer';
+    const cardParent = parentChipEl(task);
+    if (cardParent) footer.appendChild(cardParent);
     taskTags(task).forEach(tag => footer.appendChild(tagChipEl(tag)));
     const cardProg = progressChipEl(task);
     if (cardProg) footer.appendChild(cardProg);
@@ -1874,6 +1939,8 @@ function todoRow(task, where, list) {
     meta.className = 'todo-meta';
     // No theme chips on cards (Tom, 4 Nov 2026): the filters do the sorting, and
     // the solid colour pulled the eye away from the title. Tags stay.
+    const parentChip = parentChipEl(task);
+    if (parentChip) meta.appendChild(parentChip);
     taskTags(task).forEach(tag => meta.appendChild(tagChipEl(tag)));
     const prog = progressChipEl(task);
     if (prog) meta.appendChild(prog);
@@ -2718,6 +2785,7 @@ function completeTask(id) {
         }
     }
     task.updatedAt = Date.now();
+    syncParentStep(task);
     saveState();
     render();
 }
@@ -2739,7 +2807,7 @@ function scheduleOccurrence(source, dateStr, runCount) {
         themeIds: taskThemeIds(source),
         tags: [...taskTagIds(source)],
         // A fresh occurrence starts with its checklist unticked
-        subtasks: (source.subtasks || []).map(st => ({ ...st, id: genId(), done: false })),
+        subtasks: (source.subtasks || []).map(({ cardId, ...st }) => ({ ...st, id: genId(), done: false })),
         subTheme: source.subTheme,
         priority: source.priority,
         size: source.size,
@@ -2914,7 +2982,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
         modalThemeIds = [...taskThemeIds(t)];
         modalSubTheme = t.subTheme || '';
         modalTagIds = [...taskTagIds(t)];
-        modalSubtasks = (t.subtasks || []).map(st => ({...st}));
+        modalSubtasks = (t.subtasks || []).map(st => ({...st, done: subtaskDone(st)}));
         modalPriority = t.priority || '';
         modalSize = t.size || 'xs';
         document.getElementById('task-due').value = t.dueDate || '';
@@ -3097,6 +3165,8 @@ function renderTagPicker() {
 
 // ---- Sub-task editor ----
 
+const CARD_OUT_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="9" height="9" rx="1.5"/><path d="M8 2h6v6M14 2 8.5 7.5"/></svg>';
+
 function renderSubtaskEditor() {
     const list = document.getElementById('subtask-list');
     list.innerHTML = '';
@@ -3123,6 +3193,36 @@ function renderSubtaskEditor() {
             if (e.key === 'Enter') { e.preventDefault(); document.getElementById('subtask-new-name').focus(); }
         });
         row.appendChild(input);
+
+        // Split this step out onto the board as its own card. Only on a task
+        // that already exists — a new one has nothing to link the card back to.
+        const card = subtaskCard(st);
+        if (card || editingTaskId) {
+            const out = document.createElement('button');
+            out.type = 'button';
+            out.className = 'icon-btn subtask-card' + (card ? ' linked' : '');
+            out.innerHTML = CARD_OUT_SVG;
+            if (card) {
+                const col = KANBAN_COLS.find(c => c.id === card.kanbanColumn);
+                out.title = 'On the board' + (col ? ' · ' + col.name : '');
+                out.disabled = true;
+            } else {
+                out.title = 'Make this step a card on the board';
+                out.addEventListener('click', () => {
+                    const t = modalSubtasks[idx];
+                    if (!t.title.trim()) { input.focus(); return; }
+                    const parent = state.tasks.find(x => x.id === editingTaskId);
+                    if (!parent) return;
+                    if (!(parent.subtasks || []).some(x => x.id === t.id)) {
+                        parent.subtasks = [...(parent.subtasks || []), { id: t.id, title: t.title.trim(), done: !!t.done }];
+                    }
+                    const made = splitSubtaskToCard(parent.id, t.id, t.title);
+                    if (made) t.cardId = made.id;
+                    renderSubtaskEditor();
+                });
+            }
+            row.appendChild(out);
+        }
 
         const del = document.createElement('button');
         del.type = 'button';
@@ -3382,6 +3482,7 @@ function saveTaskModal() {
         }
         if (data.recurring && existing && !existing.recurRoot) data.recurRoot = editingTaskId;
         updateTask(editingTaskId, data);
+        applyStepsToCards(data.subtasks);
     } else if (data.recurring) {
         // New recurring task: schedule its first occurrence so it appears on
         // the board on its recurrence date (e.g. the coming 7th), rather than
@@ -3397,6 +3498,18 @@ function saveTaskModal() {
     checkRecurring();
     render();
     closeTaskModal();
+}
+
+// Ticking or renaming a split-out step in the parent's checklist does the
+// same to its card, so the two never disagree.
+function applyStepsToCards(steps) {
+    (steps || []).forEach(st => {
+        const card = subtaskCard(st);
+        if (!card) return;
+        if (st.title && card.title !== st.title) { card.title = st.title; card.updatedAt = Date.now(); }
+        if (!!st.done !== (card.status === 'complete')) completeTask(card.id);
+    });
+    saveState();
 }
 
 // A new task made from Today lands on the day that was showing (if it's Live)

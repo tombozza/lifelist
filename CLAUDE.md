@@ -151,7 +151,17 @@ filter dropdown are both built from it, so add a level in one place only.
 `task.subtasks = [{id, title, done}]`, surfaced as a progress chip on the board
 card and list row (`subtaskProgress` / `progressChipEl`). They're edited in the
 task modal's Sub-tasks section. A recurring occurrence copies the checklist with fresh
-ids and everything unticked.
+ids and everything unticked (and no card links).
+
+**Split out to a card.** In the task modal, a step's ↗ button (`splitSubtaskToCard`)
+makes it a real board card in Backlog, with the parent's themes and tags and
+`parentId` pointing back; the step keeps `cardId`. The **card is the source of
+truth**: `subtaskDone(st)` reads the card's status whenever the card exists, so the
+parent's % (`progressChipEl`, now shown as a percentage) is right even when the two
+records synced from different devices. `completeTask` mirrors the tick onto the
+parent (`syncParentStep`), and ticking/renaming the step in the parent's modal does
+the same to the card on save (`applyStepsToCards`). Delete the card and the step
+falls back to its own tick. The child card shows a quiet `↳ Parent` chip.
 
 ## Board columns
 
