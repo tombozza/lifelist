@@ -757,6 +757,9 @@ function isScheduled(t) { return t.status === 'scheduled'; }
 // Nothing to capture into on the Admin screens
 function syncQuickAddVisibility() {
     document.getElementById('quick-add').style.display = currentView === 'admin' ? 'none' : '';
+    // + adds a task, which means nothing on Admin, and there it sat on top of
+    // the tag boxes' Add buttons
+    document.getElementById('fab').style.display = currentView === 'admin' ? 'none' : '';
     // On Today it lines up with the centred list beneath it
     document.getElementById('quick-add').classList.toggle('quick-add-narrow', currentView === 'today');
     const target = quickAddPlanTarget();
@@ -2268,12 +2271,19 @@ function renderAdminTags(container) {
         input.type = 'text';
         input.className = 'form-input';
         input.placeholder = 'Add a tag to ' + cat.name + '\u2026';
+        input.dataset.tagAddFor = cat.id;
+        // Adding redraws the whole page, so the box typed into is gone: put the
+        // cursor in its replacement and hold the scroll, so Enter, name, Enter…
+        // keeps going without reaching for the mouse
         const go = () => {
             const v = input.value.trim();
             if (!v) return;
+            const y = window.scrollY;
             addTag(cat.id, v);
-            input.value = '';
-            input.focus();
+            const fresh = document.querySelector(`[data-tag-add-for="${cat.id}"]`) || input;
+            fresh.value = '';
+            fresh.focus({ preventScroll: true });
+            if (window.scrollY !== y) window.scrollTo(0, y);
         };
         input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
         add.appendChild(input);

@@ -66,7 +66,7 @@ header {
 .icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 
 /* ---- Main ---- */
-main { margin:0 auto; padding:20px; }
+main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the + never sits on the last row */
 #view-board { max-width:100%; padding:0 8px; }
 #view-lists, #view-admin, #view-notes { max-width:1400px; margin:0 auto; }
 .view { display:none; }
@@ -609,7 +609,7 @@ main { margin:0 auto; padding:20px; }
 @media (max-width: 768px) {
     header { padding:0 12px; }
     .logo { font-size:15px; }
-    main { padding:10px; }
+    main { padding:10px 10px 88px; }
     #fab { bottom:20px; right:16px; width:52px; height:52px; }
     .lists-toolbar { flex-direction:column; align-items:stretch; }
     /* Filters collapse behind a button; only search + Filters button show */

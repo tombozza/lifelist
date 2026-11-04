@@ -250,6 +250,14 @@ Tabs are Today, Board, Lists, Notes. **Admin has no tab**: Settings (the gear) h
 Themes / Tags / Archive / Data buttons that open it (`data-admin-open`, `showView`).
 The Notes tab deliberately shows no count.
 
+The floating **+** is hidden on Admin (it adds a task, and it sat on top of the tag
+boxes' Add buttons), and `main` has ~90px of bottom padding so on every other page
+the last row can scroll clear of it.
+
+Admin › Tags: adding a tag redraws the page, so `go()` re-focuses the *new* input for
+that category (`data-tag-add-for`) and restores the scroll — Enter, name, Enter… must
+keep working without the mouse.
+
 ## Auth
 
 The shared pattern (see the root `CLAUDE.md`), identical to `golf-tracker` bar the cookie
