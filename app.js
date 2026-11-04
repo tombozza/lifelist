@@ -121,6 +121,7 @@ let snoozeFromBulk = false;
 let todayDay = todayStr();          // the day Today is showing (arrows step through days)
 let todayAnchor = todayDay;         // the real date when todayDay was last in step with it
 let todayOrderEdit = false;
+let todayDragId = null;             // desktop drag: the task being dragged
 let todayOpenId = null;             // the row with its action strip open
 let todayDoneOpen = false;
 let todayBacklogOpen = false;
@@ -1766,6 +1767,25 @@ function sendToBacklog(id) {
 function markBlocked(id) { todayOpenId = null; updateTask(id, { kanbanColumn: 'blocked' }); }
 
 // Swap a task with its neighbour in the list it's shown in.
+// Desktop drag: drop a task onto a day at a given position, renumbering the
+// day so the order is exactly what was shown.
+function dropIntoPlan(id, day, index) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    const list = planTasks(day).filter(t => t.id !== id);
+    list.splice(Math.max(0, Math.min(index, list.length)), 0, task);
+    if (task.planDay !== day) task.carriedFrom = null;
+    task.planDay = day;
+    const now = Date.now();
+    list.forEach((t, k) => { if (t.planOrder !== k || t === task) { t.planOrder = k; t.updatedAt = now; } });
+    todayOpenId = null;
+    saveState();
+    render();
+}
+
+// Drag needs a mouse; phones keep the tap-only controls
+function canDragTodo() { return window.matchMedia('(hover: hover) and (pointer: fine)').matches; }
+
 function nudgePlanOrder(id, dir, list) {
     const i = list.findIndex(t => t.id === id), j = i + dir;
     if (i < 0 || j < 0 || j >= list.length) return;
@@ -1859,6 +1879,16 @@ function todoRow(task, where, list) {
         if (side.childNodes.length) main.appendChild(side);
     }
     row.appendChild(main);
+    if (where === 'day' && !done && canDragTodo()) {
+        row.draggable = true;
+        row.addEventListener('dragstart', e => {
+            todayDragId = task.id;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', task.id);
+            setTimeout(() => row.classList.add('dragging'), 0);
+        });
+        row.addEventListener('dragend', () => { todayDragId = null; row.classList.remove('dragging'); clearDropMarks(); });
+    }
 
     if (open) {
         const strip = document.createElement('div');
@@ -1891,6 +1921,39 @@ function todoRow(task, where, list) {
         row.appendChild(strip);
     }
     return row;
+}
+
+function clearDropMarks() {
+    document.querySelectorAll('.todo-row.drop-before, .todo-list.drop-end').forEach(el => el.classList.remove('drop-before', 'drop-end'));
+}
+
+// Where a drop would land: before the first row whose middle is below the pointer
+function dropIndex(list, y) {
+    const rows = [...list.querySelectorAll('.todo-row:not(.done)')].filter(r => r.dataset.taskId !== todayDragId);
+    for (let k = 0; k < rows.length; k++) {
+        const r = rows[k].getBoundingClientRect();
+        if (y < r.top + r.height / 2) return { index: k, row: rows[k] };
+    }
+    return { index: rows.length, row: null };
+}
+
+function makeTodoDropList(list, day) {
+    list.addEventListener('dragover', e => {
+        if (!todayDragId) return;
+        e.preventDefault();
+        const { row } = dropIndex(list, e.clientY);
+        clearDropMarks();
+        if (row) row.classList.add('drop-before'); else list.classList.add('drop-end');
+    });
+    list.addEventListener('dragleave', e => { if (!list.contains(e.relatedTarget)) clearDropMarks(); });
+    list.addEventListener('drop', e => {
+        e.preventDefault();
+        if (!todayDragId) return;
+        const { index } = dropIndex(list, e.clientY);
+        const id = todayDragId; todayDragId = null;
+        clearDropMarks();
+        dropIntoPlan(id, day, index);
+    });
 }
 
 function todoEmpty(text) {
@@ -1946,6 +2009,18 @@ function renderToday() {
     arrows.append(
         todoBtn('‹', 'today-arrow', () => goTo(addDays(day, -1)), 'Previous day'),
         todoBtn('›', 'today-arrow', () => goTo(addDays(day, 1)), 'Next day'));
+    // Drop a task on an arrow to move it to that day (never into the past)
+    [[arrows.firstChild, -1], [arrows.lastChild, 1]].forEach(([btn, dir]) => {
+        const target = addDays(day, dir);
+        if (target < today) return;
+        btn.addEventListener('dragover', e => { if (!todayDragId) return; e.preventDefault(); btn.classList.add('drop-on'); });
+        btn.addEventListener('dragleave', () => btn.classList.remove('drop-on'));
+        btn.addEventListener('drop', e => {
+            e.preventDefault(); btn.classList.remove('drop-on');
+            const id = todayDragId; todayDragId = null;
+            if (id) planFor(id, target);
+        });
+    });
     const tasks = planTasks(day);
     if (tasks.length > 1 || todayOrderEdit) {
         const b = todoBtn('', 'icon-btn todo-order-btn' + (todayOrderEdit ? ' on' : ''), () => {
@@ -1962,6 +2037,7 @@ function renderToday() {
     const list = document.createElement('div');
     list.className = 'todo-list';
     tasks.forEach(t => list.appendChild(todoRow(t, 'day', tasks)));
+    if (day >= today) makeTodoDropList(list, day);
     if (!tasks.length) {
         const past = day < today;
         list.appendChild(todoEmpty(past ? 'Anything unfinished from this day rolled forward to today.'

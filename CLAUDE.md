@@ -197,7 +197,10 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
   `renderReadySheet`) behind the quiet "Add from Ready · N" button, along with the
   board backlog. Keep it off the main screen.
 - Tapping a row opens its action strip (Tomorrow, Not today, Pick a day, Blocked,
-  Backlog, Edit), so it's all taps, no dragging.
+  Backlog, Edit), so it's all taps on a phone.
+- **Desktop drag** (only where `canDragTodo()` sees a mouse): drag a row to reorder
+  (`makeTodoDropList` → `dropIntoPlan`), or drop it on ‹ › to move it a day
+  (never into the past). Phones never get `draggable`, so scrolling stays clean.
 - On Today, quick add and the + button plan straight onto today
   (`quickAddPlanTarget`, `modalPlanDay`) instead of going to Review.
 
