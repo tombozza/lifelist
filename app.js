@@ -13,8 +13,9 @@ const STORAGE_KEY = 'life-kanban-v2';
 const SYNC_CODE = 'mpy31l1nrkp69mpy31l1nihblx';
 
 const KANBAN_COLS = [
-    { id: 'backlog-day',     name: 'Day',         backlog: true },
-    { id: 'backlog-evening', name: 'Evening',     backlog: true },
+    // One backlog (4 Nov 2026). It used to be split into Day and Evening;
+    // migrateColumns folds both old ids into this one.
+    { id: 'backlog',         name: 'Backlog',     backlog: true },
     // Live replaced Next + In Progress (Nov 2026). Everything in it feeds the
     // Today view: planned onto a day, or sitting in Ready until it is.
     { id: 'live',            name: 'Live' },
@@ -27,31 +28,12 @@ const KANBAN_COLS = [
     { id: 'complete',        name: 'Complete',    offBoard: true },
 ];
 
-const EVENING_HOUR = 17; // 5pm
+// Where a task lands when it goes on the board. themeIds is no longer used
+// (work used to go to a Day column, the rest to Evening) but callers still
+// pass it, so the signature stays.
+function defaultBacklogCol(themeIds) { return 'backlog'; }
 
-function isEvening() { return new Date().getHours() >= EVENING_HOUR; }
-
-// Which backlog a task lands in when it goes on the board: work in the Day
-// column, everything else in the Evening one. "Work" means any theme with a
-// work focus (set per theme in Admin), so a second work-ish theme behaves the
-// same as the Work theme itself without needing to be named Work.
-function defaultBacklogCol(themeIds) {
-    const isWork = (themeIds || []).some(id => {
-        const t = getTheme(id);
-        return t && themeFocus(t) === 'work';
-    });
-    return isWork ? 'backlog-day' : 'backlog-evening';
-}
-
-// Board column order. The two backlog columns swap so the time-relevant one
-// always sits immediately left of "Live": Day during the day, Evening after 5pm.
-function boardColumns() {
-    const day = KANBAN_COLS.find(c => c.id === 'backlog-day');
-    const evening = KANBAN_COLS.find(c => c.id === 'backlog-evening');
-    const rest = KANBAN_COLS.filter(c => !c.backlog && !c.offBoard);
-    const backlogs = isEvening() ? [day, evening] : [evening, day];
-    return [...backlogs, ...rest];
-}
+function boardColumns() { return KANBAN_COLS.filter(c => !c.offBoard); }
 
 const SIZE_POINTS = { xs:1, s:2, m:3, l:5, xl:8, xxl:13 };
 const SIZE_ORDER   = { xs:0, s:1, m:2, l:3, xl:4, xxl:5 };
@@ -167,7 +149,10 @@ function defaultState() {
 // the review queue only surfaces genuinely new captures.
 function migrateColumns(tasks) {
     (tasks || []).forEach(t => {
-        if (t.kanbanColumn === 'backlog') t.kanbanColumn = 'backlog-day';
+        // Day + Evening backlogs became one Backlog. An older device can still
+        // write the old ids, so this runs after every sync merge too.
+        if (t.kanbanColumn === 'backlog-day' || t.kanbanColumn === 'backlog-evening') t.kanbanColumn = 'backlog';
+        if (t._prevKanban === 'backlog-day' || t._prevKanban === 'backlog-evening') t._prevKanban = 'backlog';
         // Next and In Progress were folded into Live. An older device can
         // still write the old ids, so this runs after every sync merge too.
         if (t.kanbanColumn === 'next' || t.kanbanColumn === 'in-progress') t.kanbanColumn = 'live';
@@ -1712,7 +1697,7 @@ function planTasks(day) { return state.tasks.filter(t => isLiveActive(t) && t.pl
 function readyTasks() { return state.tasks.filter(t => isLiveActive(t) && !t.planDay).sort(byPlanOrder); }
 function doneOn(day) { return state.tasks.filter(t => t.status === 'complete' && t.planDay === day).sort(byPlanOrder); }
 function boardBacklogTasks() {
-    return state.tasks.filter(t => t.status === 'active' && (t.kanbanColumn === 'backlog-day' || t.kanbanColumn === 'backlog-evening'))
+    return state.tasks.filter(t => t.status === 'active' && t.kanbanColumn === 'backlog')
         .sort((a, b) => spotRank(a) - spotRank(b) || prioRank(a) - prioRank(b) || (a.title || '').localeCompare(b.title || ''));
 }
 function nextPlanOrder(list) { return list.reduce((m, t) => Math.max(m, t.planOrder || 0), 0) + 1; }
@@ -1769,11 +1754,18 @@ function markBlocked(id) { todayOpenId = null; updateTask(id, { kanbanColumn: 'b
 // Swap a task with its neighbour in the list it's shown in.
 // Desktop drag: drop a task onto a day at a given position, renumbering the
 // day so the order is exactly what was shown.
+// index counts the rows on screen, which may be a Work/Home-filtered subset:
+// the task goes just before the visible row it was dropped above (or just
+// after the last visible one), so hidden tasks keep their places.
 function dropIntoPlan(id, day, index) {
     const task = state.tasks.find(t => t.id === id);
     if (!task) return;
     const list = planTasks(day).filter(t => t.id !== id);
-    list.splice(Math.max(0, Math.min(index, list.length)), 0, task);
+    const visible = list.filter(todayFocusPass);
+    let at = list.length;
+    if (index < visible.length) at = list.indexOf(visible[index]);
+    else if (visible.length) at = list.indexOf(visible[visible.length - 1]) + 1;
+    list.splice(at, 0, task);
     if (task.planDay !== day) task.carriedFrom = null;
     task.planDay = day;
     const now = Date.now();
@@ -1783,16 +1775,39 @@ function dropIntoPlan(id, day, index) {
     render();
 }
 
+// Today's own Work / Home switch (state.settings.todayFocus). Separate from
+// the board's theme chips so muting a chip there never hides a task here.
+// A task with no theme counts as home.
+function todayFocus() { return state.settings.todayFocus || 'all'; }
+// Adding to Today while it shows Work: give the task the first work theme,
+// or it would count as home and vanish the moment it was added.
+function todayFocusThemeIds() {
+    if (currentView !== 'today' || todayFocus() !== 'work') return [];
+    const th = state.themes.find(t => themeFocus(t) === 'work' && !t.hidden);
+    return th ? [th.id] : [];
+}
+function todayFocusPass(t) {
+    const f = todayFocus();
+    if (f === 'all') return true;
+    const themes = taskThemes(t);
+    if (!themes.length) return f === 'home';
+    return themes.some(th => themeFocus(th) === f);
+}
+
 // Drag needs a mouse; phones keep the tap-only controls
 function canDragTodo() { return window.matchMedia('(hover: hover) and (pointer: fine)').matches; }
 
+// list is what's on screen (perhaps filtered to Work or Home). Renumber the
+// whole day first so every task has a distinct slot, then swap the two.
 function nudgePlanOrder(id, dir, list) {
     const i = list.findIndex(t => t.id === id), j = i + dir;
     if (i < 0 || j < 0 || j >= list.length) return;
+    const a = list[i], b = list[j];
+    const full = a.planDay ? planTasks(a.planDay) : readyTasks();
     const now = Date.now();
-    list.forEach((t, k) => { if (t.planOrder !== k) { t.planOrder = k; t.updatedAt = now; } });
-    [list[i].planOrder, list[j].planOrder] = [j, i];
-    list[i].updatedAt = list[j].updatedAt = now;
+    full.forEach((t, k) => { if (t.planOrder !== k) { t.planOrder = k; t.updatedAt = now; } });
+    [a.planOrder, b.planOrder] = [b.planOrder, a.planOrder];
+    a.updatedAt = b.updatedAt = now;
     saveState();
     render();
 }
@@ -2021,7 +2036,8 @@ function renderToday() {
             if (id) planFor(id, target);
         });
     });
-    const tasks = planTasks(day);
+    const allTasks = planTasks(day);
+    const tasks = allTasks.filter(todayFocusPass);
     if (tasks.length > 1 || todayOrderEdit) {
         const b = todoBtn('', 'icon-btn todo-order-btn' + (todayOrderEdit ? ' on' : ''), () => {
             todayOrderEdit = !todayOrderEdit; todayOpenId = null; render();
@@ -2034,6 +2050,23 @@ function renderToday() {
     top.appendChild(arrows);
     host.appendChild(top);
 
+    // Work / Home — this list's own switch, remembered between visits
+    const seg = document.createElement('div');
+    seg.className = 'today-focus';
+    [['all', 'All'], ['work', 'Work'], ['home', 'Home']].forEach(([mode, label]) => {
+        seg.appendChild(todoBtn(label, 'today-focus-btn' + (todayFocus() === mode ? ' active' : ''), () => {
+            state.settings.todayFocus = mode; todayOpenId = null; saveState(); render();
+        }));
+    });
+    const hiddenN = allTasks.length - tasks.length;
+    if (hiddenN) {
+        const note = document.createElement('span');
+        note.className = 'today-focus-hidden';
+        note.textContent = hiddenN + ' ' + (todayFocus() === 'work' ? 'home' : 'work') + ' hidden';
+        seg.appendChild(note);
+    }
+    host.appendChild(seg);
+
     const list = document.createElement('div');
     list.className = 'todo-list';
     tasks.forEach(t => list.appendChild(todoRow(t, 'day', tasks)));
@@ -2041,15 +2074,16 @@ function renderToday() {
     if (!tasks.length) {
         const past = day < today;
         list.appendChild(todoEmpty(past ? 'Anything unfinished from this day rolled forward to today.'
+            : hiddenN ? 'Nothing ' + todayFocus() + ' planned.'
             : doneOn(day).length ? 'All done.' : 'Nothing planned' + (day === today ? ' for today yet.' : '.')));
     }
     host.appendChild(list);
 
-    todoSection(host, 'Done', doneOn(day), todayDoneOpen, () => { todayDoneOpen = !todayDoneOpen; render(); }, 'done');
+    todoSection(host, 'Done', doneOn(day).filter(todayFocusPass), todayDoneOpen, () => { todayDoneOpen = !todayDoneOpen; render(); }, 'done');
 
     // Ready lives behind this one quiet button (nothing to add to a past day)
     if (day >= today) {
-        const n = readyTasks().length;
+        const n = readyTasks().filter(todayFocusPass).length;
         host.appendChild(todoBtn(n ? 'Add from Ready · ' + n : 'Add from Ready', 'today-pull', openReadySheet));
     }
 
@@ -2074,13 +2108,13 @@ function renderReadySheet() {
     const y = host.scrollTop;
     host.innerHTML = '';
     document.getElementById('ready-title').textContent = 'Add to ' + longDay(todayDay);
-    const ready = readyTasks();
+    const ready = readyTasks().filter(todayFocusPass);   // follows Today's Work / Home switch
     const list = document.createElement('div');
     list.className = 'todo-list';
     ready.forEach(t => list.appendChild(todoRow(t, 'ready', ready)));
     if (!ready.length) list.appendChild(todoEmpty('Nothing in Ready. Move cards into Live on the board, or pick from the backlog below.'));
     host.appendChild(list);
-    todoSection(host, 'From the board backlog', boardBacklogTasks(), todayBacklogOpen,
+    todoSection(host, 'From the board backlog', boardBacklogTasks().filter(todayFocusPass), todayBacklogOpen,
         () => { todayBacklogOpen = !todayBacklogOpen; renderReadySheet(); }, 'backlog');
     host.scrollTop = y;
 }
@@ -3629,6 +3663,8 @@ function init() {
         if (currentView !== 'today') return openTaskModal(null);
         openTaskModal(null, 'live');
         modalPlanDay = quickAddPlanTarget();
+        const ids = todayFocusThemeIds();
+        if (ids.length) { modalThemeIds = ids; renderThemePicker(); updateSubThemeSelect(); }
     });
 
     document.getElementById('ready-close').addEventListener('click', closeReadySheet);
@@ -3645,7 +3681,7 @@ function init() {
             addTask({ title, reviewed: false, kanbanColumn: null });
             reviewBannerDismissed = false;
         } else {
-            addTask({ title, reviewed: true, kanbanColumn: 'live', planDay: target,
+            addTask({ title, reviewed: true, kanbanColumn: 'live', planDay: target, themeIds: todayFocusThemeIds(),
                 planOrder: nextPlanOrder(target ? planTasks(target) : readyTasks()) });
         }
         input.value = '';

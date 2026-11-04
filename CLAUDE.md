@@ -155,22 +155,24 @@ ids and everything unticked.
 
 ## Board columns
 
-`KANBAN_COLS` holds every column; `boardColumns()` is what actually gets drawn.
-`defaultBacklogCol(themeIds)` decides where a task lands when it goes on the
-board: **Day if any of its themes has a work focus, Evening otherwise** — but
-`modalKanbanCol` beats it, so a task created from a column's "+ Add task"
-lands in *that* column. It used
-to be the time of day — it isn't any more, so don't reintroduce `isEvening()`
-there (it still drives the column *order*). Completing
-a task still parks it in the `complete` column, but that column is marked `offBoard: true`
-and is never rendered — tasks leave via "Mark complete" or the list checkbox, and the
-week's tally sits above the board (`renderBoardWeekStat`). Don't delete the `complete`
-entry: the archive, `clearCompleted()` and the list chips all still look up its name.
+`KANBAN_COLS` holds every column; `boardColumns()` is what gets drawn. Columns are
+**Backlog, Live, Waiting, Blocked, Ongoing**. Two merges, both 4 Nov 2026, both done
+by `migrateColumns()` on load *and after every sync merge* (an older cached device
+can still write the old ids):
 
-Columns are Day, Evening (the two backlogs), **Live**, Waiting, Blocked, Ongoing.
-Live replaced Next + In Progress on 4 Nov 2026; `migrateColumns()` maps the old ids
-on load *and after every sync merge*, because an older cached device can still
-write them.
+- Next + In Progress → **Live**.
+- Day + Evening backlogs → one **Backlog** (Tom: "Don't need day/evening anymore").
+  `defaultBacklogCol()` now always returns `'backlog'`; it keeps its `themeIds`
+  argument only so the callers didn't need touching. Don't reintroduce a work/home
+  column split — work/home is a *filter* now (the board's focus control, and
+  Today's own switch).
+
+A task created from a column's "+ Add task" lands in that column (`modalKanbanCol`).
+Completing a task still parks it in the `complete` column, but that column is marked
+`offBoard: true` and is never rendered — tasks leave via "Mark complete" or the list
+checkbox, and the week's tally sits above the board (`renderBoardWeekStat`). Don't
+delete the `complete` entry: the archive, `clearCompleted()` and the list chips all
+still look up its name.
 
 ## Today (the top tier)
 
@@ -201,6 +203,13 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
 - **Desktop drag** (only where `canDragTodo()` sees a mouse): drag a row to reorder
   (`makeTodoDropList` → `dropIntoPlan`), or drop it on ‹ › to move it a day
   (never into the past). Phones never get `draggable`, so scrolling stays clean.
+- **Work / Home switch** on Today (`state.settings.todayFocus`, `todayFocusPass`):
+  its own setting, deliberately *not* the board's theme-chip mutes, so muting a chip
+  on the board never hides a task here. No theme counts as home. It filters the day,
+  Done and the Ready sheet. Reordering while filtered renumbers the whole day first
+  (`nudgePlanOrder`, `dropIntoPlan`) so hidden tasks keep their places, and adding
+  while on Work stamps the first work theme (`todayFocusThemeIds`) so the new task
+  doesn't vanish.
 - On Today, quick add and the + button plan straight onto today
   (`quickAddPlanTarget`, `modalPlanDay`) instead of going to Review.
 
