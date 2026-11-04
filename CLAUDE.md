@@ -234,6 +234,15 @@ Priority on a board card is a 3px **left border** (`.board-card.priority-*`), th
 as a list row. It used to be a bar across the top, right where the eye starts reading
 the title.
 
+Card layout (`createBoardCard`), all so a column scans as a list of titles: the title
+has the top row to itself on the left; the **corner** holds the day mark, size and ⋯.
+A Live task's day is a small calendar icon (`.card-day`) — blue for today, grey with
+the day name for later, nothing for Ready — never a chip that reads like a tag. Tags,
+progress, recurring and countdown sit **right-aligned** underneath, and that row is
+only drawn when it has something in it. With a mouse, ⋯ floats over the corner on
+hover (so it takes none of the title's width) and right-click opens the same menu; on
+touch it sits in the corner, always visible.
+
 ## Navigation
 
 Tabs are Today, Board, Lists, Notes. **Admin has no tab**: Settings (the gear) has

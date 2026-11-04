@@ -1608,10 +1608,16 @@ function createBoardCard(task) {
     card.addEventListener('dragstart', e => { draggedId = task.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
     card.addEventListener('dragend', () => card.classList.remove('dragging'));
     card.addEventListener('click', () => openTaskModal(task.id));
+    // Right-click opens the same menu as ⋯ (which only shows on hover)
+    card.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, task.id); });
 
     // Priority is the card's left edge, the same as a list row — a bar across
     // the top sat right where the eye starts reading the title
     if (task.priority && !task.spotlight) card.classList.add('priority-' + task.priority);
+    // Top row: the title alone on the left, everything about it tucked into the
+    // corner (day, size, menu), so a column reads as a list of titles
+    const head = document.createElement('div');
+    head.className = 'board-card-head';
     const title = document.createElement('div');
     title.className = 'board-card-title';
     if (task.spotlight) {
@@ -1621,21 +1627,44 @@ function createBoardCard(task) {
         title.appendChild(star);
     }
     title.appendChild(document.createTextNode(task.title));
-    card.appendChild(title);
+    head.appendChild(title);
 
-    const footer = document.createElement('div');
-    footer.className = 'board-card-footer';
-    // No theme chips on cards (Tom, 4 Nov 2026): the filters do the sorting, and
-    // the solid colour pulled the eye away from the title. Tags stay.
-    taskTags(task).forEach(tag => footer.appendChild(tagChipEl(tag)));
-    const cardProg = progressChipEl(task);
-    if (cardProg) footer.appendChild(cardProg);
+    const corner = document.createElement('div');
+    corner.className = 'board-card-corner';
+    // A Live task's day is a small calendar mark, not a chip that reads like a
+    // tag: blue for today, grey with the day name for later. Ready shows nothing.
+    if (task.kanbanColumn === 'live' && task.status === 'active' && task.planDay) {
+        const isToday = task.planDay === todayStr();
+        const day = document.createElement('span');
+        day.className = 'card-day' + (isToday ? ' card-day-today' : '');
+        day.title = 'Planned for ' + longDay(task.planDay);
+        day.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>';
+        if (!isToday) day.appendChild(document.createTextNode(shortDay(task.planDay)));
+        corner.appendChild(day);
+    }
     if (task.size) {
         const sz = document.createElement('span');
         sz.className = 'chip chip-size';
         sz.textContent = task.size.toUpperCase();
-        footer.appendChild(sz);
+        corner.appendChild(sz);
     }
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'board-card-menu';
+    menuBtn.innerHTML = '⋯';
+    menuBtn.setAttribute('aria-label', 'Card options');
+    menuBtn.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
+    corner.appendChild(menuBtn);
+    head.appendChild(corner);
+    card.appendChild(head);
+
+    // Bottom row, right-aligned and only when there's something to show.
+    // No theme chips on cards (Tom, 4 Nov 2026): the filters do the sorting, and
+    // the solid colour pulled the eye away from the title. Tags stay.
+    const footer = document.createElement('div');
+    footer.className = 'board-card-footer';
+    taskTags(task).forEach(tag => footer.appendChild(tagChipEl(tag)));
+    const cardProg = progressChipEl(task);
+    if (cardProg) footer.appendChild(cardProg);
     if (task.recurring) {
         const rc = document.createElement('span');
         rc.className = 'chip chip-recurring';
@@ -1644,16 +1673,7 @@ function createBoardCard(task) {
     }
     const cd = countdownChip(task);
     if (cd) footer.appendChild(cd);
-    if (task.kanbanColumn === 'live' && task.status === 'active') {
-        footer.appendChild(todoChip(task.planDay ? dayLabel(task.planDay).replace(/ \d+ \w+$/, '') : 'Ready',
-            'chip-day' + (task.planDay === todayStr() ? ' chip-day-today' : '')));
-    }
-    const menuBtn = document.createElement('button');
-    menuBtn.className = 'board-card-menu';
-    menuBtn.innerHTML = '⋯';
-    menuBtn.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
-    footer.appendChild(menuBtn);
-    card.appendChild(footer);
+    if (footer.childNodes.length) card.appendChild(footer);
     return card;
 }
 
