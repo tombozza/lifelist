@@ -334,8 +334,8 @@ main { margin:0 auto; padding:20px; }
 .board-card.priority-low { border-left-color:var(--p-low); }
 .board-card.priority-minimal { border-left-color:var(--p-min); }
 .board-card-head { display:flex; align-items:flex-start; gap:6px; }
+.board-card-head .board-card-menu { flex-shrink:0; margin:-1px -4px 0 0; }
 .board-card-title { flex:1; min-width:0; font-size:13px; font-weight:450; line-height:1.3; padding-top:2px; overflow-wrap:anywhere; }
-.board-card-corner { display:flex; align-items:center; gap:4px; flex-shrink:0; margin:-1px -4px 0 0; }
 .board-card-footer { display:flex; align-items:center; justify-content:flex-end; gap:4px; flex-wrap:wrap; margin-top:6px; }
 .card-day { display:inline-flex; align-items:center; gap:3px; font-size:10.5px; font-weight:600; color:var(--text-3); }
 .card-day-today { color:var(--accent); }

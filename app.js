@@ -1614,8 +1614,8 @@ function createBoardCard(task) {
     // Priority is the card's left edge, the same as a list row — a bar across
     // the top sat right where the eye starts reading the title
     if (task.priority && !task.spotlight) card.classList.add('priority-' + task.priority);
-    // Top row: the title alone on the left, everything about it tucked into the
-    // corner (day, size, menu), so a column reads as a list of titles
+    // Top row: the title alone, with only the ⋯ menu in the corner, so a column
+    // reads as a list of titles
     const head = document.createElement('div');
     head.className = 'board-card-head';
     const title = document.createElement('div');
@@ -1629,37 +1629,18 @@ function createBoardCard(task) {
     title.appendChild(document.createTextNode(task.title));
     head.appendChild(title);
 
-    const corner = document.createElement('div');
-    corner.className = 'board-card-corner';
-    // A Live task's day is a small calendar mark, not a chip that reads like a
-    // tag: blue for today, grey with the day name for later. Ready shows nothing.
-    if (task.kanbanColumn === 'live' && task.status === 'active' && task.planDay) {
-        const isToday = task.planDay === todayStr();
-        const day = document.createElement('span');
-        day.className = 'card-day' + (isToday ? ' card-day-today' : '');
-        day.title = 'Planned for ' + longDay(task.planDay);
-        day.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>';
-        if (!isToday) day.appendChild(document.createTextNode(shortDay(task.planDay)));
-        corner.appendChild(day);
-    }
-    if (task.size) {
-        const sz = document.createElement('span');
-        sz.className = 'chip chip-size';
-        sz.textContent = task.size.toUpperCase();
-        corner.appendChild(sz);
-    }
+    // The corner is the ⋯ menu's alone (on hover with a mouse, always on touch)
     const menuBtn = document.createElement('button');
     menuBtn.className = 'board-card-menu';
     menuBtn.innerHTML = '⋯';
     menuBtn.setAttribute('aria-label', 'Card options');
     menuBtn.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
-    corner.appendChild(menuBtn);
-    head.appendChild(corner);
+    head.appendChild(menuBtn);
     card.appendChild(head);
 
-    // Bottom row, right-aligned and only when there's something to show.
-    // No theme chips on cards (Tom, 4 Nov 2026): the filters do the sorting, and
-    // the solid colour pulled the eye away from the title. Tags stay.
+    // Bottom row, right-aligned: tags and the rest, then the day mark and size
+    // at the far right. No theme chips on cards (Tom, 4 Nov 2026): the filters do
+    // the sorting, and the solid colour pulled the eye away from the title.
     const footer = document.createElement('div');
     footer.className = 'board-card-footer';
     taskTags(task).forEach(tag => footer.appendChild(tagChipEl(tag)));
@@ -1673,6 +1654,23 @@ function createBoardCard(task) {
     }
     const cd = countdownChip(task);
     if (cd) footer.appendChild(cd);
+    // A Live task's day is a small calendar mark, not a chip that reads like a
+    // tag: blue for today, grey with the day name for later. Ready shows nothing.
+    if (task.kanbanColumn === 'live' && task.status === 'active' && task.planDay) {
+        const isToday = task.planDay === todayStr();
+        const day = document.createElement('span');
+        day.className = 'card-day' + (isToday ? ' card-day-today' : '');
+        day.title = 'Planned for ' + longDay(task.planDay);
+        day.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>';
+        if (!isToday) day.appendChild(document.createTextNode(shortDay(task.planDay)));
+        footer.appendChild(day);
+    }
+    if (task.size) {
+        const sz = document.createElement('span');
+        sz.className = 'chip chip-size';
+        sz.textContent = task.size.toUpperCase();
+        footer.appendChild(sz);
+    }
     if (footer.childNodes.length) card.appendChild(footer);
     return card;
 }
