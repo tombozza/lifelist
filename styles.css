@@ -756,32 +756,28 @@ main { margin:0 auto; padding:20px; }
 .subtask-add .form-input { flex:1; min-width:0; }
 .subtask-add .btn-small { flex-shrink:0; }
 
-/* ============ TASK MODAL TABS ============ */
-.task-tabs {
-    display:flex; gap:2px; background:var(--bg-input); padding:3px;
-    border-radius:8px; margin-bottom:16px;
+/* ============ TASK MODAL: folded-away sections ============ */
+/* Title and themes are always there; the rest waits behind these pills. */
+.task-more { display:flex; flex-wrap:wrap; gap:6px; padding:12px 0 6px; }
+.task-more-pill {
+    padding:6px 12px; border:1px dashed var(--border); border-radius:20px;
+    background:none; color:var(--text-2); font-size:12.5px; font-weight:500;
+    cursor:pointer; font-family:var(--font);
 }
-.task-tab {
-    flex:1; padding:7px 12px; border:none; background:none; border-radius:6px;
-    font-size:13px; font-weight:500; color:var(--text-2); cursor:pointer;
-    transition:all 0.15s; display:inline-flex; align-items:center;
-    justify-content:center; gap:6px; font-family:var(--font);
-}
-.task-tab.active { background:var(--bg-card); color:var(--text); box-shadow:var(--shadow); }
-.task-tab:hover:not(.active) { color:var(--text); }
-.task-tab-badge {
-    font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px;
-    background:var(--accent); color:#fff; line-height:1.5;
+.task-more-pill:hover { color:var(--accent); border-color:var(--accent); }
+.tag-cat-toggle { border:none; background:none; padding:4px 0; cursor:pointer; text-align:left; font-family:var(--font); }
+.tag-cat-toggle:hover { color:var(--text); }
+.tag-picker-folded { gap:4px 14px; }
+@media (max-width: 768px) {
+    /* the open/close toggles sit inline; only a plain category label takes a line */
+    .tag-picker .tag-cat-toggle { width:auto; }
 }
 
 @media (max-width: 768px) {
-    /* Four view tabs plus the Notes count have to fit beside the logo */
+    /* Four view tabs have to fit beside the logo */
     header { padding:0 10px; }
     .logo { font-size:14px; }
     .tab { padding:5px 9px; font-size:12px; }
-    /* Keep "Notes & sub-tasks" on one line so the tab bar stays one row high */
-    .task-tab { font-size:12px; padding:7px 8px; white-space:nowrap; }
-    .task-tab-badge { padding:1px 5px; }
     .tag-cat-label { min-width:0; width:100%; }
     .tag-filter-body { padding:10px; }
     .subtask-add .form-input, .tag-cat-add .form-input { font-size:16px; }

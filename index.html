@@ -188,18 +188,10 @@
                 </label>
             </div>
 
-            <div class="task-tabs" id="task-tabs">
-                <button type="button" class="task-tab active" data-pane="details">Details</button>
-                <button type="button" class="task-tab" data-pane="notes">Notes &amp; sub-tasks <span class="task-tab-badge" id="task-tab-badge" style="display:none;"></span></button>
-            </div>
-
-            <div class="task-pane" id="task-pane-details">
-
             <div class="field">
                 <span class="field-label">Themes</span>
                 <div class="field-control">
                     <div id="theme-picker" class="theme-picker"></div>
-                    <div class="form-hint">Tap more than one to give a task several &mdash; e.g. Work + Jim</div>
                 </div>
             </div>
 
@@ -221,15 +213,18 @@
                 </div>
             </div>
 
-            <div class="field">
+            <!-- Everything below the themes stays folded away until asked for:
+                 one "+" pill per section (see renderTaskSections) -->
+            <div class="task-more" id="task-more"></div>
+
+            <div class="field" data-section="tags">
                 <span class="field-label">Tags</span>
                 <div class="field-control">
                     <div id="tag-picker" class="tag-picker"></div>
-                    <div class="form-hint">Cut across themes &mdash; who it involves, when it fits, which trip it belongs to. Edit them in Admin &rsaquo; Tags.</div>
                 </div>
             </div>
 
-            <div class="field">
+            <div class="field" data-section="priority">
                 <span class="field-label">Priority &amp; size</span>
                 <div class="field-control">
                     <div class="ps-grid">
@@ -247,7 +242,7 @@
                 </div>
             </div>
 
-            <div class="field">
+            <div class="field" data-section="dates">
                 <span class="field-label">Dates</span>
                 <div class="field-control">
                     <div class="date-grid">
@@ -268,8 +263,9 @@
                 </div>
             </div>
 
+            <div data-section="repeat">
             <div class="field field-toggle">
-                <span class="field-label">Recurring</span>
+                <span class="field-label">Repeat</span>
                 <div class="field-control">
                     <label class="switch">
                         <input type="checkbox" id="task-recurring-toggle">
@@ -341,20 +337,9 @@
                     </label>
                 </div>
             </div>
+            </div><!-- /repeat -->
 
-            </div><!-- /details pane -->
-
-            <div class="task-pane" id="task-pane-notes" style="display:none;">
-
-            <div class="field field-notes">
-                <span class="field-label">Notes</span>
-                <div class="field-control">
-                    <button type="button" class="btn-ghost add-notes-btn" id="task-notes-add">+ Add notes</button>
-                    <textarea id="task-notes" class="form-textarea" rows="3" placeholder="Optional notes…" style="display:none;"></textarea>
-                </div>
-            </div>
-
-            <div class="field field-subtasks">
+            <div class="field field-subtasks" data-section="subtasks">
                 <span class="field-label">Sub-tasks</span>
                 <div class="field-control">
                     <div class="subtask-progress" id="subtask-progress" style="display:none;"></div>
@@ -363,11 +348,17 @@
                         <input type="text" id="subtask-new-name" class="form-input" placeholder="Add a step&hellip;">
                         <button type="button" class="btn-small" id="subtask-add-btn">Add</button>
                     </div>
-                    <div class="form-hint">Steps too small for their own card. The board card shows how far through you are.</div>
                 </div>
             </div>
 
-            </div><!-- /notes pane -->
+            <div class="field field-notes" data-section="notes">
+                <span class="field-label">Notes</span>
+                <div class="field-control">
+                    <button type="button" class="btn-ghost add-notes-btn" id="task-notes-add">+ Add notes</button>
+                    <textarea id="task-notes" class="form-textarea" rows="3" placeholder="Optional notes…" style="display:none;"></textarea>
+                </div>
+            </div>
+
 
             <div id="task-in-list" class="task-in-list" style="display:none;"></div>
 

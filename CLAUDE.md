@@ -149,8 +149,8 @@ filter dropdown are both built from it, so add a level in one place only.
 ## Sub-tasks
 
 `task.subtasks = [{id, title, done}]`, surfaced as a progress chip on the board
-card and list row (`subtaskProgress` / `progressChipEl`). They're edited on the
-task modal's second tab. A recurring occurrence copies the checklist with fresh
+card and list row (`subtaskProgress` / `progressChipEl`). They're edited in the
+task modal's Sub-tasks section. A recurring occurrence copies the checklist with fresh
 ids and everything unticked.
 
 ## Board columns
@@ -200,6 +200,16 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
   Backlog, Edit), so it's all taps, no dragging.
 - On Today, quick add and the + button plan straight onto today
   (`quickAddPlanTarget`, `modalPlanDay`) instead of going to Review.
+
+## The task modal — progressive disclosure
+
+Tom (4 Nov 2026): "it needs tidying up and more progressive disclosure". Only the
+title and Themes are always shown. Tags, Priority & size, Dates, Repeat, Sub-tasks
+and Notes are `[data-section]` blocks behind "+" pills (`TASK_SECTIONS`,
+`renderTaskSections`, `openTaskSection`); editing a task opens the sections that
+already hold a value. The old Details / Notes tabs are gone. In Tags, each category
+is folded to its chosen tags (`modalTagCatsOpen`); untouched categories share one
+line. New fields belong in a section, not loose in the modal.
 
 ## Navigation
 

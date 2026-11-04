@@ -131,7 +131,9 @@ let modalThemeIds = [];      // a task can carry several themes
 let modalSubTheme = '';
 let modalTagIds = [];
 let modalSubtasks = [];
-let modalPane = 'details';
+// Which folded-away sections of the task modal are showing (renderTaskSections)
+let modalOpenSections = new Set();
+let modalTagCatsOpen = new Set();
 let themeModalFromTask = false;  // theme modal opened over the task modal
 let modalPriority = '';
 let modalSize = 'xs';
@@ -2775,7 +2777,8 @@ function openTaskModal(taskId, defaultKanbanCol) {
     modalSubTheme = '';
     modalTagIds = [];
     modalSubtasks = [];
-    setTaskPane('details');
+    modalOpenSections = new Set();
+    modalTagCatsOpen = new Set();
     modalPriority = '';
     modalSize = 'xs';
     modalKanbanCol = defaultKanbanCol || null;
@@ -2837,6 +2840,17 @@ function openTaskModal(taskId, defaultKanbanCol) {
         document.getElementById('recur-monthly-interval').value = 1;
     }
 
+    // A section with something in it starts open; the rest stay folded away
+    if (taskId) {
+        const t = state.tasks.find(x => x.id === taskId);
+        if (modalTagIds.length) modalOpenSections.add('tags');
+        if (modalPriority || (modalSize && modalSize !== 'xs')) modalOpenSections.add('priority');
+        if (t.dueDate || t.doDate) modalOpenSections.add('dates');
+        if (t.recurring) modalOpenSections.add('repeat');
+        if (modalSubtasks.length) modalOpenSections.add('subtasks');
+        if (t.notes) modalOpenSections.add('notes');
+    }
+    renderTaskSections();
     updateCountdownRow();
     renderThemePicker();
     renderTagPicker();
@@ -2862,23 +2876,41 @@ function closeTaskModal() {
     }
 }
 
-function setTaskPane(pane) {
-    modalPane = pane;
-    document.querySelectorAll('#task-tabs .task-tab').forEach(b => {
-        b.classList.toggle('active', b.dataset.pane === pane);
+const TASK_SECTIONS = [
+    ['tags', 'Tags'], ['priority', 'Priority'], ['dates', 'Dates'],
+    ['repeat', 'Repeat'], ['subtasks', 'Sub-tasks'], ['notes', 'Notes'],
+];
+
+// Progressive disclosure: the title and themes are always there; every other
+// section waits behind a "+" pill until it's wanted (or already has a value).
+function renderTaskSections() {
+    document.querySelectorAll('#task-modal [data-section]').forEach(el => {
+        el.style.display = modalOpenSections.has(el.dataset.section) ? '' : 'none';
     });
-    document.getElementById('task-pane-details').style.display = pane === 'details' ? '' : 'none';
-    document.getElementById('task-pane-notes').style.display = pane === 'notes' ? '' : 'none';
+    const bar = document.getElementById('task-more');
+    bar.innerHTML = '';
+    TASK_SECTIONS.forEach(([key, label]) => {
+        if (modalOpenSections.has(key)) return;
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'task-more-pill';
+        b.textContent = '+ ' + label;
+        b.addEventListener('click', () => openTaskSection(key));
+        bar.appendChild(b);
+    });
+    bar.style.display = bar.childNodes.length ? '' : 'none';
 }
 
-// A dot on the Notes tab so content behind it isn't invisible
-function updateTaskTabBadge() {
-    const badge = document.getElementById('task-tab-badge');
-    const notes = document.getElementById('task-notes').value.trim();
-    const p = modalSubtasks.length ? `${modalSubtasks.filter(st => st.done).length}/${modalSubtasks.length}` : '';
-    const text = p || (notes ? '\u2022' : '');
-    badge.textContent = text;
-    badge.style.display = text ? '' : 'none';
+function openTaskSection(key) {
+    modalOpenSections.add(key);
+    if (key === 'repeat') {
+        document.getElementById('task-recurring-toggle').checked = true;
+        document.getElementById('recurring-config').style.display = '';
+    }
+    if (key === 'notes') setNotesOpen(true);
+    renderTaskSections();
+    const focus = { notes: 'task-notes', subtasks: 'subtask-new-name' }[key];
+    if (focus) document.getElementById(focus).focus({ preventScroll: true });
 }
 
 function renderTagPicker() {
@@ -2889,14 +2921,28 @@ function renderTagPicker() {
         container.innerHTML = '<span class="form-hint">No tag categories yet &mdash; add one in Admin &rsaquo; Tags.</span>';
         return;
     }
+    // Each category is folded to just its chosen tags until tapped open, so
+    // a long People list doesn't swamp the modal
+    const catToggle = (cat, open) => {
+        const label = document.createElement('button');
+        label.type = 'button';
+        label.className = 'tag-cat-label tag-cat-toggle';
+        label.textContent = (open ? '▾ ' : '▸ ') + cat.name;
+        label.addEventListener('click', () => {
+            if (open) modalTagCatsOpen.delete(cat.id); else modalTagCatsOpen.add(cat.id);
+            renderTagPicker();
+        });
+        return label;
+    };
+    // Folded categories with nothing chosen share one line at the bottom
+    const folded = [];
     cats.forEach(cat => {
+        const open = modalTagCatsOpen.has(cat.id);
+        if (!open && !(cat.tags || []).some(t => modalTagIds.includes(t.id))) { folded.push(cat); return; }
         const row = document.createElement('div');
         row.className = 'tag-picker-row';
-        const label = document.createElement('span');
-        label.className = 'tag-cat-label';
-        label.textContent = cat.name;
-        row.appendChild(label);
-        if (!(cat.tags || []).length) {
+        row.appendChild(catToggle(cat, open));
+        if (open && !(cat.tags || []).length) {
             const none = document.createElement('span');
             none.className = 'tag-cat-empty';
             none.textContent = 'none yet';
@@ -2904,6 +2950,7 @@ function renderTagPicker() {
         }
         [...(cat.tags || [])].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
             const on = modalTagIds.includes(tag.id);
+            if (!open && !on) return;
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'tag-chip' + (on ? ' on' : '');
@@ -2920,6 +2967,12 @@ function renderTagPicker() {
         });
         container.appendChild(row);
     });
+    if (folded.length) {
+        const row = document.createElement('div');
+        row.className = 'tag-picker-row tag-picker-folded';
+        folded.forEach(cat => row.appendChild(catToggle(cat, false)));
+        container.appendChild(row);
+    }
 }
 
 // ---- Sub-task editor ----
@@ -2942,6 +2995,7 @@ function renderSubtaskEditor() {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'subtask-input';
+        input.setAttribute('data-no-clear', '');   // the row already has its own ×
         input.value = st.title;
         input.addEventListener('input', () => { modalSubtasks[idx].title = input.value; });
         // Enter moves on to a new step rather than saving the whole task
@@ -2970,7 +3024,6 @@ function renderSubtaskEditor() {
     } else {
         bar.style.display = 'none';
     }
-    updateTaskTabBadge();
 }
 
 function addSubtaskFromInput() {
@@ -3577,15 +3630,10 @@ function init() {
     document.getElementById('task-due').addEventListener('change', updateCountdownRow);
     document.getElementById('task-due').addEventListener('input', updateCountdownRow);
 
-    // Task modal tabs
-    document.querySelectorAll('#task-tabs .task-tab').forEach(btn => {
-        btn.addEventListener('click', () => setTaskPane(btn.dataset.pane));
-    });
     document.getElementById('subtask-add-btn').addEventListener('click', addSubtaskFromInput);
     document.getElementById('subtask-new-name').addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); addSubtaskFromInput(); }
     });
-    document.getElementById('task-notes').addEventListener('input', updateTaskTabBadge);
 
     // Sub-themes can be created here rather than over in Admin
     document.getElementById('subtheme-add-btn').addEventListener('click', showNewSubTheme);
