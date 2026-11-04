@@ -230,6 +230,10 @@ the solid theme colour pulled his eye off the title. So board cards, Today rows,
 Ready sheet and Lists rows show **tags but no theme chips**. Only the Admin archive
 still shows them. Don't add them back to a card.
 
+Priority on a board card is a 3px **left border** (`.board-card.priority-*`), the same
+as a list row. It used to be a bar across the top, right where the eye starts reading
+the title.
+
 ## Navigation
 
 Tabs are Today, Board, Lists, Notes. **Admin has no tab**: Settings (the gear) has

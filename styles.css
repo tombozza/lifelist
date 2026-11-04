@@ -327,12 +327,12 @@ main { margin:0 auto; padding:20px; }
 .board-card.dragging { opacity:0.4; transform:rotate(1.5deg); cursor:grabbing; }
 .board-card.completed { opacity:0.5; }
 .board-card.completed .board-card-title { text-decoration:line-through; }
-.board-card-priority { height:2px; border-radius:2px; margin-bottom:6px; }
-.board-card-priority.urgent { background:var(--p-urgent); }
-.board-card-priority.high { background:var(--p-high); }
-.board-card-priority.medium { background:var(--p-med); }
-.board-card-priority.low { background:var(--p-low); }
-.board-card-priority.minimal { background:var(--p-min); }
+.board-card { border-left:3px solid transparent; }
+.board-card.priority-urgent { border-left-color:var(--p-urgent); }
+.board-card.priority-high { border-left-color:var(--p-high); }
+.board-card.priority-medium { border-left-color:var(--p-med); }
+.board-card.priority-low { border-left-color:var(--p-low); }
+.board-card.priority-minimal { border-left-color:var(--p-min); }
 .board-card-title { font-size:13px; font-weight:450; margin-bottom:6px; line-height:1.3; }
 .board-card-footer { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
 .board-card-menu { width:24px; height:24px; border:none; background:none; color:var(--text-3); border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; opacity:0; margin-left:auto; transition:opacity 0.1s; }

@@ -1609,11 +1609,9 @@ function createBoardCard(task) {
     card.addEventListener('dragend', () => card.classList.remove('dragging'));
     card.addEventListener('click', () => openTaskModal(task.id));
 
-    if (task.priority && !task.spotlight) {
-        const bar = document.createElement('div');
-        bar.className = 'board-card-priority ' + task.priority;
-        card.appendChild(bar);
-    }
+    // Priority is the card's left edge, the same as a list row — a bar across
+    // the top sat right where the eye starts reading the title
+    if (task.priority && !task.spotlight) card.classList.add('priority-' + task.priority);
     const title = document.createElement('div');
     title.className = 'board-card-title';
     if (task.spotlight) {
