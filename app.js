@@ -1331,14 +1331,8 @@ function createListItem(task, opts = {}) {
         chips.appendChild(ok);
     }
 
-    taskThemes(task).forEach(theme => {
-        const tc = document.createElement('span');
-        tc.className = 'chip chip-theme';
-        tc.style.background = theme.color;
-        tc.style.color = contrastText(theme.color);
-        tc.textContent = theme.name;
-        chips.appendChild(tc);
-    });
+    // No theme chips on cards (Tom, 4 Nov 2026): the filters do the sorting, and
+    // the solid colour pulled the eye away from the title. Tags stay.
     taskTags(task).forEach(tag => chips.appendChild(tagChipEl(tag)));
     const listProg = progressChipEl(task);
     if (listProg) chips.appendChild(listProg);
@@ -1633,14 +1627,8 @@ function createBoardCard(task) {
 
     const footer = document.createElement('div');
     footer.className = 'board-card-footer';
-    taskThemes(task).forEach(theme => {
-        const tc = document.createElement('span');
-        tc.className = 'chip chip-theme';
-        tc.style.background = theme.color;
-        tc.style.color = contrastText(theme.color);
-        tc.textContent = theme.name;
-        footer.appendChild(tc);
-    });
+    // No theme chips on cards (Tom, 4 Nov 2026): the filters do the sorting, and
+    // the solid colour pulled the eye away from the title. Tags stay.
     taskTags(task).forEach(tag => footer.appendChild(tagChipEl(tag)));
     const cardProg = progressChipEl(task);
     if (cardProg) footer.appendChild(cardProg);
@@ -1865,12 +1853,8 @@ function todoRow(task, where, list) {
     body.appendChild(title);
     const meta = document.createElement('div');
     meta.className = 'todo-meta';
-    taskThemes(task).forEach(theme => {
-        const tc = todoChip(theme.name, 'chip-theme');
-        tc.style.background = theme.color;
-        tc.style.color = contrastText(theme.color);
-        meta.appendChild(tc);
-    });
+    // No theme chips on cards (Tom, 4 Nov 2026): the filters do the sorting, and
+    // the solid colour pulled the eye away from the title. Tags stay.
     taskTags(task).forEach(tag => meta.appendChild(tagChipEl(tag)));
     const prog = progressChipEl(task);
     if (prog) meta.appendChild(prog);

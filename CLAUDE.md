@@ -223,6 +223,13 @@ already hold a value. The old Details / Notes tabs are gone. In Tags, each categ
 is folded to its chosen tags (`modalTagCatsOpen`); untouched categories share one
 line. New fields belong in a section, not loose in the modal.
 
+## No theme chips on cards
+
+Tom (4 Nov 2026): he doesn't scan cards for themes, the filters do the sorting, and
+the solid theme colour pulled his eye off the title. So board cards, Today rows, the
+Ready sheet and Lists rows show **tags but no theme chips**. Only the Admin archive
+still shows them. Don't add them back to a card.
+
 ## Navigation
 
 Tabs are Today, Board, Lists, Notes. **Admin has no tab**: Settings (the gear) has
