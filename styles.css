@@ -858,3 +858,141 @@ main { margin:0 auto; padding:20px; }
     .tag-fix-actions .form-input { font-size:16px; }
 }
 .tag-fix-more { font-size:11px; color:var(--text-3); font-style:italic; }
+
+/* ============ TODAY ============ */
+/* The top tier: a calm list for the day. Phones get one day at a time;
+   from 900px it becomes a week you can drag across. */
+#today-content.today-day { max-width:640px; margin:0 auto; }
+.today-top { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.today-seg { display:flex; gap:2px; background:var(--bg-input); padding:3px; border-radius:9px; flex:1; max-width:280px; }
+.today-seg-btn {
+    flex:1; padding:7px 12px; border:none; background:none; border-radius:7px;
+    font-size:13px; font-weight:500; color:var(--text-2); cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+}
+.today-seg-btn.active { background:var(--bg-card); color:var(--text); box-shadow:var(--shadow); }
+.todo-order-btn { margin-left:auto; width:auto; min-width:34px; padding:0 8px; }
+.todo-order-btn.on { color:var(--accent); }
+.todo-order-done { font-size:13px; font-weight:600; }
+.today-sub { font-size:12px; color:var(--text-2); margin:-2px 0 12px; }
+.today-hint { margin:0; }
+
+.today-nav { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+.today-arrow {
+    width:42px; height:42px; flex-shrink:0; border:1px solid var(--border-light);
+    background:var(--bg-card); color:var(--text); border-radius:50%;
+    font-size:22px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;
+}
+.today-arrow:hover { background:var(--bg-hover); }
+.today-date { flex:1; text-align:center; min-width:0; }
+.today-date-big { font-size:22px; font-weight:700; letter-spacing:-0.3px; }
+.today-date-small { font-size:12.5px; color:var(--text-2); margin-top:1px; }
+.today-jump {
+    margin-top:6px; padding:3px 10px; font-size:11.5px; font-weight:500;
+    border:1px solid var(--border-light); border-radius:20px; background:none; color:var(--accent); cursor:pointer;
+}
+
+.todo-list { display:flex; flex-direction:column; gap:6px; }
+.todo-row {
+    background:var(--bg-card); border:1px solid var(--border-light); border-radius:var(--r);
+    box-shadow:var(--shadow);
+}
+.todo-row.open { border-color:var(--accent); }
+.todo-row.dragging { opacity:0.4; }
+.todo-main { display:flex; align-items:center; gap:10px; padding:10px 10px 10px 12px; }
+.todo-check {
+    width:24px; height:24px; flex-shrink:0; border-radius:50%;
+    border:2px solid var(--border); background:none; color:transparent;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;
+}
+.todo-check:hover { border-color:var(--complete-c); color:var(--complete-c); }
+.todo-row.done .todo-check { background:var(--complete-c); border-color:var(--complete-c); color:#fff; }
+.todo-body { flex:1; min-width:0; cursor:pointer; }
+.todo-title { font-size:15px; line-height:1.35; overflow-wrap:anywhere; }
+.todo-row.done { box-shadow:none; background:none; }
+.todo-row.done .todo-title { text-decoration:line-through; color:var(--text-3); }
+.todo-meta { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+.todo-meta .chip { font-size:10.5px; }
+.chip-carried { background:rgba(255,149,0,0.14); color:var(--p-med); }
+.chip-day { background:var(--bg-input); color:var(--text-2); }
+.chip-day-today { background:var(--accent); color:#fff; }
+.todo-side { display:flex; gap:4px; flex-shrink:0; }
+.todo-nudge {
+    width:34px; height:34px; border:1px solid var(--border-light); border-radius:8px;
+    background:var(--bg-input); color:var(--text); font-size:12px; cursor:pointer;
+}
+.todo-nudge:disabled { opacity:0.3; cursor:default; }
+.todo-add {
+    padding:6px 12px; border:none; border-radius:20px; background:var(--accent); color:#fff;
+    font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap;
+}
+.todo-actions {
+    display:flex; flex-wrap:wrap; gap:6px; padding:0 10px 10px 46px;
+}
+.todo-act {
+    padding:6px 12px; border:1px solid var(--border-light); border-radius:20px;
+    background:var(--bg-input); color:var(--text); font-size:12.5px; font-weight:500;
+    cursor:pointer; white-space:nowrap; font-family:var(--font);
+}
+.todo-act:hover { border-color:var(--border); }
+.todo-act.warn { color:var(--p-high); }
+.todo-pick { position:relative; overflow:hidden; }
+.todo-pick input {
+    position:absolute; inset:0; width:100%; height:100%; opacity:0;
+    border:none; padding:0; margin:0; cursor:pointer;
+}
+.todo-empty { font-size:13px; color:var(--text-2); padding:18px 12px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.todo-section-toggle {
+    display:flex; align-items:center; gap:6px; margin:16px 0 8px; padding:0;
+    border:none; background:none; color:var(--text-2); font-size:12px; font-weight:600;
+    text-transform:uppercase; letter-spacing:0.5px; cursor:pointer;
+}
+.todo-count {
+    font-size:10.5px; font-weight:700; background:var(--bg-input); color:var(--text-2);
+    border-radius:10px; padding:1px 7px; letter-spacing:0; text-transform:none;
+}
+.today-seg-btn.active .todo-count { background:var(--accent); color:#fff; }
+
+/* ---- Week (wide screens) ---- */
+.today-week-nav { display:flex; align-items:center; gap:8px; }
+.today-week-nav .today-arrow { width:32px; height:32px; font-size:18px; }
+.today-week-nav .today-jump { margin-top:0; }
+.today-week-label { font-size:15px; font-weight:600; min-width:120px; text-align:center; }
+.week-grid {
+    display:grid; grid-template-columns:minmax(200px, 1.3fr) repeat(7, minmax(130px, 1fr));
+    gap:8px; align-items:start; overflow-x:auto; padding-bottom:6px;
+}
+.week-col { background:var(--bg-col); border-radius:var(--r); padding:8px; min-width:0; }
+.week-col-today { box-shadow:inset 0 0 0 2px var(--accent); }
+.week-col-past { opacity:0.6; }
+.week-col-ready { background:none; border:1px dashed var(--border); }
+.week-col-head {
+    display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+    color:var(--text-2); padding:2px 4px 8px;
+}
+.week-col-head b { color:var(--text); font-size:14px; }
+.week-col-head .todo-count { margin-left:auto; }
+.week-today-pill { font-size:10px; background:var(--accent); color:#fff; border-radius:10px; padding:1px 7px; }
+.week-drop { min-height:60px; border-radius:var(--r-sm); }
+.week-drop.drag-over { background:rgba(0,122,255,0.08); outline:2px dashed var(--accent); outline-offset:-2px; }
+.week-grid .todo-main { padding:8px; gap:8px; align-items:flex-start; }
+.week-grid .todo-title { font-size:13px; }
+.week-grid .todo-check { width:20px; height:20px; }
+.week-grid .todo-actions { padding:0 8px 8px; gap:4px; }
+.week-grid .todo-act { padding:4px 9px; font-size:11.5px; }
+.week-grid .todo-side { flex-direction:column; }
+.week-grid .todo-nudge { width:26px; height:24px; font-size:10px; }
+.week-grid .todo-add { padding:4px 9px; font-size:11.5px; }
+.week-grid .todo-empty { padding:10px 4px; font-size:12px; }
+.week-grid .todo-section-toggle { margin:12px 2px 6px; }
+.week-grid .todo-row { cursor:grab; }
+
+@media (max-width: 768px) {
+    .todo-pick input { font-size:16px; }
+}
+/* Five tabs need the logo's room on a phone */
+@media (max-width: 460px) {
+    .logo { display:none; }
+    header .view-tabs { flex:1; }
+    header .tab { flex:1; padding:6px 4px; }
+}

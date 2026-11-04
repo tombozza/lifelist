@@ -15,11 +15,12 @@ const SYNC_CODE = 'mpy31l1nrkp69mpy31l1nihblx';
 const KANBAN_COLS = [
     { id: 'backlog-day',     name: 'Day',         backlog: true },
     { id: 'backlog-evening', name: 'Evening',     backlog: true },
-    { id: 'next',            name: 'Next' },
-    { id: 'in-progress',     name: 'In Progress' },
-    { id: 'ongoing',         name: 'Ongoing' },
+    // Live replaced Next + In Progress (Nov 2026). Everything in it feeds the
+    // Today view: planned onto a day, or sitting in Ready until it is.
+    { id: 'live',            name: 'Live' },
     { id: 'waiting',         name: 'Waiting' },
     { id: 'blocked',         name: 'Blocked' },
+    { id: 'ongoing',         name: 'Ongoing' },
     // Completing a task still parks it here, but the column is never drawn:
     // it was only ever in the way. Tasks leave via "Mark complete" and the
     // list checkbox, and the week's count sits above the board instead.
@@ -43,7 +44,7 @@ function defaultBacklogCol(themeIds) {
 }
 
 // Board column order. The two backlog columns swap so the time-relevant one
-// always sits immediately left of "Next": Day during the day, Evening after 5pm.
+// always sits immediately left of "Live": Day during the day, Evening after 5pm.
 function boardColumns() {
     const day = KANBAN_COLS.find(c => c.id === 'backlog-day');
     const evening = KANBAN_COLS.find(c => c.id === 'backlog-evening');
@@ -94,7 +95,8 @@ const DEFAULT_THEMES = [
 // ============ STATE ============
 
 let state = loadState();
-let currentView = 'board';
+// Today is the front door: the stripped-back list of what's on today.
+let currentView = 'today';
 let currentThemeTab = 'all';
 let currentSort = 'priority';
 let currentFilters = { priority:'', size:'', status:'active', search:'', age:'' };
@@ -115,6 +117,17 @@ let draggedId = null;
 let snoozedExpanded = new Set();
 let snoozeTargetIds = null;
 let snoozeFromBulk = false;
+// Today view
+let todayDay = todayStr();          // the day the phone layout is showing
+let todayAnchor = todayDay;         // the date when todayDay was last synced to "now"
+let todayWeekStart = getWeekStart(todayDay);  // the week the wide layout is showing
+let todayMode = 'day';              // 'day' | 'ready'
+let todayOrderEdit = false;
+let todayOpenId = null;             // the row with its action strip open
+let todayDoneOpen = false;
+let todayBacklogOpen = false;
+let todayDragId = null;
+let modalPlanDay = null;            // a task added from Today lands on this day
 
 // Modal field state
 let modalThemeIds = [];      // a task can carry several themes
@@ -155,6 +168,12 @@ function defaultState() {
 function migrateColumns(tasks) {
     (tasks || []).forEach(t => {
         if (t.kanbanColumn === 'backlog') t.kanbanColumn = 'backlog-day';
+        // Next and In Progress were folded into Live. An older device can
+        // still write the old ids, so this runs after every sync merge too.
+        if (t.kanbanColumn === 'next' || t.kanbanColumn === 'in-progress') t.kanbanColumn = 'live';
+        // A day only means something while the task is Live (or done, so the
+        // day can show what got finished). Anywhere else it's stale.
+        if (t.planDay && t.kanbanColumn !== 'live' && t.status !== 'complete') { t.planDay = null; t.carriedFrom = null; }
         if (t.reviewed === undefined) t.reviewed = true;
         // A completed task must never recur again — the live schedule lives on
         // its active successor. Stripping recurring from completed records
@@ -753,11 +772,24 @@ function isScheduled(t) { return t.status === 'scheduled'; }
 // Nothing to capture into on the Admin screens
 function syncQuickAddVisibility() {
     document.getElementById('quick-add').style.display = currentView === 'admin' ? 'none' : '';
+    const target = quickAddPlanTarget();
+    document.getElementById('quick-add-input').placeholder = target === undefined
+        ? 'Quick add \u2014 lands in Review\u2026'
+        : target ? 'Add to ' + dayLabel(target, true).replace(/^(Today|Tomorrow)$/, s => s.toLowerCase()) + '\u2026' : 'Add to Ready\u2026';
+}
+
+// On Today, quick add plans straight onto the day being looked at (or Ready).
+// undefined = not on Today, so it goes to Review as usual.
+function quickAddPlanTarget() {
+    if (currentView !== 'today') return undefined;
+    if (isWeekLayout()) return todayStr();
+    return todayMode === 'ready' ? null : todayDay;
 }
 
 function render() {
     updateNotesTabCount();
     if (currentView === 'lists') renderLists();
+    else if (currentView === 'today') renderToday();
     else if (currentView === 'board') renderBoard();
     else if (currentView === 'notes') renderNotes();
     else if (currentView === 'admin') renderAdmin();
@@ -1648,6 +1680,10 @@ function createBoardCard(task) {
     }
     const cd = countdownChip(task);
     if (cd) footer.appendChild(cd);
+    if (task.kanbanColumn === 'live' && task.status === 'active') {
+        footer.appendChild(todoChip(task.planDay ? dayLabel(task.planDay).replace(/ \d+ \w+$/, '') : 'Ready',
+            'chip-day' + (task.planDay === todayStr() ? ' chip-day-today' : '')));
+    }
     const menuBtn = document.createElement('button');
     menuBtn.className = 'board-card-menu';
     menuBtn.innerHTML = '⋯';
@@ -1664,6 +1700,452 @@ function getWeekStats() {
     const lastCompleted = state.tasks.filter(t => t.status === 'complete' && getWeekStart(t.completedDate||'') === lastWeek);
     const countDelta = lastCompleted.length ? Math.round((thisCompleted.length - lastCompleted.length) / lastCompleted.length * 100) : null;
     return { count: thisCompleted.length, lastCount: lastCompleted.length, delta: countDelta };
+}
+
+// ---- TODAY ----
+// The top tier. Everything in the board's Live column is either planned onto
+// a day (task.planDay) or sitting in Ready, waiting for one. Order within a
+// day is task.planOrder, moved with up/down — the to-do list's own priority,
+// so the priority field stays off it. Anything not done by the end of its day
+// rolls forward to today (rollOverPlan), so nothing is ever left behind.
+// Phones get one day at a time; a wide screen gets the whole week.
+
+function isWeekLayout() { return window.matchMedia('(min-width: 900px)').matches; }
+
+function byPlanOrder(a, b) {
+    return (a.planOrder || 0) - (b.planOrder || 0) || (a.title || '').localeCompare(b.title || '');
+}
+function isLiveActive(t) { return t.status === 'active' && t.kanbanColumn === 'live'; }
+function planTasks(day) { return state.tasks.filter(t => isLiveActive(t) && t.planDay === day).sort(byPlanOrder); }
+function readyTasks() { return state.tasks.filter(t => isLiveActive(t) && !t.planDay).sort(byPlanOrder); }
+function doneOn(day) { return state.tasks.filter(t => t.status === 'complete' && t.planDay === day).sort(byPlanOrder); }
+function boardBacklogTasks() {
+    return state.tasks.filter(t => t.status === 'active' && (t.kanbanColumn === 'backlog-day' || t.kanbanColumn === 'backlog-evening'))
+        .sort((a, b) => spotRank(a) - spotRank(b) || prioRank(a) - prioRank(b) || (a.title || '').localeCompare(b.title || ''));
+}
+function nextPlanOrder(list) { return list.reduce((m, t) => Math.max(m, t.planOrder || 0), 0) + 1; }
+
+// "Today", "Tomorrow", "Yesterday", else "Thu 6 Nov"
+function dayLabel(day, long) {
+    const today = todayStr();
+    if (day === today) return 'Today';
+    if (day === addDays(today, 1)) return 'Tomorrow';
+    if (day === addDays(today, -1)) return 'Yesterday';
+    const d = new Date(day + 'T00:00:00');
+    return d.toLocaleDateString('en-GB', long ? { weekday:'long', day:'numeric', month:'short' } : { weekday:'short', day:'numeric', month:'short' });
+}
+
+// Unfinished work from a past day moves onto today, at the top (it's the
+// overdue stuff). carriedFrom keeps the day it was first planned for, so a
+// task that keeps slipping says so. Deterministic, so two devices rolling the
+// same tasks over agree. Returns whether anything moved; the caller saves.
+function rollOverPlan() {
+    const today = todayStr();
+    const late = state.tasks.filter(t => isLiveActive(t) && t.planDay && t.planDay < today).sort((a, b) =>
+        a.planDay.localeCompare(b.planDay) || byPlanOrder(a, b));
+    if (!late.length) return false;
+    const top = planTasks(today).reduce((m, t) => Math.min(m, t.planOrder || 0), 1);
+    late.forEach((t, i) => {
+        if (!t.carriedFrom) t.carriedFrom = t.planDay;
+        t.planDay = today;
+        t.planOrder = top - late.length + i;
+        t.updatedAt = Date.now();
+    });
+    return true;
+}
+
+// Put a task on a day (or back in Ready with day = null), at the bottom.
+function planFor(id, day) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    const list = day ? planTasks(day) : readyTasks();
+    todayOpenId = null;
+    updateTask(id, {
+        kanbanColumn: 'live', planDay: day || null, planOrder: nextPlanOrder(list.filter(t => t.id !== id)),
+        carriedFrom: null, reviewed: true, offKanban: false, inNotes: false, snoozedUntil: '',
+    });
+}
+
+function sendToBacklog(id) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    todayOpenId = null;
+    updateTask(id, { kanbanColumn: defaultBacklogCol(taskThemeIds(task)) });
+}
+
+function markBlocked(id) { todayOpenId = null; updateTask(id, { kanbanColumn: 'blocked' }); }
+
+// Swap a task with its neighbour in the list it's shown in.
+function nudgePlanOrder(id, dir, list) {
+    const i = list.findIndex(t => t.id === id), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    const now = Date.now();
+    list.forEach((t, k) => { if (t.planOrder !== k) { t.planOrder = k; t.updatedAt = now; } });
+    [list[i].planOrder, list[j].planOrder] = [j, i];
+    list[i].updatedAt = list[j].updatedAt = now;
+    saveState();
+    render();
+}
+
+// Desktop drag: drop a task into a day (or Ready) at a given position.
+function dropIntoPlan(id, day, index) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    const list = (day ? planTasks(day) : readyTasks()).filter(t => t.id !== id);
+    list.splice(Math.max(0, Math.min(index, list.length)), 0, task);
+    const now = Date.now();
+    if (task.planDay !== (day || null)) task.carriedFrom = null;
+    Object.assign(task, { kanbanColumn: 'live', planDay: day || null, reviewed: true, offKanban: false, inNotes: false, snoozedUntil: '' });
+    list.forEach((t, k) => { t.planOrder = k; t.updatedAt = now; });
+    saveState();
+    render();
+}
+
+function todoChip(text, cls) {
+    const c = document.createElement('span');
+    c.className = 'chip ' + (cls || '');
+    c.textContent = text;
+    return c;
+}
+
+function todoBtn(label, cls, fn, title) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = cls;
+    b.textContent = label;
+    if (title) { b.title = title; b.setAttribute('aria-label', title); }
+    b.addEventListener('click', e => { e.stopPropagation(); fn(); });
+    return b;
+}
+
+// One to-do row. where: 'day' | 'ready' | 'backlog' | 'done'.
+// targetDay is where "+ add" puts it (the day being looked at).
+function todoRow(task, where, list, targetDay) {
+    const row = document.createElement('div');
+    row.className = 'todo-row';
+    row.dataset.taskId = task.id;
+    const done = task.status === 'complete';
+    if (done) row.classList.add('done');
+    const open = todayOpenId === task.id && !done;
+    if (open) row.classList.add('open');
+
+    const main = document.createElement('div');
+    main.className = 'todo-main';
+
+    if (where !== 'backlog') {
+        const check = todoBtn('', 'todo-check', () => { todayOpenId = null; completeTask(task.id); },
+            done ? 'Mark not done' : 'Mark complete');
+        check.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><polyline points="20 6 9 17 4 12"/></svg>';
+        main.appendChild(check);
+    }
+
+    const body = document.createElement('div');
+    body.className = 'todo-body';
+    const title = document.createElement('div');
+    title.className = 'todo-title';
+    title.textContent = task.title;
+    body.appendChild(title);
+    const meta = document.createElement('div');
+    meta.className = 'todo-meta';
+    taskThemes(task).forEach(theme => {
+        const tc = todoChip(theme.name, 'chip-theme');
+        tc.style.background = theme.color;
+        tc.style.color = contrastText(theme.color);
+        meta.appendChild(tc);
+    });
+    taskTags(task).forEach(tag => meta.appendChild(tagChipEl(tag)));
+    const prog = progressChipEl(task);
+    if (prog) meta.appendChild(prog);
+    if (task.carriedFrom && !done) meta.appendChild(todoChip('↻ since ' + dayLabel(task.carriedFrom).replace(/ \d+ \w+$/, ''), 'chip-carried'));
+    if (meta.childNodes.length) body.appendChild(meta);
+    if (!done) body.addEventListener('click', () => { todayOpenId = open ? null : task.id; render(); });
+    main.appendChild(body);
+
+    if (!done) {
+        const side = document.createElement('div');
+        side.className = 'todo-side';
+        if (todayOrderEdit && list && where !== 'backlog') {
+            const i = list.indexOf(task);
+            const up = todoBtn('▲', 'todo-nudge', () => nudgePlanOrder(task.id, -1, list), 'Move up');
+            const down = todoBtn('▼', 'todo-nudge', () => nudgePlanOrder(task.id, 1, list), 'Move down');
+            up.disabled = i <= 0; down.disabled = i >= list.length - 1;
+            side.append(up, down);
+        } else if (where === 'ready' || where === 'backlog') {
+            side.appendChild(todoBtn('+ ' + dayLabel(targetDay).replace(/^(\w{3}) .*/, '$1'), 'todo-add',
+                () => planFor(task.id, targetDay), 'Add to ' + dayLabel(targetDay, true)));
+        }
+        if (side.childNodes.length) main.appendChild(side);
+    }
+    row.appendChild(main);
+
+    if (open) {
+        const strip = document.createElement('div');
+        strip.className = 'todo-actions';
+        const today = todayStr();
+        const add = (label, fn, cls) => strip.appendChild(todoBtn(label, 'todo-act' + (cls ? ' ' + cls : ''), fn));
+        if (where === 'day') {
+            add('Tomorrow →', () => planFor(task.id, addDays(task.planDay > today ? task.planDay : today, 1)));
+            add('To Ready', () => planFor(task.id, null));
+        } else {
+            if (targetDay !== today) add('+ Today', () => planFor(task.id, today));
+            add('+ Tomorrow', () => planFor(task.id, addDays(today, 1)));
+            if (where === 'backlog') add('+ Ready', () => planFor(task.id, null));
+        }
+        const pick = document.createElement('label');
+        pick.className = 'todo-act todo-pick';
+        pick.textContent = 'Pick a day…';
+        // Invisible over the pill: a tap lands on the input itself (which is
+        // what opens the picker on iOS); elsewhere showPicker() does it.
+        const date = document.createElement('input');
+        date.type = 'date';
+        date.min = today;
+        date.setAttribute('aria-label', 'Pick a day');
+        date.addEventListener('click', e => { e.stopPropagation(); try { date.showPicker(); } catch (err) {} });
+        date.addEventListener('change', () => { if (date.value) planFor(task.id, date.value); });
+        pick.appendChild(date);
+        strip.appendChild(pick);
+        if (where !== 'backlog') {
+            add('Blocked', () => markBlocked(task.id), 'warn');
+            add('Backlog', () => sendToBacklog(task.id));
+        }
+        add('Edit', () => { todayOpenId = null; openTaskModal(task.id); });
+        row.appendChild(strip);
+    }
+
+    if (isWeekLayout() && !done) {
+        row.draggable = true;
+        row.addEventListener('dragstart', e => { todayDragId = task.id; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+        row.addEventListener('dragend', () => { todayDragId = null; row.classList.remove('dragging'); });
+    }
+    return row;
+}
+
+// A drop zone for the week view: works out the insertion point from the
+// pointer's height against the rows already there.
+function makePlanDropZone(el, day) {
+    el.addEventListener('dragover', e => { if (!todayDragId) return; e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) el.classList.remove('drag-over'); });
+    el.addEventListener('drop', e => {
+        e.preventDefault();
+        el.classList.remove('drag-over');
+        if (!todayDragId) return;
+        const rows = [...el.querySelectorAll('.todo-row:not(.done)')].filter(r => r.dataset.taskId !== todayDragId);
+        let index = rows.length;
+        for (let k = 0; k < rows.length; k++) {
+            const r = rows[k].getBoundingClientRect();
+            if (e.clientY < r.top + r.height / 2) { index = k; break; }
+        }
+        const id = todayDragId;
+        todayDragId = null;
+        dropIntoPlan(id, day, index);
+    });
+}
+
+function todoEmpty(text) {
+    const p = document.createElement('div');
+    p.className = 'todo-empty';
+    p.textContent = text;
+    return p;
+}
+
+function orderToggleBtn() {
+    const b = todoBtn('', 'icon-btn todo-order-btn' + (todayOrderEdit ? ' on' : ''), () => {
+        todayOrderEdit = !todayOrderEdit; todayOpenId = null; render();
+    }, todayOrderEdit ? 'Done reordering' : 'Reorder');
+    b.innerHTML = todayOrderEdit
+        ? '<span class="todo-order-done">Done</span>'
+        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg>';
+    return b;
+}
+
+// The "pull from the board backlog" section under Ready — collapsed, since
+// it's the long tail.
+function backlogPullSection(host, targetDay) {
+    const items = boardBacklogTasks();
+    if (!items.length) return;
+    const head = todoBtn((todayBacklogOpen ? '▾ ' : '▸ ') + 'From the board backlog', 'todo-section-toggle',
+        () => { todayBacklogOpen = !todayBacklogOpen; render(); });
+    const count = document.createElement('span');
+    count.className = 'todo-count';
+    count.textContent = items.length;
+    head.appendChild(count);
+    host.appendChild(head);
+    if (!todayBacklogOpen) return;
+    const list = document.createElement('div');
+    list.className = 'todo-list';
+    items.forEach(t => list.appendChild(todoRow(t, 'backlog', null, targetDay)));
+    host.appendChild(list);
+}
+
+function doneSection(host, day) {
+    const done = doneOn(day);
+    if (!done.length) return;
+    const head = todoBtn((todayDoneOpen ? '▾ ' : '▸ ') + 'Done', 'todo-section-toggle',
+        () => { todayDoneOpen = !todayDoneOpen; render(); });
+    const count = document.createElement('span');
+    count.className = 'todo-count';
+    count.textContent = done.length;
+    head.appendChild(count);
+    host.appendChild(head);
+    if (!todayDoneOpen) return;
+    const list = document.createElement('div');
+    list.className = 'todo-list';
+    done.forEach(t => list.appendChild(todoRow(t, 'done', null, day)));
+    host.appendChild(list);
+}
+
+function renderToday() {
+    const host = document.getElementById('today-content');
+    const y = window.scrollY;
+    // Left open past midnight: follow the date, unless they'd moved off today
+    const now = todayStr();
+    if (todayAnchor !== now) {
+        if (todayDay === todayAnchor) todayDay = now;
+        if (todayWeekStart === getWeekStart(todayAnchor)) todayWeekStart = getWeekStart(now);
+        todayAnchor = now;
+    }
+    if (rollOverPlan()) saveState();
+    host.innerHTML = '';
+    host.className = isWeekLayout() ? 'today-week' : 'today-day';
+    if (isWeekLayout()) renderTodayWeek(host); else renderTodayDay(host);
+    syncQuickAddVisibility();
+    if (window.scrollY !== y) window.scrollTo(0, y);
+}
+
+// Phone: one day, arrows either side, or the Ready list.
+function renderTodayDay(host) {
+    const top = document.createElement('div');
+    top.className = 'today-top';
+    const seg = document.createElement('div');
+    seg.className = 'today-seg';
+    const ready = readyTasks();
+    [['day', 'Day'], ['ready', 'Ready']].forEach(([mode, label]) => {
+        const b = todoBtn(label, 'today-seg-btn' + (todayMode === mode ? ' active' : ''), () => {
+            todayMode = mode; todayOpenId = null; render();
+        });
+        if (mode === 'ready' && ready.length) {
+            const n = document.createElement('span');
+            n.className = 'todo-count';
+            n.textContent = ready.length;
+            b.appendChild(n);
+        }
+        seg.appendChild(b);
+    });
+    top.appendChild(seg);
+    top.appendChild(orderToggleBtn());
+    host.appendChild(top);
+
+    if (todayMode === 'ready') {
+        const sub = document.createElement('div');
+        sub.className = 'today-sub';
+        sub.textContent = 'Live, but not on a day yet. Tap + to put one on ' + dayLabel(todayDay).toLowerCase().replace(/^(\w{3}) /, '$1 ') + '.';
+        host.appendChild(sub);
+        const list = document.createElement('div');
+        list.className = 'todo-list';
+        ready.forEach(t => list.appendChild(todoRow(t, 'ready', ready, todayDay)));
+        if (!ready.length) list.appendChild(todoEmpty('Nothing waiting. Move cards into Live on the board, or pull from the backlog below.'));
+        host.appendChild(list);
+        backlogPullSection(host, todayDay);
+        return;
+    }
+
+    const nav = document.createElement('div');
+    nav.className = 'today-nav';
+    nav.appendChild(todoBtn('‹', 'today-arrow', () => { todayDay = addDays(todayDay, -1); todayOpenId = null; render(); }, 'Previous day'));
+    const mid = document.createElement('div');
+    mid.className = 'today-date';
+    const d = new Date(todayDay + 'T00:00:00');
+    const big = document.createElement('div');
+    big.className = 'today-date-big';
+    big.textContent = d.toLocaleDateString('en-GB', { weekday:'long' });
+    const small = document.createElement('div');
+    small.className = 'today-date-small';
+    const rel = dayLabel(todayDay);
+    small.textContent = d.toLocaleDateString('en-GB', { day:'numeric', month:'long' }) + (/^(Today|Tomorrow|Yesterday)$/.test(rel) ? ' · ' + rel : '');
+    mid.append(big, small);
+    if (todayDay !== todayStr()) {
+        mid.appendChild(todoBtn('Back to today', 'today-jump', () => { todayDay = todayStr(); todayOpenId = null; render(); }));
+    }
+    nav.appendChild(mid);
+    nav.appendChild(todoBtn('›', 'today-arrow', () => { todayDay = addDays(todayDay, 1); todayOpenId = null; render(); }, 'Next day'));
+    host.appendChild(nav);
+
+    const tasks = planTasks(todayDay);
+    const list = document.createElement('div');
+    list.className = 'todo-list';
+    tasks.forEach(t => list.appendChild(todoRow(t, 'day', tasks, todayDay)));
+    if (!tasks.length) {
+        const past = todayDay < todayStr();
+        const empty = todoEmpty(past ? 'Anything unfinished from this day has rolled forward to today.'
+            : (doneOn(todayDay).length ? 'All done.' : 'Nothing planned.'));
+        if (!past && ready.length) empty.appendChild(todoBtn('Pick from Ready (' + ready.length + ')', 'btn-small todo-empty-btn', () => { todayMode = 'ready'; render(); }));
+        list.appendChild(empty);
+    }
+    host.appendChild(list);
+    doneSection(host, todayDay);
+}
+
+// Wide screen: Ready down the left, the week across, drag between them.
+function renderTodayWeek(host) {
+    const top = document.createElement('div');
+    top.className = 'today-top';
+    const nav = document.createElement('div');
+    nav.className = 'today-week-nav';
+    nav.appendChild(todoBtn('‹', 'today-arrow', () => { todayWeekStart = addDays(todayWeekStart, -7); todayOpenId = null; render(); }, 'Previous week'));
+    const label = document.createElement('div');
+    label.className = 'today-week-label';
+    label.textContent = 'Week of ' + formatDateShort(todayWeekStart);
+    nav.appendChild(label);
+    nav.appendChild(todoBtn('›', 'today-arrow', () => { todayWeekStart = addDays(todayWeekStart, 7); todayOpenId = null; render(); }, 'Next week'));
+    if (todayWeekStart !== getWeekStart(todayStr())) {
+        nav.appendChild(todoBtn('This week', 'today-jump', () => { todayWeekStart = getWeekStart(todayStr()); render(); }));
+    }
+    top.appendChild(nav);
+    const hint = document.createElement('span');
+    hint.className = 'today-sub today-hint';
+    hint.textContent = 'Drag between days, or click a task for options';
+    top.appendChild(hint);
+    top.appendChild(orderToggleBtn());
+    host.appendChild(top);
+
+    const grid = document.createElement('div');
+    grid.className = 'week-grid';
+    const today = todayStr();
+
+    const readyCol = document.createElement('div');
+    readyCol.className = 'week-col week-col-ready';
+    const ready = readyTasks();
+    readyCol.innerHTML = `<div class="week-col-head"><span>Ready</span><span class="todo-count">${ready.length}</span></div>`;
+    const readyList = document.createElement('div');
+    readyList.className = 'todo-list week-drop';
+    ready.forEach(t => readyList.appendChild(todoRow(t, 'ready', ready, today)));
+    if (!ready.length) readyList.appendChild(todoEmpty('Live, but not on a day yet.'));
+    makePlanDropZone(readyList, null);
+    readyCol.appendChild(readyList);
+    backlogPullSection(readyCol, today);
+    grid.appendChild(readyCol);
+
+    for (let i = 0; i < 7; i++) {
+        const day = addDays(todayWeekStart, i);
+        const col = document.createElement('div');
+        col.className = 'week-col' + (day === today ? ' week-col-today' : '') + (day < today ? ' week-col-past' : '');
+        const tasks = planTasks(day);
+        const d = new Date(day + 'T00:00:00');
+        const head = document.createElement('div');
+        head.className = 'week-col-head';
+        head.innerHTML = `<span>${d.toLocaleDateString('en-GB', { weekday:'short' })} <b>${d.getDate()}</b></span>` +
+            (day === today ? '<span class="week-today-pill">Today</span>' : '') +
+            (tasks.length ? `<span class="todo-count">${tasks.length}</span>` : '');
+        col.appendChild(head);
+        const list = document.createElement('div');
+        list.className = 'todo-list week-drop';
+        tasks.forEach(t => list.appendChild(todoRow(t, 'day', tasks, day)));
+        doneOn(day).forEach(t => list.appendChild(todoRow(t, 'done', null, day)));
+        if (day >= today) makePlanDropZone(list, day);
+        col.appendChild(list);
+        grid.appendChild(col);
+    }
+    host.appendChild(grid);
 }
 
 // ---- ADMIN ----
@@ -2169,6 +2651,8 @@ function createTask(data) {
         scheduledFor: data.scheduledFor || null,
         runCount: data.runCount || 0,
         spotlight: data.spotlight || false,
+        planDay: data.planDay || null,
+        planOrder: data.planOrder || 0,
         // Items captured straight to the list start unreviewed; anything
         // created already on the board counts as triaged
         reviewed: data.reviewed || !!data.kanbanColumn,
@@ -2201,6 +2685,9 @@ function updateTask(id, data) {
     const task = state.tasks.find(t => t.id === id);
     if (!task) return;
     Object.assign(task, data);
+    // Leaving Live (to the backlog, Blocked, a list, a snooze) takes the
+    // task off whichever day it was planned for.
+    if (task.planDay && task.kanbanColumn !== 'live' && task.status !== 'complete') { task.planDay = null; task.carriedFrom = null; }
     task.updatedAt = Date.now();
     saveState();
     render();
@@ -2237,6 +2724,8 @@ function completeTask(id) {
         task.status = 'complete';
         task.kanbanColumn = 'complete';
         task.completedDate = todayStr();
+        // Done counts on the day it was actually done, so Today's "Done" shows it
+        if (task.planDay) task.planDay = task.completedDate;
         // Schedule the next occurrence for its recurrence date (it stays
         // dormant until then, then appears on the board), and clear the
         // schedule off this completed record
@@ -2431,6 +2920,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
     modalPriority = '';
     modalSize = 'xs';
     modalKanbanCol = defaultKanbanCol || null;
+    modalPlanDay = null;
     modalRecurType = 'daily';
     modalRecurDow = new Set();
     modalMonthlyMode = 'date';
@@ -2830,10 +3320,10 @@ function saveTaskModal() {
         const titles = document.getElementById('task-title-multi').value
             .split('\n').map(s => s.trim()).filter(Boolean);
         if (!titles.length) { document.getElementById('task-title-multi').focus(); return; }
-        titles.forEach(title => addTask({
+        titles.forEach(title => addTask(withPlanDay({
             ...shared, title,
             kanbanColumn: addToKanban ? (modalKanbanCol || defaultBacklogCol(modalThemeIds)) : null,
-        }));
+        })));
         checkAutoKanban();
         closeTaskModal();
         return;
@@ -2869,12 +3359,18 @@ function saveTaskModal() {
         scheduleOccurrence({ ...data, recurRoot: root }, first, 1);
         saveState();
     } else {
-        addTask(data);
+        addTask(withPlanDay(data));
     }
     checkAutoKanban();
     checkRecurring();
     render();
     closeTaskModal();
+}
+
+// A new task made from Today lands on the day that was showing (if it's Live)
+function withPlanDay(data) {
+    if (!modalPlanDay || data.kanbanColumn !== 'live') return data;
+    return { ...data, planDay: modalPlanDay, planOrder: nextPlanOrder(planTasks(modalPlanDay)) };
 }
 
 // ============ THEME MODAL ============
@@ -2988,6 +3484,8 @@ function openContextMenu(e, taskId) {
     menu.querySelector('[data-action="from-notes"]').style.display = parked ? '' : 'none';
     menu.querySelector('[data-action="snooze"]').style.display = isSnoozed(task) ? 'none' : '';
     menu.querySelector('[data-action="unsnooze"]').style.display = isSnoozed(task) ? '' : 'none';
+    menu.querySelector('[data-action="plan-today"]').style.display =
+        (task.status === 'active' && !(task.kanbanColumn === 'live' && task.planDay === todayStr())) ? '' : 'none';
     menu.querySelector('[data-action="spotlight"]').style.display = task.spotlight ? 'none' : '';
     menu.querySelector('[data-action="unspotlight"]').style.display = task.spotlight ? '' : 'none';
     menu.style.display = 'block';
@@ -3127,7 +3625,11 @@ function init() {
     });
 
     // FAB
-    document.getElementById('fab').addEventListener('click', () => openTaskModal(null));
+    document.getElementById('fab').addEventListener('click', () => {
+        if (currentView !== 'today') return openTaskModal(null);
+        openTaskModal(null, 'live');
+        modalPlanDay = quickAddPlanTarget();
+    });
 
     // Quick add — a title and nothing else, left unreviewed so it surfaces in
     // the review queue rather than silently joining the list.
@@ -3135,12 +3637,18 @@ function init() {
         const input = document.getElementById('quick-add-input');
         const title = input.value.trim();
         if (!title) { input.focus(); return; }
-        addTask({ title, reviewed: false, kanbanColumn: null });
+        const target = quickAddPlanTarget();
+        if (target === undefined) {
+            addTask({ title, reviewed: false, kanbanColumn: null });
+            reviewBannerDismissed = false;
+        } else {
+            addTask({ title, reviewed: true, kanbanColumn: 'live', planDay: target,
+                planOrder: nextPlanOrder(target ? planTasks(target) : readyTasks()) });
+        }
         input.value = '';
-        reviewBannerDismissed = false;
         render();
         const flash = document.getElementById('quick-add-flash');
-        flash.textContent = 'Added to Review';
+        flash.textContent = target === undefined ? 'Added to Review' : 'Added';
         clearTimeout(quickAddFlashTimer);
         quickAddFlashTimer = setTimeout(() => { flash.textContent = ''; }, 2200);
         input.focus();
@@ -3264,6 +3772,7 @@ function init() {
         if (!action || !ctxTaskId) return;
         if (action === 'edit') openTaskModal(ctxTaskId);
         else if (action === 'to-kanban') moveToKanban(ctxTaskId);
+        else if (action === 'plan-today') planFor(ctxTaskId, todayStr());
         else if (action === 'move-to') { openMoveToModal(ctxTaskId); }
         else if (action === 'snooze') { openSnoozeModal(ctxTaskId); }
         else if (action === 'unsnooze') updateTask(ctxTaskId, { snoozedUntil: '' });
@@ -3403,7 +3912,12 @@ function init() {
     // Surface the reminder while the app sits open on the Board (e.g. 9am
     // rolls around, or a snooze lapses), and activate any recurrence whose day
     // has arrived while the app was left open / backgrounded
-    const periodicChecks = () => { checkRecurring(); checkAutoKanban(); renderListReminder(); };
+    const periodicChecks = () => {
+        checkRecurring(); checkAutoKanban(); renderListReminder();
+        if (rollOverPlan()) { saveState(); render(); }
+    };
+    // Phone and desktop get different Today layouts; redraw when crossing over
+    window.matchMedia('(min-width: 900px)').addEventListener('change', () => { if (currentView === 'today') render(); });
     setInterval(periodicChecks, 60000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { periodicChecks(); render(); } });
 
@@ -3809,6 +4323,7 @@ async function pullFromCloud() {
         // localContrib was worked out before the merge, so a recovery has to
         // flag itself or the repaired categories would never leave this device
         if (recoverOrphanTags() + recoverOrphanThemes()) { markTagRecovery(); localContrib = true; }
+        if (rollOverPlan()) localContrib = true;
         _baseSave();
         render();
         syncPaused = false;

@@ -20,7 +20,8 @@
 <header id="app-header">
     <h1 class="logo">Life Kanban</h1>
     <nav class="view-tabs">
-        <button class="tab active" data-view="board">Board</button>
+        <button class="tab active" data-view="today">Today</button>
+        <button class="tab" data-view="board">Board</button>
         <button class="tab" data-view="lists">Lists</button>
         <button class="tab" data-view="notes" id="tab-notes">Notes</button>
         <button class="tab" data-view="admin">Admin</button>
@@ -41,6 +42,12 @@
         <button class="btn-small" id="quick-add-btn">Add</button>
         <span class="quick-add-flash" id="quick-add-flash"></span>
     </div>
+
+    <!-- ============ TODAY VIEW ============ -->
+    <!-- The top tier: what's on today. Built from the board's Live column. -->
+    <section id="view-today" class="view active">
+        <div id="today-content"></div>
+    </section>
 
     <!-- ============ NOTES VIEW ============ -->
     <section id="view-notes" class="view">
@@ -125,7 +132,7 @@
     </section>
 
     <!-- ============ BOARD VIEW ============ -->
-    <section id="view-board" class="view active">
+    <section id="view-board" class="view">
         <div class="board-stats" id="board-stats"></div>
         <div id="review-banner" class="review-banner" style="display:none;"></div>
         <div id="list-reminder" class="review-banner" style="display:none;">
@@ -482,6 +489,7 @@
     <button data-action="edit">Edit</button>
     <button data-action="spotlight" class="ctx-spotlight">★ Spotlight</button>
     <button data-action="unspotlight" class="ctx-spotlight" style="display:none;">★ Remove spotlight</button>
+    <button data-action="plan-today">Do today</button>
     <button data-action="to-kanban">Add to Kanban</button>
     <button data-action="move-to" style="display:none;">Move to…</button>
     <button data-action="from-kanban" style="display:none;">Take off board</button>

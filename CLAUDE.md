@@ -167,6 +167,34 @@ and is never rendered — tasks leave via "Mark complete" or the list checkbox, 
 week's tally sits above the board (`renderBoardWeekStat`). Don't delete the `complete`
 entry: the archive, `clearCompleted()` and the list chips all still look up its name.
 
+Columns are Day, Evening (the two backlogs), **Live**, Waiting, Blocked, Ongoing.
+Live replaced Next + In Progress on 4 Nov 2026; `migrateColumns()` maps the old ids
+on load *and after every sync merge*, because an older cached device can still
+write them.
+
+## Today (the top tier)
+
+The tiers, bottom to top: snoozed list items → themed Lists → off-board → the
+Board → **Today**, with Notes off to the side. Today is the default view on open.
+
+- Everything in the **Live** column feeds it. `task.planDay` (`YYYY-MM-DD` or null)
+  puts a Live task on a day; Live with no day is **Ready**.
+- `task.planOrder` is the to-do list's own order (▲▼ in reorder mode, drag on
+  desktop). Priority is deliberately not shown on Today.
+- **Rollover:** `rollOverPlan()` moves any unfinished Live task from a past day onto
+  today, at the top, and sets `carriedFrom` to the day it was first planned for (the
+  "↻ since" chip). It's deterministic so devices agree, and runs on render, every
+  minute, and after each sync merge.
+- A day only means something while the task is Live: `updateTask()` and
+  `migrateColumns()` clear `planDay` the moment a task leaves Live. Completing keeps
+  it, re-stamped to the completion day, so that day's "Done" section shows it.
+- Phones (<900px) get one day with ‹ › arrows plus a Day/Ready toggle; ≥900px gets
+  Ready + a Mon–Sun week grid with HTML5 drag (`dropIntoPlan`). Tapping a row opens
+  its action strip (Tomorrow, To Ready, Pick a day, Blocked, Backlog, Edit), so it's
+  all taps on a phone, no dragging.
+- On Today, quick add and the + button plan straight onto the day being shown
+  (`quickAddPlanTarget`, `modalPlanDay`) instead of going to Review.
+
 ## Auth
 
 The shared pattern (see the root `CLAUDE.md`), identical to `golf-tracker` bar the cookie
