@@ -188,11 +188,17 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
 - A day only means something while the task is Live: `updateTask()` and
   `migrateColumns()` clear `planDay` the moment a task leaves Live. Completing keeps
   it, re-stamped to the completion day, so that day's "Done" section shows it.
-- Phones (<900px) get one day with ‹ › arrows plus a Day/Ready toggle; ≥900px gets
-  Ready + a Mon–Sun week grid with HTML5 drag (`dropIntoPlan`). Tapping a row opens
-  its action strip (Tomorrow, To Ready, Pick a day, Blocked, Backlog, Edit), so it's
-  all taps on a phone, no dragging.
-- On Today, quick add and the + button plan straight onto the day being shown
+- **Today shows today and nothing else**, on every screen size. A week view and
+  a Day/Ready toggle with day arrows were built first and removed the same day at
+  Tom's request ("so focused on what is today's tasks") — don't bring them back
+  unasked. Future days are reached only through a task's "Tomorrow →" / "Pick a
+  day…" actions, and show up on their own when the day arrives.
+- **Ready is hidden on purpose**: it lives in a sheet (`#ready-modal`,
+  `renderReadySheet`) behind the quiet "Add from Ready · N" button, along with the
+  board backlog. Keep it off the main screen.
+- Tapping a row opens its action strip (Tomorrow, Not today, Pick a day, Blocked,
+  Backlog, Edit), so it's all taps, no dragging.
+- On Today, quick add and the + button plan straight onto today
   (`quickAddPlanTarget`, `modalPlanDay`) instead of going to Review.
 
 ## Auth
