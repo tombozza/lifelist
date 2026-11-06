@@ -163,6 +163,28 @@ parent (`syncParentStep`), and ticking/renaming the step in the parent's modal d
 the same to the card on save (`applyStepsToCards`). Delete the card and the step
 falls back to its own tick. The child card shows a quiet `↳ Parent` chip.
 
+## Link
+
+`task.url` holds one web link, edited in the modal's **Link** section (an "Open"
+button follows the box). `normaliseUrl()` adds `https://` to a bare address.
+Cards, Today rows and list rows show it as a chip with the site's name
+(`linkChipEl`); the chip *is* the link and stops the click from opening the task.
+
+## Undo
+
+Ctrl/⌘-Z, plus an **Undo** toast after every completion (phones have no Ctrl-Z).
+`saveState()` keeps a snapshot of `state.tasks` as it was before each change and
+pushes it onto `undoStack` (30 deep, in memory only) — but **only when a person
+caused the save**: a capture listener stamps `userIntentAt` on any pointer, key,
+drop or change, and saves more than 1.5s after one aren't recorded. Sync merges
+set `inSyncMerge` around their save. So rollover, recurring checks and sync
+move the baseline but never become undo steps, and undo can't revert someone
+else's edit that just synced in. `undoLast()` restores only the tasks that
+differ, re-stamping `updatedAt` so the restored version wins the next sync;
+tasks the change created are tombstoned, tasks it deleted get their tombstone
+lifted. Ctrl-Z is ignored while typing in a box or while a modal is open.
+Only tasks are covered, not themes or tags.
+
 ## Board columns
 
 `KANBAN_COLS` holds every column; `boardColumns()` is what gets drawn. Columns are

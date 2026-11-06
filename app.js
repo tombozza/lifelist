@@ -76,7 +76,18 @@ const DEFAULT_THEMES = [
 
 // ============ STATE ============
 
+// Undo (Ctrl/⌘-Z, and the toast's Undo button). saveState() keeps a copy of
+// the task list as it was before each change a person made — automatic saves
+// (sync merges, rollover, recurring checks) move the baseline but are never
+// recorded, so undo always steps back over something you actually did.
+let undoStack = [];
+let undoBaseline = null;
+let userIntentAt = 0;
+let undoing = false;
+let inSyncMerge = false;
+
 let state = loadState();
+undoBaseline = JSON.stringify(state.tasks);
 // Today is the front door: the stripped-back list of what's on today.
 let currentView = 'today';
 let currentThemeTab = 'all';
@@ -281,7 +292,73 @@ function loadState() {
 }
 
 function saveState() {
+    const tasksJson = JSON.stringify(state.tasks);
+    if (undoBaseline !== null && tasksJson !== undoBaseline && !undoing && !inSyncMerge
+        && Date.now() - userIntentAt < 1500) {
+        undoStack.push(undoBaseline);
+        if (undoStack.length > 30) undoStack.shift();
+    }
+    undoBaseline = tasksJson;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+// Put the task list back as it was before the last change. Only tasks that
+// differ are touched, and each gets a fresh updatedAt so the restored version
+// wins the next sync; a task the change created is deleted (tombstoned), and
+// one it deleted comes back with its tombstone lifted.
+function undoLast() {
+    const prev = undoStack.pop();
+    if (!prev) { showToast('Nothing to undo'); return; }
+    const before = JSON.parse(prev);
+    const now = Date.now();
+    const cur = new Map(state.tasks.map(t => [t.id, t]));
+    const prevIds = new Set(before.map(t => t.id));
+    const changed = [];
+    const restored = before.map(t => {
+        const c = cur.get(t.id);
+        if (c && JSON.stringify(c) === JSON.stringify(t)) return c;
+        changed.push(t);
+        return { ...t, updatedAt: now };
+    });
+    const removed = state.tasks.filter(t => !prevIds.has(t.id));
+    state.deletedIds = (state.deletedIds || []).filter(x => !(prevIds.has(x.id) && !cur.has(x.id)));
+    removed.forEach(t => state.deletedIds.push({ id: t.id, ts: now }));
+    state.tasks = restored;
+    undoing = true;
+    try { saveState(); } finally { undoing = false; }
+    render();
+    const what = changed[0] || removed[0];
+    showToast('Undone' + (what && what.title ? ': ' + what.title : ''));
+}
+
+// A small message at the bottom of the screen, optionally with an Undo
+// button — the phone's way to undo, where there's no Ctrl-Z.
+let toastTimer = null;
+function showToast(msg, opts) {
+    let el = document.getElementById('toast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'toast';
+        el.className = 'toast';
+        el.setAttribute('role', 'status');
+        document.body.appendChild(el);
+    }
+    el.innerHTML = '';
+    const text = document.createElement('span');
+    text.className = 'toast-text';
+    text.textContent = msg;
+    el.appendChild(text);
+    if (opts && opts.undo) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'toast-undo';
+        b.textContent = 'Undo';
+        b.addEventListener('click', () => { el.classList.remove('show'); undoLast(); });
+        el.appendChild(b);
+    }
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), opts && opts.undo ? 6000 : 2500);
 }
 
 // ============ HELPERS ============
@@ -365,6 +442,42 @@ function progressChipEl(task) {
     el.innerHTML = `<span class="chip-progress-bar"><span style="width:${p.pct}%"></span></span>${p.pct}%`;
     el.title = `${p.done} of ${p.total} sub-tasks done`;
     return el;
+}
+
+// ---- Link ----
+// A task can carry one web link. Typed without a scheme ("amazon.co.uk/…")
+// it gets https:// so it opens rather than being read as a relative path.
+function normaliseUrl(raw) {
+    const v = (raw || '').trim();
+    if (!v) return '';
+    return /^[a-z][a-z0-9+.-]*:/i.test(v) ? v : 'https://' + v;
+}
+// The modal's Open button follows whatever is in the box.
+function syncUrlOpen() {
+    const url = normaliseUrl(document.getElementById('task-url').value);
+    const open = document.getElementById('task-url-open');
+    open.style.display = url ? '' : 'none';
+    if (url) open.href = url;
+}
+function urlHost(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+const LINK_SVG = '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9"/><path d="M9.5 6.5a3 3 0 0 0-4.2 0L3 8.8a3 3 0 0 0 4.2 4.2l.9-.9"/></svg>';
+// The chip is the link: a tap opens it in a new tab without opening the task.
+function linkChipEl(task) {
+    if (!task.url) return null;
+    const a = document.createElement('a');
+    a.className = 'chip chip-link';
+    a.href = task.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.innerHTML = LINK_SVG;
+    a.appendChild(document.createTextNode(urlHost(task.url)));
+    a.title = task.url;
+    a.draggable = false;
+    a.addEventListener('click', e => e.stopPropagation());
+    a.addEventListener('mousedown', e => e.stopPropagation());
+    return a;
 }
 
 // On a card split out of another task's checklist: a quiet pointer back to
@@ -1402,6 +1515,8 @@ function createListItem(task, opts = {}) {
     taskTags(task).forEach(tag => chips.appendChild(tagChipEl(tag)));
     const listProg = progressChipEl(task);
     if (listProg) chips.appendChild(listProg);
+    const listLink = linkChipEl(task);
+    if (listLink) chips.appendChild(listLink);
     if (task.subTheme) {
         const sc = document.createElement('span');
         sc.className = 'chip chip-sub';
@@ -1714,6 +1829,8 @@ function createBoardCard(task) {
     taskTags(task).forEach(tag => footer.appendChild(tagChipEl(tag)));
     const cardProg = progressChipEl(task);
     if (cardProg) footer.appendChild(cardProg);
+    const cardLink = linkChipEl(task);
+    if (cardLink) footer.appendChild(cardLink);
     if (task.recurring) {
         const rc = document.createElement('span');
         rc.className = 'chip chip-recurring';
@@ -1944,6 +2061,8 @@ function todoRow(task, where, list) {
     taskTags(task).forEach(tag => meta.appendChild(tagChipEl(tag)));
     const prog = progressChipEl(task);
     if (prog) meta.appendChild(prog);
+    const link = linkChipEl(task);
+    if (link) meta.appendChild(link);
     if (task.carriedFrom && !done) meta.appendChild(todoChip('↻ since ' + shortDay(task.carriedFrom), 'chip-carried'));
     if (meta.childNodes.length) body.appendChild(meta);
     if (!done) body.addEventListener('click', () => { todayOpenId = open ? null : task.id; render(); });
@@ -2692,6 +2811,7 @@ function createTask(data) {
         countdown: data.countdown || false,
         doDate: data.doDate || '',
         notes: data.notes || '',
+        url: data.url || '',
         createdDate: data.createdDate || todayStr(),
         completedDate: null,
         recurring: data.recurring || null,
@@ -2768,6 +2888,7 @@ function completeTask(id) {
             delete task.spawnedChildId;
         }
     } else {
+        if (Date.now() - userIntentAt < 1500) setTimeout(() => showToast('Completed: ' + task.title, { undo: true }), 0);
         task._prevKanban = task.kanbanColumn;
         task.status = 'complete';
         task.kanbanColumn = 'complete';
@@ -2989,6 +3110,8 @@ function openTaskModal(taskId, defaultKanbanCol) {
         document.getElementById('task-countdown').checked = !!t.countdown;
         document.getElementById('task-do').value = t.doDate || '';
         document.getElementById('task-notes').value = t.notes || '';
+        document.getElementById('task-url').value = t.url || '';
+        syncUrlOpen();
         setNotesOpen(!!t.notes);
         document.getElementById('task-add-to-kanban').checked = !!t.kanbanColumn;
         const ri = !!t.recurring;
@@ -3019,6 +3142,8 @@ function openTaskModal(taskId, defaultKanbanCol) {
         document.getElementById('task-countdown').checked = false;
         document.getElementById('task-do').value = '';
         document.getElementById('task-notes').value = '';
+        document.getElementById('task-url').value = '';
+        syncUrlOpen();
         setNotesOpen(false);
         document.getElementById('task-recurring-toggle').checked = false;
         document.getElementById('recurring-config').style.display = 'none';
@@ -3037,6 +3162,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
         if (t.recurring) modalOpenSections.add('repeat');
         if (modalSubtasks.length) modalOpenSections.add('subtasks');
         if (t.notes) modalOpenSections.add('notes');
+        if (t.url) modalOpenSections.add('link');
     }
     renderTaskSections();
     updateCountdownRow();
@@ -3066,7 +3192,7 @@ function closeTaskModal() {
 
 const TASK_SECTIONS = [
     ['tags', 'Tags'], ['priority', 'Priority'], ['dates', 'Dates'],
-    ['repeat', 'Repeat'], ['subtasks', 'Sub-tasks'], ['notes', 'Notes'],
+    ['repeat', 'Repeat'], ['subtasks', 'Sub-tasks'], ['link', 'Link'], ['notes', 'Notes'],
 ];
 
 // Progressive disclosure: the title and themes are always there; every other
@@ -3097,7 +3223,7 @@ function openTaskSection(key) {
     }
     if (key === 'notes') setNotesOpen(true);
     renderTaskSections();
-    const focus = { notes: 'task-notes', subtasks: 'subtask-new-name' }[key];
+    const focus = { notes: 'task-notes', subtasks: 'subtask-new-name', link: 'task-url' }[key];
     if (focus) document.getElementById(focus).focus({ preventScroll: true });
 }
 
@@ -3445,6 +3571,7 @@ function saveTaskModal() {
         countdown: document.getElementById('task-countdown').checked,
         doDate: document.getElementById('task-do').value,
         notes: document.getElementById('task-notes').value.trim(),
+        url: normaliseUrl(document.getElementById('task-url').value),
         recurring: getRecurringFromModal(),
     }, modalThemeIds);
 
@@ -3866,6 +3993,8 @@ function init() {
     document.getElementById('task-due').addEventListener('input', updateCountdownRow);
 
     document.getElementById('subtask-add-btn').addEventListener('click', addSubtaskFromInput);
+    document.getElementById('task-url').addEventListener('input', syncUrlOpen);
+    document.getElementById('task-url').addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
     document.getElementById('subtask-new-name').addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); addSubtaskFromInput(); }
     });
@@ -4104,6 +4233,21 @@ function init() {
     document.getElementById('snooze-date').addEventListener('change', e => {
         const v = e.target.value;
         if (v && v > todayStr() && snoozeTargetIds && snoozeTargetIds.length) applySnooze(v);
+    });
+
+    // Anything a person does marks the next save as theirs, so it can be undone
+    ['pointerdown', 'keydown', 'drop', 'change'].forEach(ev =>
+        document.addEventListener(ev, () => { userIntentAt = Date.now(); }, true));
+
+    // Ctrl/⌘-Z undoes the last change — except while typing, where the box's
+    // own undo is what you want, and while a modal holds unsaved edits.
+    document.addEventListener('keydown', e => {
+        if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+        const tg = e.target;
+        if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName))) return;
+        if ([...document.querySelectorAll('.modal-overlay')].some(m => getComputedStyle(m).display !== 'none')) return;
+        e.preventDefault();
+        undoLast();
     });
 
     // Escape key
@@ -4479,7 +4623,8 @@ async function pullFromCloud() {
         // flag itself or the repaired categories would never leave this device
         if (recoverOrphanTags() + recoverOrphanThemes()) { markTagRecovery(); localContrib = true; }
         if (rollOverPlan()) localContrib = true;
-        _baseSave();
+        inSyncMerge = true;
+        try { _baseSave(); } finally { inSyncMerge = false; }
         render();
         syncPaused = false;
 
