@@ -1,10 +1,12 @@
-const CACHE_NAME = 'life-kanban-v68';
+const CACHE_NAME = 'life-kanban-v69';
 const ASSETS = [
     './',
     './index.html',
     './styles.css',
     './app.js',
+    './vendor/chassis/tokens.css',
     './vendor/chassis/controls.css',
+    './vendor/chassis/components.css',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png',

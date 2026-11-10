@@ -8,9 +8,11 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Life Kanban">
     <title>Life Kanban</title>
-    <link rel="stylesheet" href="styles.css">
-    <!-- Shared checkboxes, radios, switches and sliders (sites/_shared/chassis), after the app's CSS. -->
+    <!-- Shared chassis (sites/_shared/chassis): tokens, controls, components, then the app's own CSS. -->
+    <link rel="stylesheet" href="vendor/chassis/tokens.css">
     <link rel="stylesheet" href="vendor/chassis/controls.css">
+    <link rel="stylesheet" href="vendor/chassis/components.css">
+    <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -19,29 +21,26 @@
 </head>
 <body>
 
-<header id="app-header">
-    <h1 class="logo">Life Kanban</h1>
-    <nav class="view-tabs">
-        <button class="tab active" data-view="today">Today</button>
-        <button class="tab" data-view="board">Board</button>
-        <button class="tab" data-view="lists">Lists</button>
-        <button class="tab" data-view="notes" id="tab-notes">Notes</button>
+<header id="app-header" class="ui-bar">
+    <h1 class="name logo">Life Kanban</h1>
+    <nav class="ui-seg view-tabs" role="tablist" aria-label="Views">
+        <button class="tab" role="tab" aria-selected="true" data-view="today">Today</button>
+        <button class="tab" role="tab" aria-selected="false" data-view="board">Board</button>
+        <button class="tab" role="tab" aria-selected="false" data-view="lists">Lists</button>
+        <button class="tab" role="tab" aria-selected="false" data-view="notes" id="tab-notes">Notes</button>
     </nav>
-    <div class="header-right">
-        <button class="icon-btn" id="settings-btn" title="Settings">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
-    </div>
+    <button class="ui-btn quiet icon" id="settings-btn" title="Settings" aria-label="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
 </header>
 
 <main id="app-main">
 
     <!-- Quick capture: one field, straight onto the review pile -->
     <div class="quick-add" id="quick-add">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <input type="text" id="quick-add-input" placeholder="Quick add &mdash; lands in Review&hellip;">
-        <button class="btn-small" id="quick-add-btn">Add</button>
-        <span class="quick-add-flash" id="quick-add-flash"></span>
+        <input type="text" id="quick-add-input" class="ui-input" placeholder="Quick add &mdash; lands in Review&hellip;">
+        <button class="ui-btn primary" id="quick-add-btn">Add</button>
+        <span class="ui-hint quick-add-flash" id="quick-add-flash"></span>
     </div>
 
     <!-- ============ TODAY VIEW ============ -->
@@ -53,10 +52,10 @@
     <!-- ============ NOTES VIEW ============ -->
     <section id="view-notes" class="view">
         <div class="notes-head">
-            <h3>Notes</h3>
-            <span class="notes-sub">Parked, not prioritised &mdash; things to buy, someday-maybes. Off the main list but never hidden.</span>
+            <h2 class="ui-h2">Notes</h2>
+            <p class="ui-sub notes-sub">Parked, not prioritised &mdash; things to buy, someday-maybes. Off the main list but never hidden.</p>
         </div>
-        <div class="notes-bar" id="notes-bar"></div>
+        <div class="ui-chips scroll notes-bar" id="notes-bar"></div>
         <div class="tag-filter" id="notes-tag-filter"></div>
         <div id="notes-content" class="lists-content"></div>
     </section>
@@ -66,19 +65,18 @@
         <div class="lists-toolbar">
             <div class="lists-toolbar-left">
                 <div class="search-wrap">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input type="text" id="list-search" placeholder="Search…">
+                    <input type="search" id="list-search" class="ui-input search" placeholder="Search…">
                 </div>
-                <button class="btn-ghost filters-btn" id="open-filters">
+                <button class="ui-btn filters-btn" id="open-filters">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                     <span id="filters-btn-label">Filters &amp; sort</span>
                 </button>
                 <div id="filter-controls" class="filter-controls">
-                <select id="list-filter-priority" class="filter-select">
+                <select id="list-filter-priority" class="ui-input filter-select" aria-label="Priority">
                     <option value="">All Priorities</option>
                     <!-- the rest come from PRIORITY_LEVELS -->
                 </select>
-                <select id="list-filter-size" class="filter-select">
+                <select id="list-filter-size" class="ui-input filter-select" aria-label="Size">
                     <option value="">All Sizes</option>
                     <option value="xs">XS</option>
                     <option value="s">S</option>
@@ -87,19 +85,19 @@
                     <option value="xl">XL</option>
                     <option value="xxl">XXL</option>
                 </select>
-                <select id="list-filter-status" class="filter-select">
+                <select id="list-filter-status" class="ui-input filter-select" aria-label="Status">
                     <option value="active">Active</option>
                     <option value="all">All incl. done</option>
                     <option value="complete">Completed</option>
                 </select>
-                <select id="list-filter-age" class="filter-select">
+                <select id="list-filter-age" class="ui-input filter-select" aria-label="Age">
                     <option value="">Any age</option>
                     <option value="7">In list 1+ week</option>
                     <option value="14">In list 2+ weeks</option>
                     <option value="30">In list 1+ month</option>
                     <option value="90">In list 3+ months</option>
                 </select>
-                <select id="list-sort" class="filter-select">
+                <select id="list-sort" class="ui-input filter-select" aria-label="Sort">
                     <option value="priority">Sort: Priority</option>
                     <option value="size">Sort: Size</option>
                     <option value="date">Sort: Date added</option>
@@ -108,26 +106,24 @@
                 </div>
             </div>
             <div class="lists-toolbar-right">
-                <button class="btn-ghost" id="bulk-select-btn">Select</button>
+                <button class="ui-btn" id="bulk-select-btn">Select</button>
             </div>
         </div>
 
-        <div id="filter-status" class="filter-status" style="display:none;"></div>
+        <div id="filter-status" class="ui-note filter-status" style="display:none;"></div>
 
-        <div class="bulk-action-bar" id="bulk-action-bar" style="display:none;">
-            <span id="bulk-count">0 selected</span>
-            <button class="btn-small" id="bulk-to-kanban">Add to Kanban</button>
-            <button class="btn-small btn-ghost" id="bulk-from-kanban">Remove from Kanban</button>
-            <button class="btn-small" id="bulk-snooze">Snooze</button>
-            <button class="btn-small" id="bulk-to-notes">To Notes</button>
-            <button class="btn-ghost" id="bulk-cancel">Cancel</button>
+        <div class="ui-note bulk-action-bar" id="bulk-action-bar" style="display:none;">
+            <span id="bulk-count" class="bulk-count">0 selected</span>
+            <button class="ui-btn small primary" id="bulk-to-kanban">Add to Kanban</button>
+            <button class="ui-btn small" id="bulk-from-kanban">Remove from Kanban</button>
+            <button class="ui-btn small" id="bulk-snooze">Snooze</button>
+            <button class="ui-btn small" id="bulk-to-notes">To Notes</button>
+            <button class="ui-btn small quiet" id="bulk-cancel">Cancel</button>
         </div>
 
-        <div id="stale-banner" class="stale-banner" style="display:none;"></div>
+        <div id="stale-banner" class="ui-note warn page-note" style="display:none;"></div>
 
-        <div class="theme-tabs-scroll">
-            <div class="theme-tabs" id="lists-theme-tabs"></div>
-        </div>
+        <div class="ui-chips scroll theme-tabs" id="lists-theme-tabs"></div>
         <div class="tag-filter" id="lists-tag-filter"></div>
 
         <div id="lists-content" class="lists-content"></div>
@@ -136,34 +132,29 @@
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" class="view">
         <div class="board-stats" id="board-stats"></div>
-        <div id="review-banner" class="review-banner" style="display:none;"></div>
-        <div id="list-reminder" class="review-banner" style="display:none;">
-            <span class="review-banner-text">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-                <span><strong>Time to review your Lists</strong> — you haven't checked them today.</span>
-            </span>
-            <div class="review-banner-actions">
-                <button class="btn-small" id="reminder-open">Review list</button>
-                <button class="btn-ghost" id="reminder-snooze">1 hr</button>
-                <button class="btn-ghost" id="reminder-tomorrow">Tomorrow</button>
+        <div id="review-banner" class="ui-note page-note" style="display:none;"></div>
+        <div id="list-reminder" class="ui-note page-note" style="display:none;">
+            <span class="ui-spacer"><strong>Time to review your Lists</strong> — you haven't checked them today.</span>
+            <div class="ui-actions">
+                <button class="ui-btn small primary" id="reminder-open">Review list</button>
+                <button class="ui-btn small" id="reminder-snooze">1 hr</button>
+                <button class="ui-btn small" id="reminder-tomorrow">Tomorrow</button>
             </div>
         </div>
-        <div class="theme-tabs-scroll">
-            <div class="theme-tabs" id="board-filter"></div>
-        </div>
+        <div class="ui-chips scroll theme-tabs" id="board-filter"></div>
         <div class="tag-filter" id="board-tag-filter"></div>
         <div id="board-columns" class="board-columns"></div>
     </section>
 
     <!-- ============ ADMIN VIEW ============ -->
     <section id="view-admin" class="view">
-        <div class="admin-tabs">
-            <button class="admin-tab active" data-admin="themes">Themes</button>
-            <button class="admin-tab" data-admin="tags">Tags</button>
-            <button class="admin-tab" data-admin="archive">Archive</button>
-            <button class="admin-tab" data-admin="data">Data</button>
+        <div class="ui-seg admin-tabs" role="tablist" aria-label="Admin">
+            <button class="admin-tab" role="tab" aria-selected="true" data-admin="themes">Themes</button>
+            <button class="admin-tab" role="tab" aria-selected="false" data-admin="tags">Tags</button>
+            <button class="admin-tab" role="tab" aria-selected="false" data-admin="archive">Archive</button>
+            <button class="admin-tab" role="tab" aria-selected="false" data-admin="data">Data</button>
         </div>
-        <div id="admin-content" class="admin-content"></div>
+        <div id="admin-content" class="ui-stack admin-content"></div>
     </section>
 
 </main>
@@ -173,325 +164,302 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
 
+<!-- Every pop-up is the shared sheet: <dialog class="ui-sheet">, opened with showModal()
+     (openSheet / closeSheet in app.js). Escape is handled by app.js, not the browser. -->
+
 <!-- ============ TASK MODAL ============ -->
-<div id="task-modal" class="modal-overlay" style="display:none;">
-    <div class="modal modal-task">
-        <div class="modal-header">
-            <h3 id="task-modal-title">New Task</h3>
-            <button class="icon-btn modal-close" id="task-modal-close">&times;</button>
-        </div>
-        <div class="modal-body">
+<dialog id="task-modal" class="ui-sheet task-sheet" aria-labelledby="task-modal-title">
+    <header>
+        <h2 id="task-modal-title">New Task</h2>
+        <button class="ui-btn quiet icon small" id="task-modal-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="body">
 
-            <div class="form-group">
-                <input type="text" id="task-title" class="task-title-input" placeholder="What needs doing?">
-                <textarea id="task-title-multi" class="task-title-input task-title-multi" rows="4" placeholder="One task per line…" style="display:none;"></textarea>
-                <label class="multi-add-row" id="multi-add-row">
-                    <input type="checkbox" id="task-multi-toggle">
-                    <span>Add several at once (one per line)</span>
+        <div class="ui-stack">
+            <input type="text" id="task-title" class="ui-input task-title-input" placeholder="What needs doing?" aria-label="Title">
+            <textarea id="task-title-multi" class="ui-input" rows="4" placeholder="One task per line…" aria-label="Titles, one per line" style="display:none;"></textarea>
+            <label class="check" id="multi-add-row">
+                <input type="checkbox" id="task-multi-toggle">
+                Add several at once (one per line)
+            </label>
+        </div>
+
+        <div class="field">
+            <span class="field-label">Themes</span>
+            <div class="field-control">
+                <div id="theme-picker" class="ui-chips"></div>
+            </div>
+        </div>
+
+        <div class="field" id="subtheme-field">
+            <span class="field-label">Sub-theme</span>
+            <div class="field-control">
+                <div class="subtheme-row">
+                    <select id="task-subtheme" class="ui-input" aria-label="Sub-theme">
+                        <option value="">None</option>
+                    </select>
+                    <button type="button" class="ui-btn" id="subtheme-add-btn">+ New</button>
+                </div>
+                <div class="subtheme-new" id="subtheme-new" style="display:none;">
+                    <select id="subtheme-new-theme" class="ui-input" aria-label="Theme" style="display:none;"></select>
+                    <input type="text" id="subtheme-new-name" class="ui-input" placeholder="New sub-theme&hellip;" aria-label="New sub-theme">
+                    <button type="button" class="ui-btn" id="subtheme-new-cancel">Cancel</button>
+                    <button type="button" class="ui-btn primary" id="subtheme-new-save">Add</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Everything below the themes stays folded away until asked for:
+             one "+" chip per section (see renderTaskSections) -->
+        <div class="ui-chips task-more" id="task-more"></div>
+
+        <div class="field" data-section="tags">
+            <span class="field-label">Tags</span>
+            <div class="field-control">
+                <div id="tag-picker" class="ui-stack tag-picker"></div>
+            </div>
+        </div>
+
+        <div class="field" data-section="priority">
+            <span class="field-label">Priority &amp; size</span>
+            <div class="field-control ui-stack">
+                <!-- filled from PRIORITY_LEVELS -->
+                <div class="ui-chips" id="priority-picker"></div>
+                <div class="ui-chips" id="size-picker">
+                    <button type="button" class="ui-chip size-btn" aria-pressed="true" data-value="xs">XS</button>
+                    <button type="button" class="ui-chip size-btn" aria-pressed="false" data-value="s">S</button>
+                    <button type="button" class="ui-chip size-btn" aria-pressed="false" data-value="m">M</button>
+                    <button type="button" class="ui-chip size-btn" aria-pressed="false" data-value="l">L</button>
+                    <button type="button" class="ui-chip size-btn" aria-pressed="false" data-value="xl">XL</button>
+                    <button type="button" class="ui-chip size-btn" aria-pressed="false" data-value="xxl">XXL</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="field" data-section="dates">
+            <span class="field-label">Dates</span>
+            <div class="field-control ui-stack">
+                <div class="date-grid">
+                    <label class="ui-field"><span>Do by</span><input type="date" id="task-due" class="ui-input"></label>
+                    <label class="ui-field"><span>Do on</span><input type="date" id="task-do" class="ui-input"></label>
+                </div>
+                <label class="check" id="countdown-row">
+                    <input type="checkbox" id="task-countdown">
+                    Show countdown on card
+                </label>
+                <p class="ui-hint">“Do on” auto-adds it to the Kanban backlog that day</p>
+            </div>
+        </div>
+
+        <div data-section="repeat">
+        <div class="field field-toggle">
+            <span class="field-label">Repeat</span>
+            <div class="field-control">
+                <label class="check">
+                    <input type="checkbox" role="switch" id="task-recurring-toggle" aria-label="Repeat">
+                </label>
+            </div>
+        </div>
+
+        <div id="recurring-config" class="ui-card inset ui-stack recurring-config" style="display:none;">
+            <div class="ui-seg">
+                <button type="button" class="recur-btn" aria-pressed="true" data-type="daily">Daily</button>
+                <button type="button" class="recur-btn" aria-pressed="false" data-type="weekly">Weekly</button>
+                <button type="button" class="recur-btn" aria-pressed="false" data-type="monthly">Monthly</button>
+            </div>
+
+            <div id="recur-daily" class="ui-stack">
+                <div class="inline-row">
+                    <span>Every</span>
+                    <input type="number" id="recur-daily-interval" value="1" min="1" max="365" class="ui-input num-input" aria-label="Days">
+                    <span>day(s)</span>
+                </div>
+            </div>
+
+            <div id="recur-weekly" class="ui-stack" style="display:none;">
+                <div class="inline-row">
+                    <span>Every</span>
+                    <input type="number" id="recur-weekly-interval" value="1" min="1" max="52" class="ui-input num-input" aria-label="Weeks">
+                    <span>week(s) on</span>
+                </div>
+                <div class="ui-chips">
+                    <button type="button" class="ui-chip dow-btn" aria-pressed="false" data-day="1">Mon</button>
+                    <button type="button" class="ui-chip dow-btn" aria-pressed="false" data-day="2">Tue</button>
+                    <button type="button" class="ui-chip dow-btn" aria-pressed="false" data-day="3">Wed</button>
+                    <button type="button" class="ui-chip dow-btn" aria-pressed="false" data-day="4">Thu</button>
+                    <button type="button" class="ui-chip dow-btn" aria-pressed="false" data-day="5">Fri</button>
+                    <button type="button" class="ui-chip dow-btn" aria-pressed="false" data-day="6">Sat</button>
+                    <button type="button" class="ui-chip dow-btn" aria-pressed="false" data-day="0">Sun</button>
+                </div>
+            </div>
+
+            <div id="recur-monthly" class="ui-stack" style="display:none;">
+                <div class="inline-row">
+                    <span>Every</span>
+                    <input type="number" id="recur-monthly-interval" value="1" min="1" max="60" class="ui-input num-input" aria-label="Months">
+                    <span>month(s)</span>
+                </div>
+                <label class="check inline-row">
+                    <input type="radio" name="monthly-mode" value="date" checked> On day
+                    <input type="number" id="recur-monthly-day" value="1" min="1" max="31" class="ui-input num-input" aria-label="Day of the month">
+                    of the month
+                </label>
+                <label class="check inline-row">
+                    <input type="radio" name="monthly-mode" value="weekday"> On the
+                    <select id="recur-monthly-week" class="ui-input inline-select" aria-label="Week of the month">
+                        <option value="1">1st</option>
+                        <option value="2">2nd</option>
+                        <option value="3">3rd</option>
+                        <option value="4">4th</option>
+                    </select>
+                    <select id="recur-monthly-dow" class="ui-input inline-select" aria-label="Day of the week">
+                        <option value="1">Monday</option>
+                        <option value="2">Tuesday</option>
+                        <option value="3">Wednesday</option>
+                        <option value="4">Thursday</option>
+                        <option value="5">Friday</option>
+                        <option value="6">Saturday</option>
+                        <option value="0">Sunday</option>
+                    </select>
                 </label>
             </div>
 
-            <div class="field">
-                <span class="field-label">Themes</span>
-                <div class="field-control">
-                    <div id="theme-picker" class="theme-picker"></div>
+            <div class="ui-stack recur-today">
+                <label class="check"><input type="checkbox" id="recur-on-today"> Put it on Today on the day</label>
+                <div class="ui-stack" id="recur-missed-row">
+                    <span class="ui-hint">If it's not done that day</span>
+                    <label class="check"><input type="radio" name="recur-missed" value="carry" checked> Move it to the next day</label>
+                    <label class="check"><input type="radio" name="recur-missed" value="skip"> Only that day</label>
                 </div>
-            </div>
-
-            <div class="field" id="subtheme-field">
-                <span class="field-label">Sub-theme</span>
-                <div class="field-control">
-                    <div class="subtheme-row">
-                        <select id="task-subtheme" class="form-select">
-                            <option value="">None</option>
-                        </select>
-                        <button type="button" class="btn-ghost subtheme-add-btn" id="subtheme-add-btn">+ New</button>
-                    </div>
-                    <div class="subtheme-new" id="subtheme-new" style="display:none;">
-                        <select id="subtheme-new-theme" class="form-select form-select-sm" style="display:none;"></select>
-                        <input type="text" id="subtheme-new-name" class="form-input" placeholder="New sub-theme&hellip;">
-                        <button type="button" class="btn-ghost" id="subtheme-new-cancel">Cancel</button>
-                        <button type="button" class="btn-small" id="subtheme-new-save">Add</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Everything below the themes stays folded away until asked for:
-                 one "+" pill per section (see renderTaskSections) -->
-            <div class="task-more" id="task-more"></div>
-
-            <div class="field" data-section="tags">
-                <span class="field-label">Tags</span>
-                <div class="field-control">
-                    <div id="tag-picker" class="tag-picker"></div>
-                </div>
-            </div>
-
-            <div class="field" data-section="priority">
-                <span class="field-label">Priority &amp; size</span>
-                <div class="field-control">
-                    <div class="ps-grid">
-                        <!-- filled from PRIORITY_LEVELS -->
-                        <div class="btn-group" id="priority-picker"></div>
-                        <div class="size-picker" id="size-picker">
-                            <button type="button" class="size-btn active" data-value="xs">XS</button>
-                            <button type="button" class="size-btn" data-value="s">S</button>
-                            <button type="button" class="size-btn" data-value="m">M</button>
-                            <button type="button" class="size-btn" data-value="l">L</button>
-                            <button type="button" class="size-btn" data-value="xl">XL</button>
-                            <button type="button" class="size-btn" data-value="xxl">XXL</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="field" data-section="dates">
-                <span class="field-label">Dates</span>
-                <div class="field-control">
-                    <div class="date-grid">
-                        <div>
-                            <span class="sub-label">Do by</span>
-                            <input type="date" id="task-due" class="form-input">
-                        </div>
-                        <div>
-                            <span class="sub-label">Do on</span>
-                            <input type="date" id="task-do" class="form-input">
-                        </div>
-                    </div>
-                    <label class="check-row" id="countdown-row">
-                        <input type="checkbox" id="task-countdown">
-                        <span>Show countdown on card</span>
-                    </label>
-                    <div class="form-hint">“Do on” auto-adds it to the Kanban backlog that day</div>
-                </div>
-            </div>
-
-            <div data-section="repeat">
-            <div class="field field-toggle">
-                <span class="field-label">Repeat</span>
-                <div class="field-control">
-                    <label class="switch">
-                        <input type="checkbox" role="switch" id="task-recurring-toggle">
-                    </label>
-                </div>
-            </div>
-
-            <div id="recurring-config" class="recurring-config" style="display:none;">
-                <div class="recur-type-row">
-                    <button type="button" class="recur-btn active" data-type="daily">Daily</button>
-                    <button type="button" class="recur-btn" data-type="weekly">Weekly</button>
-                    <button type="button" class="recur-btn" data-type="monthly">Monthly</button>
-                </div>
-
-                <div id="recur-daily" class="recur-opts">
-                    <div class="inline-row">
-                        <span>Every</span>
-                        <input type="number" id="recur-daily-interval" value="1" min="1" max="365" class="num-input">
-                        <span>day(s)</span>
-                    </div>
-                </div>
-
-                <div id="recur-weekly" class="recur-opts" style="display:none;">
-                    <div class="inline-row">
-                        <span>Every</span>
-                        <input type="number" id="recur-weekly-interval" value="1" min="1" max="52" class="num-input">
-                        <span>week(s) on</span>
-                    </div>
-                    <div class="dow-picker">
-                        <button type="button" class="dow-btn" data-day="1">Mon</button>
-                        <button type="button" class="dow-btn" data-day="2">Tue</button>
-                        <button type="button" class="dow-btn" data-day="3">Wed</button>
-                        <button type="button" class="dow-btn" data-day="4">Thu</button>
-                        <button type="button" class="dow-btn" data-day="5">Fri</button>
-                        <button type="button" class="dow-btn" data-day="6">Sat</button>
-                        <button type="button" class="dow-btn" data-day="0">Sun</button>
-                    </div>
-                </div>
-
-                <div id="recur-monthly" class="recur-opts" style="display:none;">
-                    <div class="inline-row">
-                        <span>Every</span>
-                        <input type="number" id="recur-monthly-interval" value="1" min="1" max="60" class="num-input">
-                        <span>month(s)</span>
-                    </div>
-                    <label class="radio-row">
-                        <input type="radio" name="monthly-mode" value="date" checked> On day
-                        <input type="number" id="recur-monthly-day" value="1" min="1" max="31" class="num-input">
-                        of the month
-                    </label>
-                    <label class="radio-row" style="margin-top:8px;">
-                        <input type="radio" name="monthly-mode" value="weekday"> On the
-                        <select id="recur-monthly-week" class="form-select-sm">
-                            <option value="1">1st</option>
-                            <option value="2">2nd</option>
-                            <option value="3">3rd</option>
-                            <option value="4">4th</option>
-                        </select>
-                        <select id="recur-monthly-dow" class="form-select-sm">
-                            <option value="1">Monday</option>
-                            <option value="2">Tuesday</option>
-                            <option value="3">Wednesday</option>
-                            <option value="4">Thursday</option>
-                            <option value="5">Friday</option>
-                            <option value="6">Saturday</option>
-                            <option value="0">Sunday</option>
-                        </select>
-                    </label>
-                </div>
-
-                <div class="recur-today">
-                    <label class="check"><input type="checkbox" id="recur-on-today"> Put it on Today on the day</label>
-                    <div class="recur-missed" id="recur-missed-row">
-                        <span class="recur-missed-label">If it's not done that day</span>
-                        <label class="check"><input type="radio" name="recur-missed" value="carry" checked> Move it to the next day</label>
-                        <label class="check"><input type="radio" name="recur-missed" value="skip"> Only that day</label>
-                    </div>
-                </div>
-            </div>
-            </div><!-- /repeat -->
-
-            <div class="field field-subtasks" data-section="subtasks">
-                <span class="field-label">Sub-tasks</span>
-                <div class="field-control">
-                    <div class="subtask-progress" id="subtask-progress" style="display:none;"></div>
-                    <div id="subtask-list" class="subtask-list"></div>
-                    <div class="subtask-add">
-                        <input type="text" id="subtask-new-name" class="form-input" placeholder="Add a step&hellip;">
-                        <button type="button" class="btn-small" id="subtask-add-btn">Add</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="field field-link" data-section="link">
-                <span class="field-label">Link</span>
-                <div class="field-control task-url-row">
-                    <input type="url" id="task-url" class="form-input" placeholder="Paste a web address…" inputmode="url" autocomplete="off" spellcheck="false">
-                    <a id="task-url-open" class="btn-small" target="_blank" rel="noopener noreferrer" style="display:none;">Open</a>
-                </div>
-            </div>
-
-            <div class="field field-notes" data-section="notes">
-                <span class="field-label">Notes</span>
-                <div class="field-control">
-                    <button type="button" class="btn-ghost add-notes-btn" id="task-notes-add">+ Add notes</button>
-                    <textarea id="task-notes" class="form-textarea" rows="3" placeholder="Optional notes…" style="display:none;"></textarea>
-                </div>
-            </div>
-
-
-            <div id="task-in-list" class="task-in-list" style="display:none;"></div>
-
-        </div>
-        <div class="modal-footer">
-            <button class="btn-danger-ghost" id="task-modal-delete" style="display:none;">Delete</button>
-            <div class="modal-footer-right">
-                <label class="check-row footer-check">
-                    <input type="checkbox" id="task-add-to-kanban">
-                    <span>Add to board</span>
-                </label>
-                <button class="btn-ghost" id="task-modal-cancel">Cancel</button>
-                <button class="btn-primary" id="task-modal-save">Save</button>
             </div>
         </div>
+        </div><!-- /repeat -->
+
+        <div class="field field-subtasks" data-section="subtasks">
+            <span class="field-label">Sub-tasks</span>
+            <div class="field-control">
+                <div class="subtask-progress" id="subtask-progress" style="display:none;"></div>
+                <div id="subtask-list" class="subtask-list"></div>
+                <div class="subtask-add">
+                    <input type="text" id="subtask-new-name" class="ui-input" placeholder="Add a step&hellip;" aria-label="New step">
+                    <button type="button" class="ui-btn primary" id="subtask-add-btn">Add</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="field field-link" data-section="link">
+            <span class="field-label">Link</span>
+            <div class="field-control task-url-row">
+                <input type="url" id="task-url" class="ui-input" placeholder="Paste a web address…" aria-label="Link" inputmode="url" autocomplete="off" spellcheck="false">
+                <a id="task-url-open" class="ui-btn" target="_blank" rel="noopener noreferrer" style="display:none;">Open</a>
+            </div>
+        </div>
+
+        <div class="field field-notes" data-section="notes">
+            <span class="field-label">Notes</span>
+            <div class="field-control">
+                <button type="button" class="ui-btn small" id="task-notes-add">+ Add notes</button>
+                <textarea id="task-notes" class="ui-input" rows="3" placeholder="Optional notes…" aria-label="Notes" style="display:none;"></textarea>
+            </div>
+        </div>
+
+
+        <p id="task-in-list" class="ui-hint task-in-list" style="display:none;"></p>
+
     </div>
-</div>
+    <footer class="ui-actions task-footer">
+        <button class="ui-btn danger" id="task-modal-delete" style="display:none;">Delete</button>
+        <span class="ui-spacer"></span>
+        <label class="check footer-check">
+            <input type="checkbox" id="task-add-to-kanban">
+            Add to board
+        </label>
+        <button class="ui-btn" id="task-modal-cancel">Cancel</button>
+        <button class="ui-btn primary" id="task-modal-save">Save</button>
+    </footer>
+</dialog>
 
 <!-- ============ THEME EDITOR MODAL ============ -->
-<div id="theme-edit-modal" class="modal-overlay" style="display:none;">
-    <div class="modal modal-small">
-        <div class="modal-header">
-            <h3 id="theme-edit-title">Add Theme</h3>
-            <button class="icon-btn modal-close" id="theme-edit-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div class="form-group">
-                <label class="form-label">Name</label>
-                <input type="text" id="theme-edit-name" class="form-input" placeholder="Theme name">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Colour</label>
-                <div class="color-pick-row">
-                    <input type="color" id="theme-edit-color" value="#007AFF" class="color-input">
-                    <span id="theme-edit-color-hex">#007AFF</span>
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Focus</label>
-                <div class="btn-group" id="theme-focus-picker">
-                    <button type="button" class="group-btn active" data-value="home">Home</button>
-                    <button type="button" class="group-btn" data-value="work">Work</button>
-                </div>
-                <div class="form-hint">Used by the Board's All / Work / Home focus switcher</div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Sub-themes <span class="form-label-hint">(one per line)</span></label>
-                <textarea id="theme-edit-subthemes" class="form-textarea" rows="4" placeholder="e.g.&#10;Meetings&#10;Reports&#10;Calls"></textarea>
-            </div>
-            <div class="form-group">
-                <label class="toggle-row">
-                    <span class="form-label" style="margin:0">Hidden</span>
-                    <label class="switch">
-                        <input type="checkbox" role="switch" id="theme-edit-hidden">
-                    </label>
-                </label>
-                <div class="form-hint">Hidden themes and their tasks don't appear in Lists or on the Board</div>
-            </div>
-            <div class="form-group">
-                <label class="toggle-row">
-                    <span class="form-label" style="margin:0">Hide on weekends</span>
-                    <label class="switch">
-                        <input type="checkbox" role="switch" id="theme-edit-hide-weekend">
-                    </label>
-                </label>
-                <div class="form-hint">This theme's cards are hidden from the Board on Saturdays and Sundays</div>
+<dialog id="theme-edit-modal" class="ui-sheet" aria-labelledby="theme-edit-title">
+    <header>
+        <h2 id="theme-edit-title">Add Theme</h2>
+        <button class="ui-btn quiet icon small" id="theme-edit-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="body">
+        <label class="ui-field">
+            <span>Name</span>
+            <input type="text" id="theme-edit-name" class="ui-input" placeholder="Theme name">
+        </label>
+        <div class="ui-field">
+            <span>Colour</span>
+            <div class="color-pick-row">
+                <input type="color" id="theme-edit-color" value="#007AFF" class="color-input" aria-label="Colour">
+                <span id="theme-edit-color-hex">#007AFF</span>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="btn-danger-ghost" id="theme-edit-delete" style="display:none;">Delete</button>
-            <div class="modal-footer-right">
-                <button class="btn-ghost" id="theme-edit-cancel">Cancel</button>
-                <button class="btn-primary" id="theme-edit-save">Save</button>
+        <div class="ui-field">
+            <span>Focus</span>
+            <div class="ui-seg" id="theme-focus-picker">
+                <button type="button" class="group-btn" aria-pressed="true" data-value="home">Home</button>
+                <button type="button" class="group-btn" aria-pressed="false" data-value="work">Work</button>
             </div>
+            <small>Used by the Board's All / Work / Home focus switcher</small>
+        </div>
+        <label class="ui-field">
+            <span>Sub-themes (one per line)</span>
+            <textarea id="theme-edit-subthemes" class="ui-input" rows="4" placeholder="e.g.&#10;Meetings&#10;Reports&#10;Calls"></textarea>
+        </label>
+        <div class="ui-stack setting">
+            <label class="check"><input type="checkbox" role="switch" id="theme-edit-hidden"> Hidden</label>
+            <p class="ui-hint">Hidden themes and their tasks don't appear in Lists or on the Board</p>
+        </div>
+        <div class="ui-stack setting">
+            <label class="check"><input type="checkbox" role="switch" id="theme-edit-hide-weekend"> Hide on weekends</label>
+            <p class="ui-hint">This theme's cards are hidden from the Board on Saturdays and Sundays</p>
         </div>
     </div>
-</div>
+    <footer class="ui-actions">
+        <button class="ui-btn danger" id="theme-edit-delete" style="display:none;">Delete</button>
+        <span class="ui-spacer"></span>
+        <button class="ui-btn" id="theme-edit-cancel">Cancel</button>
+        <button class="ui-btn primary" id="theme-edit-save">Save</button>
+    </footer>
+</dialog>
 
 <!-- ============ TAG CATEGORY MODAL ============ -->
-<div id="tagcat-modal" class="modal-overlay" style="display:none;">
-    <div class="modal modal-small">
-        <div class="modal-header">
-            <h3 id="tagcat-title">Add Category</h3>
-            <button class="icon-btn modal-close" id="tagcat-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div class="form-group">
-                <label class="form-label">Name</label>
-                <input type="text" id="tagcat-name" class="form-input" placeholder="e.g. People, When, Italy trip">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Colour</label>
-                <div class="color-pick-row">
-                    <input type="color" id="tagcat-color" value="#5856D6" class="color-input">
-                    <span id="tagcat-color-hex">#5856D6</span>
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Tags <span class="form-label-hint">(one per line)</span></label>
-                <textarea id="tagcat-tags" class="form-textarea" rows="5" placeholder="e.g.&#10;Barney&#10;Harry&#10;Jim"></textarea>
-                <div class="form-hint">Renaming a line renames the tag everywhere. Deleting one takes it off any task using it.</div>
+<dialog id="tagcat-modal" class="ui-sheet" aria-labelledby="tagcat-title">
+    <header>
+        <h2 id="tagcat-title">Add Category</h2>
+        <button class="ui-btn quiet icon small" id="tagcat-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="body">
+        <label class="ui-field">
+            <span>Name</span>
+            <input type="text" id="tagcat-name" class="ui-input" placeholder="e.g. People, When, Italy trip">
+        </label>
+        <div class="ui-field">
+            <span>Colour</span>
+            <div class="color-pick-row">
+                <input type="color" id="tagcat-color" value="#5856D6" class="color-input" aria-label="Colour">
+                <span id="tagcat-color-hex">#5856D6</span>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="btn-danger-ghost" id="tagcat-delete" style="display:none;">Delete</button>
-            <div class="modal-footer-right">
-                <button class="btn-ghost" id="tagcat-cancel">Cancel</button>
-                <button class="btn-primary" id="tagcat-save">Save</button>
-            </div>
-        </div>
+        <label class="ui-field">
+            <span>Tags (one per line)</span>
+            <textarea id="tagcat-tags" class="ui-input" rows="5" placeholder="e.g.&#10;Barney&#10;Harry&#10;Jim"></textarea>
+            <small>Renaming a line renames the tag everywhere. Deleting one takes it off any task using it.</small>
+        </label>
     </div>
-</div>
+    <footer class="ui-actions">
+        <button class="ui-btn danger" id="tagcat-delete" style="display:none;">Delete</button>
+        <span class="ui-spacer"></span>
+        <button class="ui-btn" id="tagcat-cancel">Cancel</button>
+        <button class="ui-btn primary" id="tagcat-save">Save</button>
+    </footer>
+</dialog>
 
 <!-- ============ CONTEXT MENU ============ -->
+<!-- No shared pop-over menu yet; this one is app-made, from the shared tokens. -->
 <div id="context-menu" class="context-menu" style="display:none;">
     <button data-action="edit">Edit</button>
     <button data-action="spotlight" class="ctx-spotlight">★ Spotlight</button>
@@ -513,172 +481,136 @@
 </div>
 
 <!-- ============ SETTINGS MODAL ============ -->
-<div id="settings-modal" class="modal-overlay" style="display:none;">
-    <div class="modal modal-small">
-        <div class="modal-header">
-            <h3>Settings</h3>
-            <button class="icon-btn modal-close" id="settings-close">&times;</button>
+<dialog id="settings-modal" class="ui-sheet" aria-labelledby="settings-title">
+    <header>
+        <h2 id="settings-title">Settings</h2>
+        <button class="ui-btn quiet icon small" id="settings-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="body">
+        <div class="ui-stack">
+            <span class="ui-label">Manage</span>
+            <div class="settings-admin">
+                <button type="button" class="ui-btn small" data-admin-open="themes">Themes</button>
+                <button type="button" class="ui-btn small" data-admin-open="tags">Tags</button>
+                <button type="button" class="ui-btn small" data-admin-open="archive">Archive</button>
+                <button type="button" class="ui-btn small" data-admin-open="data">Data</button>
+            </div>
         </div>
-        <div class="modal-body">
-            <div class="form-group">
-                <span class="form-label">Manage</span>
-                <div class="settings-admin">
-                    <button type="button" class="settings-admin-btn" data-admin-open="themes">Themes</button>
-                    <button type="button" class="settings-admin-btn" data-admin-open="tags">Tags</button>
-                    <button type="button" class="settings-admin-btn" data-admin-open="archive">Archive</button>
-                    <button type="button" class="settings-admin-btn" data-admin-open="data">Data</button>
+        <label class="check"><input type="checkbox" role="switch" id="settings-dark"> Dark mode</label>
+        <div class="ui-stack setting">
+            <label class="check"><input type="checkbox" role="switch" id="settings-show-hidden"> Show hidden themes</label>
+            <p class="ui-hint">Temporarily reveal themes marked as hidden in Lists and on the Board</p>
+        </div>
+        <div class="ui-stack setting">
+            <label class="check"><input type="checkbox" role="switch" id="settings-reminder"> Daily list review reminder</label>
+            <p class="ui-hint">Nudges you on the Board if you haven't checked Lists yet that day. This device only.</p>
+        </div>
+        <label class="ui-field" id="reminder-time-row" style="display:none;">
+            <span>Remind from</span>
+            <input type="time" id="settings-reminder-time" class="ui-input" value="09:00">
+        </label>
+        <div class="ui-stack setting">
+            <label class="check"><input type="checkbox" role="switch" id="settings-password"> Require a password</label>
+            <p class="ui-hint">Locks this site behind a single shared password on every device. Off by default.</p>
+            <div id="password-set-row" class="ui-stack" style="display:none;">
+                <input type="password" id="settings-password-input" class="ui-input" placeholder="Choose a password (min 4 characters)" aria-label="New password" autocomplete="new-password">
+                <div class="ui-actions end">
+                    <button class="ui-btn primary" id="settings-password-save">Enable lock</button>
                 </div>
             </div>
-            <div class="form-group">
-                <label class="toggle-row">
-                    <span class="form-label" style="margin:0">Dark mode</span>
-                    <label class="switch">
-                        <input type="checkbox" role="switch" id="settings-dark">
-                    </label>
-                </label>
+            <p id="password-status" class="ui-hint" style="display:none;"></p>
+            <div id="password-logout-row" style="display:none;">
+                <button class="ui-btn" id="settings-password-logout">Log out this device</button>
             </div>
-            <div class="form-group">
-                <label class="toggle-row">
-                    <span class="form-label" style="margin:0">Show hidden themes</span>
-                    <label class="switch">
-                        <input type="checkbox" role="switch" id="settings-show-hidden">
-                    </label>
-                </label>
-                <div class="form-hint">Temporarily reveal themes marked as hidden in Lists and on the Board</div>
-            </div>
-            <div class="form-group">
-                <label class="toggle-row">
-                    <span class="form-label" style="margin:0">Daily list review reminder</span>
-                    <label class="switch">
-                        <input type="checkbox" role="switch" id="settings-reminder">
-                    </label>
-                </label>
-                <div class="form-hint">Nudges you on the Board if you haven't checked Lists yet that day. This device only.</div>
-            </div>
-            <div class="form-group" id="reminder-time-row" style="display:none;">
-                <label class="form-label">Remind from</label>
-                <input type="time" id="settings-reminder-time" class="form-input" value="09:00">
-            </div>
-            <div class="form-group">
-                <label class="toggle-row">
-                    <span class="form-label" style="margin:0">Require a password</span>
-                    <label class="switch">
-                        <input type="checkbox" role="switch" id="settings-password">
-                    </label>
-                </label>
-                <div class="form-hint">Locks this site behind a single shared password on every device. Off by default.</div>
-                <div id="password-set-row" style="display:none; margin-top:8px;">
-                    <input type="password" id="settings-password-input" class="form-input" placeholder="Choose a password (min 4 characters)" autocomplete="new-password">
-                    <div class="modal-footer-right" style="margin-top:8px;">
-                        <button class="btn-primary" id="settings-password-save">Enable lock</button>
-                    </div>
-                </div>
-                <div id="password-status" class="form-hint" style="display:none;"></div>
-                <div id="password-logout-row" style="display:none; margin-top:8px;">
-                    <button class="btn-ghost" id="settings-password-logout">Log out this device</button>
-                </div>
-            </div>
-            <div class="sync-info-box">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                Syncing across devices
-            </div>
+        </div>
+        <div class="ui-note good">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <span>Syncing across devices</span>
         </div>
     </div>
-</div>
+</dialog>
 
 <!-- ============ PASSWORD GATE (shown only when the site is locked) ============ -->
-<div id="password-gate" class="modal-overlay" style="display:none; z-index:1000;">
-    <div class="modal modal-small">
-        <div class="modal-header">
-            <h3>Life Kanban</h3>
-        </div>
-        <div class="modal-body">
-            <div class="form-group">
-                <label class="form-label" for="gate-password">This board is locked</label>
-                <input type="password" id="gate-password" class="form-input" placeholder="Password" autocomplete="current-password">
-                <div id="gate-error" class="form-hint" style="display:none; color:var(--danger, #c00);"></div>
-            </div>
-            <div class="modal-footer-right">
-                <button class="btn-primary" id="gate-submit">Unlock</button>
-            </div>
-        </div>
+<dialog id="password-gate" class="ui-sheet" aria-labelledby="gate-title">
+    <header>
+        <h2 id="gate-title">Life Kanban</h2>
+    </header>
+    <div class="body">
+        <label class="ui-field" id="gate-field">
+            <span>This board is locked</span>
+            <input type="password" id="gate-password" class="ui-input" placeholder="Password" autocomplete="current-password">
+            <small id="gate-error" style="display:none;"></small>
+        </label>
     </div>
-</div>
+    <footer class="ui-actions end">
+        <button class="ui-btn primary" id="gate-submit">Unlock</button>
+    </footer>
+</dialog>
 
 <!-- ============ FILTER MODAL (mobile) ============ -->
-<div id="filter-modal" class="modal-overlay" style="display:none;">
-    <div class="modal modal-small">
-        <div class="modal-header">
-            <h3>Filters &amp; sort</h3>
-            <button class="icon-btn modal-close" id="filter-modal-close">&times;</button>
-        </div>
-        <div class="modal-body" id="filter-modal-body"><!-- #filter-controls is moved here on mobile --></div>
-        <div class="modal-footer">
-            <button class="btn-ghost" id="filter-modal-clear">Clear all</button>
-            <div class="modal-footer-right">
-                <button class="btn-primary" id="filter-modal-done">Done</button>
-            </div>
-        </div>
-    </div>
-</div>
+<dialog id="filter-modal" class="ui-sheet" aria-labelledby="filter-modal-title">
+    <header>
+        <h2 id="filter-modal-title">Filters &amp; sort</h2>
+        <button class="ui-btn quiet icon small" id="filter-modal-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="body" id="filter-modal-body"><!-- #filter-controls is moved here on mobile --></div>
+    <footer class="ui-actions">
+        <button class="ui-btn" id="filter-modal-clear">Clear all</button>
+        <span class="ui-spacer"></span>
+        <button class="ui-btn primary" id="filter-modal-done">Done</button>
+    </footer>
+</dialog>
 
 <!-- ============ REVIEW MODAL ============ -->
-<div id="review-modal" class="modal-overlay" style="display:none;">
-    <div class="modal modal-review">
-        <div class="modal-header">
-            <h3>Review new items</h3>
-            <button class="icon-btn modal-close" id="review-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <p class="review-intro">Triage items you've captured but not yet placed on the board.</p>
-            <div id="review-list" class="review-list"></div>
-        </div>
-        <div class="modal-footer">
-            <div class="modal-footer-right">
-                <button class="btn-primary" id="review-done">Keep remaining</button>
-            </div>
-        </div>
+<dialog id="review-modal" class="ui-sheet review-sheet" aria-labelledby="review-title">
+    <header>
+        <h2 id="review-title">Review new items</h2>
+        <button class="ui-btn quiet icon small" id="review-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="body">
+        <p class="ui-hint">Triage items you've captured but not yet placed on the board.</p>
+        <div id="review-list"></div>
     </div>
-</div>
+    <footer class="ui-actions end">
+        <button class="ui-btn primary" id="review-done">Keep remaining</button>
+    </footer>
+</dialog>
 
 <!-- ============ SNOOZE MODAL ============ -->
-<div id="snooze-modal" class="modal-overlay" style="display:none;">
-    <div class="modal modal-small">
-        <div class="modal-header">
-            <h3>Snooze until…</h3>
-            <button class="icon-btn modal-close" id="snooze-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div id="snooze-options"></div>
-            <div class="form-group" style="margin-top:12px; margin-bottom:0;">
-                <label class="form-label">Or pick a date</label>
-                <input type="date" id="snooze-date" class="form-input">
-            </div>
-        </div>
+<dialog id="snooze-modal" class="ui-sheet" aria-labelledby="snooze-title">
+    <header>
+        <h2 id="snooze-title">Snooze until…</h2>
+        <button class="ui-btn quiet icon small" id="snooze-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="body">
+        <div class="ui-card flat list-box"><div id="snooze-options" class="ui-list"></div></div>
+        <label class="ui-field">
+            <span>Or pick a date</span>
+            <input type="date" id="snooze-date" class="ui-input">
+        </label>
     </div>
-</div>
+</dialog>
+
+<!-- ============ READY SHEET ============ -->
+<!-- Ready: Live tasks with no day yet, kept out of the way of Today -->
+<dialog id="ready-modal" class="ui-sheet" aria-labelledby="ready-title">
+    <header>
+        <h2 id="ready-title">Add to today</h2>
+        <button class="ui-btn quiet icon small" id="ready-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="body" id="ready-list"></div>
+</dialog>
 
 <!-- ============ MOVE TO MODAL ============ -->
-<!-- Ready: Live tasks with no day yet, kept out of the way of Today -->
-<div id="ready-modal" class="modal-overlay" style="display:none;">
-    <div class="modal modal-ready">
-        <div class="modal-header">
-            <h3 id="ready-title">Add to today</h3>
-            <button class="icon-btn modal-close" id="ready-close">&times;</button>
-        </div>
-        <div class="modal-body" id="ready-list"></div>
+<dialog id="move-to-modal" class="ui-sheet" aria-labelledby="move-to-title">
+    <header>
+        <h2 id="move-to-title">Move to…</h2>
+        <button class="ui-btn quiet icon small" id="move-to-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="body">
+        <div class="ui-card flat list-box"><div class="ui-list" id="move-to-list"></div></div>
     </div>
-</div>
-
-<div id="move-to-modal" class="modal-overlay" style="display:none;">
-    <div class="modal modal-small">
-        <div class="modal-header">
-            <h3>Move to…</h3>
-            <button class="icon-btn modal-close" id="move-to-close">&times;</button>
-        </div>
-        <div class="modal-body" id="move-to-list"></div>
-    </div>
-</div>
+</dialog>
 
 <script src="vendor/fuzzy.js"></script>
 <script src="app.js"></script>

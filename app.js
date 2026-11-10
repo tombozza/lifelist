@@ -339,15 +339,13 @@ function undoLast() {
 // button — the phone's way to undo, where there's no Ctrl-Z.
 let toastTimer = null;
 function showToast(msg, opts) {
-    let el = document.getElementById('toast');
-    if (!el) {
-        el = document.createElement('div');
-        el.id = 'toast';
-        el.className = 'toast';
-        el.setAttribute('role', 'status');
-        document.body.appendChild(el);
-    }
-    el.innerHTML = '';
+    // The shared .ui-toast (vendor/chassis/components.css): add it, remove it after a while.
+    const old = document.getElementById('toast');
+    if (old) old.remove();
+    const el = document.createElement('div');
+    el.id = 'toast';
+    el.className = 'ui-toast toast';
+    el.setAttribute('role', 'status');
     const text = document.createElement('span');
     text.className = 'toast-text';
     text.textContent = msg;
@@ -355,14 +353,36 @@ function showToast(msg, opts) {
     if (opts && opts.undo) {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'toast-undo';
+        b.className = 'ui-btn small';
         b.textContent = 'Undo';
-        b.addEventListener('click', () => { el.classList.remove('show'); undoLast(); });
+        b.addEventListener('click', () => { el.remove(); undoLast(); });
         el.appendChild(b);
     }
-    el.classList.add('show');
+    document.body.appendChild(el);
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), opts && opts.undo ? 6000 : 2500);
+    toastTimer = setTimeout(() => el.remove(), opts && opts.undo ? 6000 : 2500);
+}
+
+// Pop-ups are <dialog class="ui-sheet"> (vendor/chassis/components.css), opened with showModal().
+function openSheet(id) { const d = document.getElementById(id); if (d && !d.open) d.showModal(); return d; }
+function closeSheet(id) { const d = document.getElementById(id); if (d && d.open) d.close(); }
+function sheetOpen(id) { const d = document.getElementById(id); return !!(d && d.open); }
+
+// A shared chip or badge in a theme's or tag category's own colour: it takes
+// that colour as its --accent, so aria-pressed / .accent paint with it.
+function tintChip(el, color) {
+    if (!color) return el;
+    el.style.setProperty('--accent', color);
+    el.style.setProperty('--text-on-accent', contrastText(color));
+    return el;
+}
+function chipBtn(label, pressed) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ui-chip';
+    b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    b.textContent = label;
+    return b;
 }
 
 // ============ HELPERS ============
@@ -430,9 +450,8 @@ function withThemeIds(data, ids) {
 // different families at a glance.
 function tagChipEl(tag) {
     const el = document.createElement('span');
-    el.className = 'chip chip-tag';
-    el.style.borderColor = tag.category.color;
-    el.style.color = tag.category.color;
+    el.className = 'ui-badge accent chip-tag';
+    el.style.setProperty('--accent', tag.category.color);
     el.textContent = tag.name;
     el.title = tag.category.name + ' · ' + tag.name;
     return el;
@@ -442,7 +461,7 @@ function progressChipEl(task) {
     const p = subtaskProgress(task);
     if (!p) return null;
     const el = document.createElement('span');
-    el.className = 'chip chip-progress' + (p.done === p.total ? ' chip-progress-done' : '');
+    el.className = 'ui-badge chip-progress' + (p.done === p.total ? ' good' : '');
     el.innerHTML = `<span class="chip-progress-bar"><span style="width:${p.pct}%"></span></span>${p.pct}%`;
     el.title = `${p.done} of ${p.total} sub-tasks done`;
     return el;
@@ -471,7 +490,7 @@ const LINK_SVG = '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" st
 function linkChipEl(task) {
     if (!task.url) return null;
     const a = document.createElement('a');
-    a.className = 'chip chip-link';
+    a.className = 'ui-badge accent chip-link';
     a.href = task.url;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
@@ -490,7 +509,7 @@ function parentChipEl(task) {
     const parent = task.parentId && state.tasks.find(t => t.id === task.parentId);
     if (!parent) return null;
     const el = document.createElement('span');
-    el.className = 'chip chip-parent';
+    el.className = 'ui-badge chip-parent';
     el.textContent = '\u21B3 ' + parent.title;
     el.title = 'A step of: ' + parent.title;
     return el;
@@ -688,17 +707,17 @@ function renderRecoveryNotice(container, kind) {
     const n = kind === 'tags' ? recoveredTagCount() : recoveredThemeCount();
     if (!n) return;
     const note = document.createElement('div');
-    note.className = 'tag-recovery-note';
+    note.className = 'ui-note warn tag-recovery-note';
     note.innerHTML = kind === 'tags'
-        ? `<strong>${n} tag${n === 1 ? '' : 's'} recovered.</strong> They were still on your cards but their
+        ? `<span><strong>${n} tag${n === 1 ? '' : 's'} recovered.</strong> They were still on your cards but their
            category had been overwritten by a sync, so they'd stopped showing. The names couldn't be recovered \u2014
            rename each <em>Recovered&nbsp;N</em> below and the tasks keep it. Delete one instead and it comes off
-           those tasks properly.`
-        : `<strong>${n} theme${n === 1 ? '' : 's'} rebuilt.</strong> ${n === 1 ? 'A task was' : 'Tasks were'} still
+           those tasks properly.</span>`
+        : `<span><strong>${n} theme${n === 1 ? '' : 's'} rebuilt.</strong> ${n === 1 ? 'A task was' : 'Tasks were'} still
            filed under ${n === 1 ? 'a theme' : 'themes'} that had gone missing, so ${n === 1 ? 'it has' : 'they have'}
-           been put back from the name in the id. Rename or recolour as you like \u2014 the tasks stay attached.`;
+           been put back from the name in the id. Rename or recolour as you like \u2014 the tasks stay attached.</span>`;
     const dismiss = document.createElement('button');
-    dismiss.className = 'btn-ghost';
+    dismiss.className = 'ui-btn small';
     dismiss.textContent = 'Dismiss';
     dismiss.addEventListener('click', () => {
         // One dismissal clears the lot, so it can't reappear on the other tab
@@ -825,7 +844,7 @@ function countdownChip(task) {
     if (!task.countdown || !task.dueDate || task.status !== 'active') return null;
     const n = daysUntil(task.dueDate);
     const chip = document.createElement('span');
-    chip.className = 'chip chip-countdown' + (n < 0 ? ' past' : n <= 2 ? ' soon' : '');
+    chip.className = 'ui-badge chip-countdown ' + (n <= 2 ? 'bad' : 'warn');
     if (n < 0)       chip.textContent = Math.abs(n) + 'd overdue';
     else if (n === 0) chip.textContent = 'Due today';
     else if (n === 1) chip.textContent = 'Tomorrow';
@@ -959,7 +978,7 @@ function render() {
     else if (currentView === 'board') renderBoard();
     else if (currentView === 'notes') renderNotes();
     else if (currentView === 'admin') renderAdmin();
-    if (document.getElementById('review-modal').style.display === 'flex') {
+    if (sheetOpen('review-modal')) {
         if (reviewQueue().length) renderReviewList();
         else closeReviewModal();
     }
@@ -1026,11 +1045,11 @@ function renderFilterStatus() {
     bar.style.display = 'flex';
     bar.innerHTML = '';
     const label = document.createElement('span');
-    label.className = 'filter-status-label';
-    label.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> ' + parts.join(' · ');
+    label.className = 'ui-spacer';
+    label.textContent = 'Filtered: ' + parts.join(' · ');
     bar.appendChild(label);
     const clear = document.createElement('button');
-    clear.className = 'filter-clear-btn';
+    clear.className = 'ui-btn small primary';
     clear.textContent = 'Clear';
     clear.addEventListener('click', clearListFilters);
     bar.appendChild(clear);
@@ -1058,13 +1077,13 @@ function updateFiltersButton() {
 // in/out so there's a single source of truth (no duplicated state to sync).
 function openFilterModal() {
     document.getElementById('filter-modal-body').appendChild(document.getElementById('filter-controls'));
-    document.getElementById('filter-modal').style.display = 'flex';
+    openSheet('filter-modal');
 }
 
 function closeFilterModal() {
     // Return the controls to the toolbar
     document.querySelector('.lists-toolbar-left').appendChild(document.getElementById('filter-controls'));
-    document.getElementById('filter-modal').style.display = 'none';
+    closeSheet('filter-modal');
 }
 
 function reviewQueue() {
@@ -1082,17 +1101,18 @@ function renderReviewBanner() {
     banner.style.display = 'flex';
     banner.innerHTML = '';
     const txt = document.createElement('span');
-    txt.className = 'review-banner-text';
-    txt.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg> <strong>${queue.length}</strong> new item${queue.length>1?'s':''} to review — decide what goes on the board.`;
+    txt.className = 'ui-spacer';
+    txt.innerHTML = `<strong>${queue.length}</strong> new item${queue.length>1?'s':''} to review — decide what goes on the board.`;
     banner.appendChild(txt);
     const actions = document.createElement('div');
-    actions.className = 'review-banner-actions';
+    actions.className = 'ui-actions';
     const reviewBtn = document.createElement('button');
-    reviewBtn.className = 'btn-small';
+    reviewBtn.className = 'ui-btn small primary';
     reviewBtn.textContent = 'Review';
     reviewBtn.addEventListener('click', openReviewModal);
     const dismiss = document.createElement('button');
-    dismiss.className = 'btn-ghost review-banner-dismiss';
+    dismiss.className = 'ui-btn quiet icon small';
+    dismiss.setAttribute('aria-label', 'Dismiss');
     dismiss.innerHTML = '&times;';
     dismiss.title = 'Dismiss';
     dismiss.addEventListener('click', () => { reviewBannerDismissed = true; renderReviewBanner(); });
@@ -1103,11 +1123,11 @@ function renderReviewBanner() {
 
 function openReviewModal() {
     renderReviewList();
-    document.getElementById('review-modal').style.display = 'flex';
+    openSheet('review-modal');
 }
 
 function closeReviewModal() {
-    document.getElementById('review-modal').style.display = 'none';
+    closeSheet('review-modal');
 }
 
 function renderReviewList() {
@@ -1115,11 +1135,12 @@ function renderReviewList() {
     list.innerHTML = '';
     const queue = reviewQueue();
     if (!queue.length) {
-        list.innerHTML = '<div class="review-empty">All caught up 🎉</div>';
+        list.innerHTML = '<div class="ui-empty"><span class="icon">🎉</span><strong>All caught up</strong></div>';
         return;
     }
+    const box = listBox(list);
     sortKanbanFirst(queue).forEach(task => {
-        list.appendChild(createListItem(task, { review: true }));
+        box.appendChild(createListItem(task, { review: true }));
     });
 }
 
@@ -1136,13 +1157,13 @@ function renderStaleBanner() {
     banner.style.display = 'flex';
     banner.innerHTML = '';
     const txt = document.createElement('span');
-    txt.className = 'stale-banner-text';
-    txt.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> <strong>${stale.length}</strong> task${stale.length>1?'s have':' has'} been sitting over ${STALE_DAYS} days. Snooze the ones you won't pick up soon.`;
+    txt.className = 'ui-spacer';
+    txt.innerHTML = `<strong>${stale.length}</strong> task${stale.length>1?'s have':' has'} been sitting over ${STALE_DAYS} days. Snooze the ones you won't pick up soon.`;
     banner.appendChild(txt);
     const actions = document.createElement('div');
-    actions.className = 'stale-banner-actions';
+    actions.className = 'ui-actions';
     const review = document.createElement('button');
-    review.className = 'btn-small';
+    review.className = 'ui-btn small primary';
     review.textContent = 'Review';
     review.addEventListener('click', () => {
         // Clear anything that could hide stale items, then filter to 30+ days
@@ -1159,7 +1180,8 @@ function renderStaleBanner() {
         renderLists();
     });
     const dismiss = document.createElement('button');
-    dismiss.className = 'btn-ghost stale-banner-dismiss';
+    dismiss.className = 'ui-btn quiet icon small';
+    dismiss.setAttribute('aria-label', 'Snooze until next week');
     dismiss.innerHTML = '&times;';
     dismiss.title = 'Snooze until next week';
     // Closing snoozes the reminder until the start of next week, so it stops
@@ -1185,29 +1207,29 @@ function renderTagFilter(hostId) {
     if (!cats.length) return;
 
     const head = document.createElement('div');
-    head.className = 'tag-filter-head';
+    head.className = 'ui-chips tag-filter-head';
     const toggle = document.createElement('button');
-    toggle.className = 'tag-filter-toggle' + (tagFilterOpen ? ' open' : '');
-    toggle.innerHTML = `Tags <span class="tag-filter-caret">${tagFilterOpen ? '\u25be' : '\u25b8'}</span>`;
+    toggle.type = 'button';
+    toggle.className = 'ui-chip';
+    toggle.setAttribute('aria-expanded', tagFilterOpen ? 'true' : 'false');
+    toggle.innerHTML = `Tags <span class="n">${tagFilterOpen ? '\u25be' : '\u25b8'}</span>`;
     toggle.addEventListener('click', () => { tagFilterOpen = !tagFilterOpen; render(); });
     head.appendChild(toggle);
 
     if (activeTagFilter.length) {
         const count = document.createElement('span');
-        count.className = 'tag-filter-count';
+        count.className = 'ui-badge accent';
         count.textContent = activeTagFilter.length + ' on';
         head.appendChild(count);
         // Name the active tags even when collapsed, so a filter can't hide
         activeTagFilter.map(getTag).filter(Boolean).forEach(tag => {
-            const chip = tagChipEl(tag);
-            chip.classList.add('chip-tag-active');
-            chip.style.background = tag.category.color;
-            chip.style.color = contrastText(tag.category.color);
+            const chip = tintChip(chipBtn(tag.name, true), tag.category.color);
+            chip.title = tag.category.name + ' · ' + tag.name;
             chip.addEventListener('click', () => toggleTagFilter(tag.id));
             head.appendChild(chip);
         });
         const clear = document.createElement('button');
-        clear.className = 'btn-ghost tag-filter-clear';
+        clear.className = 'ui-btn quiet small';
         clear.textContent = 'Clear';
         clear.addEventListener('click', () => { activeTagFilter = []; render(); });
         head.appendChild(clear);
@@ -1216,22 +1238,17 @@ function renderTagFilter(hostId) {
 
     if (!tagFilterOpen) return;
     const body = document.createElement('div');
-    body.className = 'tag-filter-body';
+    body.className = 'ui-card flat tag-filter-body';
     cats.forEach(cat => {
         const row = document.createElement('div');
-        row.className = 'tag-filter-row';
+        row.className = 'ui-chips tag-filter-row';
         const label = document.createElement('span');
-        label.className = 'tag-cat-label';
+        label.className = 'ui-label tag-cat-label';
         label.textContent = cat.name;
         row.appendChild(label);
         [...cat.tags].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
             const on = activeTagFilter.includes(tag.id);
-            const btn = document.createElement('button');
-            btn.className = 'tag-chip' + (on ? ' on' : '');
-            btn.textContent = tag.name;
-            btn.style.borderColor = cat.color;
-            if (on) { btn.style.background = cat.color; btn.style.color = contrastText(cat.color); }
-            else { btn.style.color = cat.color; }
+            const btn = tintChip(chipBtn(tag.name, on), cat.color);
             btn.addEventListener('click', () => toggleTagFilter(tag.id));
             row.appendChild(btn);
         });
@@ -1249,18 +1266,12 @@ function toggleTagFilter(id) {
 function renderThemeTabs() {
     const container = document.getElementById('lists-theme-tabs');
     container.innerHTML = '';
-    const allBtn = document.createElement('button');
-    allBtn.className = 'theme-tab' + (currentThemeTab === 'all' ? ' active' : '');
-    allBtn.textContent = 'All';
-    if (currentThemeTab === 'all') allBtn.style.background = '#1d1d1f';
+    const allBtn = chipBtn('All', currentThemeTab === 'all');
     allBtn.addEventListener('click', () => { currentThemeTab = 'all'; renderLists(); });
     container.appendChild(allBtn);
 
     [...state.themes].filter(t => !t.hidden || state.settings.showHidden).sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
-        const btn = document.createElement('button');
-        btn.className = 'theme-tab' + (currentThemeTab === theme.id ? ' active' : '');
-        btn.textContent = theme.name;
-        if (currentThemeTab === theme.id) { btn.style.background = theme.color; btn.style.color = contrastText(theme.color); }
+        const btn = tintChip(chipBtn(theme.name, currentThemeTab === theme.id), theme.color);
         btn.addEventListener('click', () => { currentThemeTab = theme.id; renderLists(); });
         container.appendChild(btn);
     });
@@ -1364,13 +1375,40 @@ function renderNotes() {
     window.scrollTo(0, y);
 }
 
+// Task rows sit in a shared list on a card (.ui-card > .ui-list), one per group.
+function listBox(container) {
+    const card = document.createElement('div');
+    card.className = 'ui-card flat list-box';
+    const list = document.createElement('div');
+    list.className = 'ui-list';
+    card.appendChild(list);
+    container.appendChild(card);
+    return list;
+}
+function groupLabel(container, text) {
+    const label = document.createElement('div');
+    label.className = 'ui-label list-group-label';
+    label.textContent = text;
+    container.appendChild(label);
+    return label;
+}
+function emptyState(title, hint) {
+    const e = document.createElement('div');
+    e.className = 'ui-empty';
+    const s = document.createElement('strong');
+    s.textContent = title;
+    e.appendChild(s);
+    if (hint) { const h = document.createElement('p'); h.className = 'ui-hint'; h.innerHTML = hint; e.appendChild(h); }
+    return e;
+}
+
 function renderParkedNotes() {
     renderTagFilter('notes-tag-filter');
     const container = document.getElementById('notes-content');
     container.innerHTML = '';
     const all = notesTasks();
     if (!all.length) {
-        container.innerHTML = '<div class="empty-state"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><path d="M4 4h16v12l-4 4H4z"/><path d="M8 9h8M8 13h5"/></svg><p>Nothing parked here yet</p><p class="empty-hint">Use a card\u2019s \u22ef menu &rsaquo; <strong>Move to Notes</strong> to park it.</p></div>';
+        container.appendChild(emptyState('Nothing parked here yet', 'Use a card\u2019s \u22ef menu &rsaquo; <strong>Move to Notes</strong> to park it.'));
         return;
     }
     const grouped = {};
@@ -1383,13 +1421,11 @@ function renderParkedNotes() {
     order.forEach(tid => {
         if (!grouped[tid] || !grouped[tid].length) return;
         const theme = getTheme(tid);
-        const label = document.createElement('div');
-        label.className = 'list-group-label';
-        label.textContent = theme ? theme.name : 'No Theme';
-        container.appendChild(label);
+        groupLabel(container, theme ? theme.name : 'No Theme');
+        const box = listBox(container);
         grouped[tid]
             .sort((a,b) => (a.title||'').localeCompare(b.title||''))
-            .forEach(t => container.appendChild(createListItem(t)));
+            .forEach(t => box.appendChild(createListItem(t)));
     });
 }
 
@@ -1451,7 +1487,8 @@ function renderNoteBar() {
     const pill = (label, id, active) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'notes-pill' + (active ? ' active' : '');
+        b.className = 'ui-chip';
+        b.setAttribute('aria-pressed', active ? 'true' : 'false');
         b.textContent = label;
         b.addEventListener('click', () => {
             noteDraft = null;
@@ -1465,7 +1502,8 @@ function renderNoteBar() {
     (state.smartNotes || []).forEach(n => pill(n.name, n.id, !noteDraft && noteSel === n.id || (noteDraft && noteDraft.id === n.id)));
     const add = document.createElement('button');
     add.type = 'button';
-    add.className = 'notes-pill notes-pill-new' + (noteDraft && !noteDraft.id ? ' active' : '');
+    add.className = 'ui-chip';
+    add.setAttribute('aria-pressed', noteDraft && !noteDraft.id ? 'true' : 'false');
     add.textContent = '+ Filter';
     add.title = 'Filter by theme, sub-theme or tag — then save it as a note';
     add.addEventListener('click', () => {
@@ -1476,7 +1514,8 @@ function renderNoteBar() {
 }
 
 function noteRows(container, tasks) {
-    tasks.forEach(t => container.appendChild(createListItem(t)));
+    const box = listBox(container);
+    tasks.forEach(t => box.appendChild(createListItem(t)));
 }
 
 function renderSmartNote(note) {
@@ -1485,13 +1524,13 @@ function renderSmartNote(note) {
     const tasks = noteTasks(note);
 
     const head = document.createElement('div');
-    head.className = 'note-head';
-    head.innerHTML = `<div class="note-head-text"><div class="note-title"></div><div class="note-rules"></div></div>`;
+    head.className = 'ui-head note-head';
+    head.innerHTML = `<div class="ui-spacer"><h3 class="ui-h2 note-title"></h3><p class="ui-hint note-rules"></p></div>`;
     head.querySelector('.note-title').textContent = note.name;
     head.querySelector('.note-rules').textContent = describeRules(note) + ' · ' + tasks.length;
     const edit = document.createElement('button');
     edit.type = 'button';
-    edit.className = 'btn-small btn-ghost';
+    edit.className = 'ui-btn small';
     edit.textContent = 'Edit';
     edit.addEventListener('click', () => {
         noteDraft = JSON.parse(JSON.stringify(note));
@@ -1504,7 +1543,7 @@ function renderSmartNote(note) {
     // tag and parks it, so it never lands on the board or clutters Lists.
     const form = document.createElement('form');
     form.className = 'note-add';
-    form.innerHTML = '<input type="text" class="form-input" autocomplete="off"><button type="submit" class="btn-small">Add</button>';
+    form.innerHTML = '<input type="text" class="ui-input" autocomplete="off"><button type="submit" class="ui-btn primary">Add</button>';
     const input = form.querySelector('input');
     input.placeholder = 'Add to ' + note.name + '\u2026';
     form.addEventListener('submit', e => {
@@ -1518,10 +1557,7 @@ function renderSmartNote(note) {
     container.appendChild(form);
 
     if (!tasks.length) {
-        const e = document.createElement('div');
-        e.className = 'empty-state';
-        e.innerHTML = '<p>Nothing matches yet</p>';
-        container.appendChild(e);
+        container.appendChild(emptyState('Nothing matches yet'));
         return;
     }
     noteRows(container, tasks);
@@ -1564,10 +1600,10 @@ function renderNoteBuilder() {
     const container = document.getElementById('notes-content');
     container.innerHTML = '';
     const box = document.createElement('div');
-    box.className = 'note-builder';
+    box.className = 'ui-card flat note-builder';
 
-    const hint = document.createElement('div');
-    hint.className = 'note-hint';
+    const hint = document.createElement('p');
+    hint.className = 'ui-hint';
     hint.textContent = 'Tap once to show, twice to leave out, again to clear. Pick a theme to see its sub-themes.';
     box.appendChild(hint);
 
@@ -1582,11 +1618,9 @@ function renderNoteBuilder() {
     };
     const pill = (g, v, label, color) => {
         const st = stateOf(g, v);
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'nf-pill' + (st ? ' ' + st : '');
-        b.textContent = (st === 'exc' ? '\u2212 ' : '') + label;
-        if (color) b.style.setProperty('--nf', color);
+        // Three states on one shared chip: pressed = show, .nf-exc = leave out (no shared look for it yet)
+        const b = tintChip(chipBtn((st === 'exc' ? '\u2212 ' : '') + label, st === 'inc'), color);
+        if (st === 'exc') b.classList.add('nf-exc');
         b.title = st === 'inc' ? 'Showing — tap to leave out' : st === 'exc' ? 'Left out — tap to clear' : 'Tap to show';
         b.addEventListener('click', () => cycle(g, v));
         return b;
@@ -1594,13 +1628,13 @@ function renderNoteBuilder() {
     const group = (label, pills) => {
         if (!pills.length) return;
         const g = document.createElement('div');
-        g.className = 'nf-group';
+        g.className = 'ui-stack nf-group';
         const l = document.createElement('div');
-        l.className = 'nf-label';
+        l.className = 'ui-label';
         l.textContent = label;
         g.appendChild(l);
         const row = document.createElement('div');
-        row.className = 'nf-pills';
+        row.className = 'ui-chips';
         pills.forEach(p => row.appendChild(p));
         g.appendChild(row);
         box.appendChild(g);
@@ -1625,13 +1659,13 @@ function renderNoteBuilder() {
     save.className = 'note-save';
     const name = document.createElement('input');
     name.type = 'text';
-    name.className = 'form-input';
+    name.className = 'ui-input';
     name.placeholder = 'Name this note, e.g. Black Friday';
     name.value = d.name;
     name.addEventListener('input', () => { d.name = name.value; });
     const ok = document.createElement('button');
     ok.type = 'button';
-    ok.className = 'btn-small';
+    ok.className = 'ui-btn primary';
     ok.textContent = d.id ? 'Save' : 'Save as note';
     const commit = () => {
         const n = d.name.trim() || ruleNames(d.inc).join(' + ');
@@ -1651,14 +1685,14 @@ function renderNoteBuilder() {
     save.appendChild(ok);
     const cancel = document.createElement('button');
     cancel.type = 'button';
-    cancel.className = 'btn-small btn-ghost';
+    cancel.className = 'ui-btn';
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', () => { noteDraft = null; renderNotes(); });
     save.appendChild(cancel);
     if (d.id) {
         const del = document.createElement('button');
         del.type = 'button';
-        del.className = 'btn-small btn-ghost note-del';
+        del.className = 'ui-btn danger quiet note-del';
         del.textContent = 'Delete note';
         del.addEventListener('click', () => {
             if (!confirm('Delete the note "' + d.name + '"? The tasks in it stay where they are.')) return;
@@ -1673,7 +1707,7 @@ function renderNoteBuilder() {
     container.appendChild(save);
 
     const label = document.createElement('div');
-    label.className = 'list-group-label';
+    label.className = 'ui-label list-group-label';
     if (!hasRules(d.inc)) {
         label.textContent = 'Pick something to show';
         container.appendChild(label);
@@ -1691,18 +1725,20 @@ function renderListContent() {
     const all = getFilteredTasks();
 
     if (!all.length) {
-        container.innerHTML = '<div class="empty-state"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg><p>No tasks here yet</p></div>';
+        container.appendChild(emptyState('No tasks here yet'));
         return;
     }
 
     const appendGroup = (groupKey, groupTasks) => {
         const active = groupTasks.filter(t => !isSnoozed(t));
         const snoozed = groupTasks.filter(isSnoozed);
-        sortKanbanFirst(active).forEach(t => container.appendChild(createListItem(t)));
+        const box = listBox(container);
+        sortKanbanFirst(active).forEach(t => box.appendChild(createListItem(t)));
         if (snoozed.length) {
             const open = snoozedExpanded.has(groupKey);
             const toggle = document.createElement('button');
-            toggle.className = 'snoozed-toggle';
+            toggle.type = 'button';
+            toggle.className = 'ui-row no-chevron snoozed-toggle';
             toggle.innerHTML = open
                 ? 'Hide snoozed'
                 : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> Show ${snoozed.length} snoozed`;
@@ -1710,8 +1746,8 @@ function renderListContent() {
                 if (open) snoozedExpanded.delete(groupKey); else snoozedExpanded.add(groupKey);
                 renderLists();
             });
-            container.appendChild(toggle);
-            if (open) sortKanbanFirst(snoozed).forEach(t => container.appendChild(createListItem(t)));
+            box.appendChild(toggle);
+            if (open) sortKanbanFirst(snoozed).forEach(t => box.appendChild(createListItem(t)));
         }
     };
 
@@ -1722,10 +1758,11 @@ function renderListContent() {
         const aged = all.filter(t => !t.kanbanColumn && !isSnoozed(t))
             .sort((a, b) => (a.createdDate || '').localeCompare(b.createdDate || ''));
         if (!aged.length) {
-            container.innerHTML = '<div class="empty-state"><p>Nothing sitting that long 🎉</p></div>';
+            container.appendChild(emptyState('Nothing sitting that long 🎉'));
             return;
         }
-        aged.forEach(t => container.appendChild(createListItem(t)));
+        const box = listBox(container);
+        aged.forEach(t => box.appendChild(createListItem(t)));
         return;
     }
 
@@ -1742,10 +1779,7 @@ function renderListContent() {
         themeOrder.forEach(tid => {
             if (!grouped[tid] || !grouped[tid].length) return;
             const theme = getTheme(tid);
-            const label = document.createElement('div');
-            label.className = 'list-group-label';
-            label.textContent = theme ? theme.name : 'No Theme';
-            container.appendChild(label);
+            groupLabel(container, theme ? theme.name : 'No Theme');
             appendGroup(tid, grouped[tid]);
         });
     } else {
@@ -1755,7 +1789,7 @@ function renderListContent() {
 
 function createListItem(task, opts = {}) {
     const row = document.createElement('div');
-    row.className = 'list-item';
+    row.className = 'ui-row list-item';
     if (opts.review) row.classList.add('review-item');
     if (task.priority) row.classList.add('priority-' + task.priority);
     if (task.spotlight) row.classList.add('spotlight');
@@ -1811,13 +1845,13 @@ function createListItem(task, opts = {}) {
 
     if (needsReview(task)) {
         const nw = document.createElement('span');
-        nw.className = 'chip chip-new';
+        nw.className = 'ui-badge accent';
         nw.textContent = 'New';
         chips.appendChild(nw);
     }
     if (task.offKanban && !task.kanbanColumn) {
         const ok = document.createElement('span');
-        ok.className = 'chip chip-offkanban';
+        ok.className = 'ui-badge';
         ok.textContent = 'Off board';
         chips.appendChild(ok);
     }
@@ -1833,19 +1867,19 @@ function createListItem(task, opts = {}) {
     if (listLink) chips.appendChild(listLink);
     if (task.subTheme) {
         const sc = document.createElement('span');
-        sc.className = 'chip chip-sub';
+        sc.className = 'ui-badge';
         sc.textContent = task.subTheme;
         chips.appendChild(sc);
     }
     if (task.size) {
         const sz = document.createElement('span');
-        sz.className = 'chip chip-size';
+        sz.className = 'ui-badge';
         sz.textContent = task.size.toUpperCase();
         chips.appendChild(sz);
     }
     if (task.recurring) {
         const rc = document.createElement('span');
-        rc.className = 'chip chip-recurring';
+        rc.className = 'ui-badge';
         rc.textContent = '↻' + (task.runCount > 0 ? ' #'+task.runCount : '');
         chips.appendChild(rc);
     }
@@ -1855,27 +1889,27 @@ function createListItem(task, opts = {}) {
         chips.appendChild(cd);
     } else if (task.dueDate) {
         const due = document.createElement('span');
-        due.className = 'chip ' + (task.dueDate < today ? 'chip-overdue' : 'chip-due');
+        due.className = 'ui-badge ' + (task.dueDate < today ? 'bad' : 'warn');
         due.textContent = 'Due ' + formatDateShort(task.dueDate);
         chips.appendChild(due);
     }
     if (task.doDate && !task.kanbanColumn && task.status === 'active') {
         const dd = document.createElement('span');
-        dd.className = 'chip chip-do';
+        dd.className = 'ui-badge accent';
         dd.textContent = 'Do ' + formatDateShort(task.doDate);
         chips.appendChild(dd);
     }
     if (isSnoozed(task)) {
         row.classList.add('snoozed');
         const sn = document.createElement('span');
-        sn.className = 'chip chip-snoozed';
+        sn.className = 'ui-badge';
         sn.textContent = 'Snoozed until ' + formatDateShort(task.snoozedUntil);
         chips.appendChild(sn);
     } else if (currentFilters.age && !opts.review && !task.kanbanColumn) {
         // Only surface "days in list" while reviewing the aged-tasks filter
         // (e.g. via the 30-day banner) — otherwise it's just clutter.
         const st = document.createElement('span');
-        st.className = 'chip chip-stale';
+        st.className = 'ui-badge warn';
         st.textContent = daysSince(task.createdDate) + 'd in list';
         chips.appendChild(st);
     }
@@ -1888,15 +1922,17 @@ function createListItem(task, opts = {}) {
 
     if (task.kanbanColumn) {
         const kb = document.createElement('span');
-        kb.className = 'chip chip-kanban';
+        kb.className = 'ui-badge good';
         kb.textContent = (KANBAN_COLS.find(c=>c.id===task.kanbanColumn)||{name:task.kanbanColumn}).name;
         right.appendChild(kb);
     }
 
     // To kanban / remove from kanban button
     const kanbanBtn = document.createElement('button');
-    kanbanBtn.className = 'list-item-to-kanban' + (task.kanbanColumn ? ' on-kanban' : '');
+    kanbanBtn.type = 'button';
+    kanbanBtn.className = 'ui-btn quiet icon small list-item-to-kanban' + (task.kanbanColumn ? ' on-kanban' : '');
     kanbanBtn.title = task.kanbanColumn ? 'Remove from Kanban' : 'Add to Kanban';
+    kanbanBtn.setAttribute('aria-label', kanbanBtn.title);
     if (task.kanbanColumn) {
         kanbanBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
     } else {
@@ -1916,14 +1952,18 @@ function createListItem(task, opts = {}) {
 
     if (opts.review) {
         const del = document.createElement('button');
-        del.className = 'list-item-delete';
+        del.type = 'button';
+        del.className = 'ui-btn quiet icon small danger list-item-delete';
         del.title = 'Delete';
+        del.setAttribute('aria-label', 'Delete');
         del.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
         del.addEventListener('click', e => { e.stopPropagation(); deleteTask(task.id); });
         right.appendChild(del);
     } else {
         const menu = document.createElement('button');
-        menu.className = 'list-item-menu';
+        menu.type = 'button';
+        menu.className = 'ui-btn quiet icon small list-item-menu';
+        menu.setAttribute('aria-label', 'More');
         menu.innerHTML = '⋯';
         menu.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
         right.appendChild(menu);
@@ -1998,11 +2038,12 @@ function renderBoardFilter() {
 
     // Focus segmented control: All / Work / Home presets
     const seg = document.createElement('div');
-    seg.className = 'focus-seg';
+    seg.className = 'ui-seg focus-seg';
     const currentFocus = deriveBoardFocus(visibleThemes, muted);
     [['all','All'], ['work','Work'], ['home','Home']].forEach(([mode, label]) => {
         const b = document.createElement('button');
-        b.className = 'focus-seg-btn' + (currentFocus === mode ? ' active' : '');
+        b.type = 'button';
+        b.setAttribute('aria-pressed', currentFocus === mode ? 'true' : 'false');
         b.textContent = label;
         b.addEventListener('click', () => setBoardFocus(mode));
         seg.appendChild(b);
@@ -2013,10 +2054,7 @@ function renderBoardFilter() {
     // when off. Off chips simply hide that theme's cards.
     [...visibleThemes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const isOn = !muted.has(theme.id);
-        const btn = document.createElement('button');
-        btn.className = 'theme-tab theme-tab-toggle' + (isOn ? ' active' : ' off');
-        btn.textContent = theme.name;
-        if (isOn) { btn.style.background = theme.color; btn.style.color = contrastText(theme.color); }
+        const btn = tintChip(chipBtn(theme.name, isOn), theme.color);
         btn.title = (isOn ? 'Hide ' : 'Show ') + theme.name + ' cards';
         btn.addEventListener('click', () => toggleThemeMute(theme.id));
         container.appendChild(btn);
@@ -2046,7 +2084,7 @@ function renderBoard() {
 
         const header = document.createElement('div');
         header.className = 'board-col-header';
-        header.innerHTML = `<span class="board-col-name">${col.name}</span><span class="board-col-count">${tasks.length}</span>`;
+        header.innerHTML = `<span class="ui-label board-col-name">${col.name}</span><span class="ui-badge">${tasks.length}</span>`;
         colEl.appendChild(header);
 
         const cards = document.createElement('div');
@@ -2070,7 +2108,8 @@ function renderBoard() {
         colEl.appendChild(cards);
 
         const addBtn = document.createElement('button');
-        addBtn.className = 'board-col-add';
+        addBtn.type = 'button';
+        addBtn.className = 'ui-btn quiet small board-col-add';
         addBtn.textContent = '+ Add task';
         addBtn.addEventListener('click', () => openTaskModal(null, col.id));
         colEl.appendChild(addBtn);
@@ -2086,10 +2125,10 @@ function renderBoardWeekStat() {
     const w = getWeekStats();
     if (!w.count && !w.lastCount) return;
     const arrow = w.delta === null ? '' : w.delta > 0 ? ` ↑${Math.abs(w.delta)}%` : w.delta < 0 ? ` ↓${Math.abs(w.delta)}%` : '';
-    const cls = w.delta === null ? '' : w.delta > 0 ? 'col-stat-up' : w.delta < 0 ? 'col-stat-down' : '';
+    const cls = w.delta === null ? '' : w.delta > 0 ? ' good' : w.delta < 0 ? ' bad' : '';
     const pill = document.createElement('div');
     pill.className = 'board-week-stat';
-    pill.innerHTML = `<strong>${w.count}</strong> completed this week<span class="${cls}">${arrow}</span>`;
+    pill.innerHTML = `<strong>${w.count}</strong> completed this week${arrow ? `<span class="ui-badge${cls}">${arrow.trim()}</span>` : ''}`;
     host.appendChild(pill);
 }
 
@@ -2147,7 +2186,7 @@ function createBoardCard(task) {
     if (cardLink) footer.appendChild(cardLink);
     if (task.recurring) {
         const rc = document.createElement('span');
-        rc.className = 'chip chip-recurring';
+        rc.className = 'ui-badge';
         rc.textContent = '↻' + (task.runCount > 0 ? ' #'+task.runCount : '');
         footer.appendChild(rc);
     }
@@ -2166,7 +2205,7 @@ function createBoardCard(task) {
     }
     if (task.size) {
         const sz = document.createElement('span');
-        sz.className = 'chip chip-size';
+        sz.className = 'ui-badge';
         sz.textContent = task.size.toUpperCase();
         footer.appendChild(sz);
     }
@@ -2340,7 +2379,7 @@ function nudgePlanOrder(id, dir, list) {
 
 function todoChip(text, cls) {
     const c = document.createElement('span');
-    c.className = 'chip ' + (cls || '');
+    c.className = 'ui-badge ' + (cls || '');
     c.textContent = text;
     return c;
 }
@@ -2364,7 +2403,7 @@ function shortDay(day) { return dayLabel(day).replace(/ \d+ \w+$/, ''); }
 
 // One to-do row. where: 'day' | 'ready' | 'backlog' | 'done'.
 function todoRow(task, where, list) {
-    const row = document.createElement('div');
+    const row = document.createElement('li');
     row.className = 'todo-row';
     row.dataset.taskId = task.id;
     const done = task.status === 'complete';
@@ -2374,12 +2413,17 @@ function todoRow(task, where, list) {
     const today = todayStr();
 
     const main = document.createElement('div');
-    main.className = 'todo-main';
+    main.className = 'ui-row todo-main';
 
     if (where === 'day' || where === 'done') {
-        const check = todoBtn('', 'todo-check', () => { todayOpenId = null; completeTask(task.id); },
-            done ? 'Mark not done' : 'Mark complete');
-        check.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><polyline points="20 6 9 17 4 12"/></svg>';
+        // The shared tick (vendor/chassis/controls.css), green like the Lists ticks
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.className = 'list-check todo-check';
+        check.checked = done;
+        check.setAttribute('aria-label', done ? 'Mark not done' : 'Mark complete');
+        check.addEventListener('click', e => e.stopPropagation());
+        check.addEventListener('change', () => { todayOpenId = null; completeTask(task.id); });
         main.appendChild(check);
     }
 
@@ -2400,7 +2444,7 @@ function todoRow(task, where, list) {
     if (prog) meta.appendChild(prog);
     const link = linkChipEl(task);
     if (link) meta.appendChild(link);
-    if (task.carriedFrom && !done) meta.appendChild(todoChip('↻ since ' + shortDay(task.carriedFrom), 'chip-carried'));
+    if (task.carriedFrom && !done) meta.appendChild(todoChip('↻ since ' + shortDay(task.carriedFrom), 'warn'));
     if (meta.childNodes.length) body.appendChild(meta);
     if (!done) body.addEventListener('click', () => { todayOpenId = open ? null : task.id; render(); });
     main.appendChild(body);
@@ -2410,12 +2454,12 @@ function todoRow(task, where, list) {
         side.className = 'todo-side';
         if (where === 'day' && todayOrderEdit && list) {
             const i = list.indexOf(task);
-            const up = todoBtn('▲', 'todo-nudge', () => nudgePlanOrder(task.id, -1, list), 'Move up');
-            const down = todoBtn('▼', 'todo-nudge', () => nudgePlanOrder(task.id, 1, list), 'Move down');
+            const up = todoBtn('▲', 'ui-btn icon small', () => nudgePlanOrder(task.id, -1, list), 'Move up');
+            const down = todoBtn('▼', 'ui-btn icon small', () => nudgePlanOrder(task.id, 1, list), 'Move down');
             up.disabled = i <= 0; down.disabled = i >= list.length - 1;
             side.append(up, down);
         } else if (where === 'ready' || where === 'backlog') {
-            side.appendChild(todoBtn('+ ' + shortDay(todayDay), 'todo-add', () => planFor(task.id, todayDay), 'Add to ' + longDay(todayDay)));
+            side.appendChild(todoBtn('+ ' + shortDay(todayDay), 'ui-btn small primary', () => planFor(task.id, todayDay), 'Add to ' + longDay(todayDay)));
         }
         if (side.childNodes.length) main.appendChild(side);
     }
@@ -2433,8 +2477,8 @@ function todoRow(task, where, list) {
 
     if (open) {
         const strip = document.createElement('div');
-        strip.className = 'todo-actions';
-        const add = (label, fn, cls) => strip.appendChild(todoBtn(label, 'todo-act' + (cls ? ' ' + cls : ''), fn));
+        strip.className = 'ui-actions todo-actions';
+        const add = (label, fn, cls) => strip.appendChild(todoBtn(label, 'ui-btn small' + (cls ? ' ' + cls : ''), fn));
         if (where === 'day') add(todayDay === today ? 'Tomorrow →' : 'Next day →', () => planFor(task.id, addDays(todayDay, 1)));
         else {
             if (todayDay !== today) add('+ Today', () => planFor(task.id, today));
@@ -2442,7 +2486,7 @@ function todoRow(task, where, list) {
         }
         if (where !== 'ready') add(where === 'day' ? (todayDay === today ? 'Not today' : 'To Ready') : '+ Ready', () => planFor(task.id, null));
         const pick = document.createElement('label');
-        pick.className = 'todo-act todo-pick';
+        pick.className = 'ui-btn small todo-pick';
         pick.textContent = 'Pick a day…';
         // Invisible over the pill: a tap lands on the input itself (which is
         // what opens the picker on iOS); elsewhere showPicker() does it.
@@ -2455,7 +2499,7 @@ function todoRow(task, where, list) {
         pick.appendChild(date);
         strip.appendChild(pick);
         if (where !== 'backlog') {
-            add('Blocked', () => markBlocked(task.id), 'warn');
+            add('Blocked', () => markBlocked(task.id), 'danger');
             add('Backlog', () => sendToBacklog(task.id));
         }
         add('Edit', () => { todayOpenId = null; openTaskModal(task.id); });
@@ -2498,25 +2542,34 @@ function makeTodoDropList(list, day) {
 }
 
 function todoEmpty(text) {
-    const p = document.createElement('div');
-    p.className = 'todo-empty';
+    const p = document.createElement('li');
+    p.className = 'ui-empty todo-empty';
     p.textContent = text;
     return p;
 }
 
+// A to-do list: the shared list on a card, rows are <li class="todo-row">.
+function todoList(host) {
+    const card = document.createElement('div');
+    card.className = 'ui-card flat list-box';
+    const list = document.createElement('ul');
+    list.className = 'ui-list todo-list';
+    card.appendChild(list);
+    host.appendChild(card);
+    return list;
+}
+
 function todoSection(host, label, items, isOpen, toggle, where) {
     if (!items.length) return;
-    const head = todoBtn((isOpen ? '▾ ' : '▸ ') + label, 'todo-section-toggle', toggle);
+    const head = todoBtn((isOpen ? '▾ ' : '▸ ') + label, 'ui-btn quiet small todo-section-toggle', toggle);
     const count = document.createElement('span');
-    count.className = 'todo-count';
+    count.className = 'ui-badge';
     count.textContent = items.length;
     head.appendChild(count);
     host.appendChild(head);
     if (!isOpen) return;
-    const list = document.createElement('div');
-    list.className = 'todo-list';
+    const list = todoList(host);
     items.forEach(t => list.appendChild(todoRow(t, where, items)));
-    host.appendChild(list);
 }
 
 function renderToday() {
@@ -2538,18 +2591,18 @@ function renderToday() {
     const d = new Date(day + 'T00:00:00');
     const date = document.createElement('div');
     date.className = 'today-date';
-    date.innerHTML = '<div class="today-date-big"></div><div class="today-date-small"></div>';
+    date.innerHTML = '<h2 class="ui-title today-date-big"></h2><p class="ui-sub today-date-small"></p>';
     date.firstChild.textContent = d.toLocaleDateString('en-GB', { weekday:'long' });
     const rel = dayLabel(day);
     date.lastChild.textContent = d.toLocaleDateString('en-GB', { day:'numeric', month:'long' }) +
         (/^(Today|Tomorrow|Yesterday)$/.test(rel) && rel !== 'Today' ? ' · ' + rel : '');
-    if (day !== today) date.lastChild.appendChild(todoBtn('Back to today', 'today-jump', () => goTo(today)));
+    if (day !== today) date.lastChild.appendChild(todoBtn('Back to today', 'ui-btn quiet small today-jump', () => goTo(today)));
     top.appendChild(date);
     const arrows = document.createElement('div');
     arrows.className = 'today-arrows';
     arrows.append(
-        todoBtn('‹', 'today-arrow', () => goTo(addDays(day, -1)), 'Previous day'),
-        todoBtn('›', 'today-arrow', () => goTo(addDays(day, 1)), 'Next day'));
+        todoBtn('‹', 'ui-btn icon today-arrow', () => goTo(addDays(day, -1)), 'Previous day'),
+        todoBtn('›', 'ui-btn icon today-arrow', () => goTo(addDays(day, 1)), 'Next day'));
     // Drop a task on an arrow to move it to that day (never into the past)
     [[arrows.firstChild, -1], [arrows.lastChild, 1]].forEach(([btn, dir]) => {
         const target = addDays(day, dir);
@@ -2565,11 +2618,11 @@ function renderToday() {
     const allTasks = planTasks(day);
     const tasks = allTasks.filter(todayFocusPass);
     if (tasks.length > 1 || todayOrderEdit) {
-        const b = todoBtn('', 'icon-btn todo-order-btn' + (todayOrderEdit ? ' on' : ''), () => {
+        const b = todoBtn('', 'ui-btn quiet todo-order-btn' + (todayOrderEdit ? '' : ' icon'), () => {
             todayOrderEdit = !todayOrderEdit; todayOpenId = null; render();
         }, todayOrderEdit ? 'Done reordering' : 'Reorder');
         b.innerHTML = todayOrderEdit
-            ? '<span class="todo-order-done">Done</span>'
+            ? 'Done'
             : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg>';
         top.appendChild(b);
     }
@@ -2577,24 +2630,28 @@ function renderToday() {
     host.appendChild(top);
 
     // Work / Home — this list's own switch, remembered between visits
+    const focusRow = document.createElement('div');
+    focusRow.className = 'today-focus';
     const seg = document.createElement('div');
-    seg.className = 'today-focus';
+    seg.className = 'ui-seg focus-seg';
     [['all', 'All'], ['work', 'Work'], ['home', 'Home']].forEach(([mode, label]) => {
-        seg.appendChild(todoBtn(label, 'today-focus-btn' + (todayFocus() === mode ? ' active' : ''), () => {
+        const b = todoBtn(label, '', () => {
             state.settings.todayFocus = mode; todayOpenId = null; saveState(); render();
-        }));
+        });
+        b.setAttribute('aria-pressed', todayFocus() === mode ? 'true' : 'false');
+        seg.appendChild(b);
     });
+    focusRow.appendChild(seg);
     const hiddenN = allTasks.length - tasks.length;
     if (hiddenN) {
         const note = document.createElement('span');
-        note.className = 'today-focus-hidden';
+        note.className = 'ui-hint';
         note.textContent = hiddenN + ' ' + (todayFocus() === 'work' ? 'home' : 'work') + ' hidden';
-        seg.appendChild(note);
+        focusRow.appendChild(note);
     }
-    host.appendChild(seg);
+    host.appendChild(focusRow);
 
-    const list = document.createElement('div');
-    list.className = 'todo-list';
+    const list = todoList(host);
     tasks.forEach(t => list.appendChild(todoRow(t, 'day', tasks)));
     if (day >= today) makeTodoDropList(list, day);
     if (!tasks.length) {
@@ -2603,17 +2660,16 @@ function renderToday() {
             : hiddenN ? 'Nothing ' + todayFocus() + ' planned.'
             : doneOn(day).length ? 'All done.' : 'Nothing planned' + (day === today ? ' for today yet.' : '.')));
     }
-    host.appendChild(list);
 
     todoSection(host, 'Done', doneOn(day).filter(todayFocusPass), todayDoneOpen, () => { todayDoneOpen = !todayDoneOpen; render(); }, 'done');
 
     // Ready lives behind this one quiet button (nothing to add to a past day)
     if (day >= today) {
         const n = readyTasks().filter(todayFocusPass).length;
-        host.appendChild(todoBtn(n ? 'Add from Ready · ' + n : 'Add from Ready', 'today-pull', openReadySheet));
+        host.appendChild(todoBtn(n ? 'Add from Ready · ' + n : 'Add from Ready', 'ui-btn quiet today-pull', openReadySheet));
     }
 
-    if (document.getElementById('ready-modal').style.display === 'flex') renderReadySheet();
+    if (sheetOpen('ready-modal')) renderReadySheet();
     syncQuickAddVisibility();   // its placeholder names the day being shown
     if (window.scrollY !== y) window.scrollTo(0, y);
 }
@@ -2621,12 +2677,12 @@ function renderToday() {
 // ---- The Ready sheet: Live but not on a day, plus the board backlog ----
 function openReadySheet() {
     todayOpenId = null;
-    document.getElementById('ready-modal').style.display = 'flex';
+    openSheet('ready-modal');
     renderReadySheet();
 }
 function closeReadySheet() {
     todayOpenId = null;
-    document.getElementById('ready-modal').style.display = 'none';
+    closeSheet('ready-modal');
     render();
 }
 function renderReadySheet() {
@@ -2635,11 +2691,9 @@ function renderReadySheet() {
     host.innerHTML = '';
     document.getElementById('ready-title').textContent = 'Add to ' + longDay(todayDay);
     const ready = readyTasks().filter(todayFocusPass);   // follows Today's Work / Home switch
-    const list = document.createElement('div');
-    list.className = 'todo-list';
+    const list = todoList(host);
     ready.forEach(t => list.appendChild(todoRow(t, 'ready', ready)));
     if (!ready.length) list.appendChild(todoEmpty('Nothing in Ready. Move cards into Live on the board, or pick from the backlog below.'));
-    host.appendChild(list);
     todoSection(host, 'From the board backlog', boardBacklogTasks().filter(todayFocusPass), todayBacklogOpen,
         () => { todayBacklogOpen = !todayBacklogOpen; renderReadySheet(); }, 'backlog');
     host.scrollTop = y;
@@ -2648,7 +2702,7 @@ function renderReadySheet() {
 // ---- ADMIN ----
 
 function renderAdmin() {
-    document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('active', t.dataset.admin === currentAdminTab));
+    document.querySelectorAll('.admin-tab').forEach(t => t.setAttribute('aria-selected', t.dataset.admin === currentAdminTab ? 'true' : 'false'));
     const container = document.getElementById('admin-content');
     if (currentAdminTab === 'themes') renderAdminThemes(container);
     else if (currentAdminTab === 'tags') renderAdminTags(container);
@@ -2659,10 +2713,10 @@ function renderAdmin() {
 function renderAdminThemes(container) {
     container.innerHTML = '';
     const hdr = document.createElement('div');
-    hdr.className = 'admin-section-header';
-    hdr.innerHTML = '<h3>Themes & Sub-themes</h3>';
+    hdr.className = 'ui-head admin-section-header';
+    hdr.innerHTML = '<h3 class="ui-h2">Themes & Sub-themes</h3>';
     const addBtn = document.createElement('button');
-    addBtn.className = 'btn-primary';
+    addBtn.className = 'ui-btn primary small';
     addBtn.textContent = '+ Add Theme';
     addBtn.addEventListener('click', () => openThemeModal(null));
     hdr.appendChild(addBtn);
@@ -2670,26 +2724,23 @@ function renderAdminThemes(container) {
 
     renderRecoveryNotice(container, 'themes');
 
-    const list = document.createElement('div');
-    list.className = 'theme-list';
+    const list = listBox(container);
     [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const row = document.createElement('div');
-        row.className = 'theme-row';
+        row.className = 'ui-row theme-row';
         if (theme.hidden) row.classList.add('theme-row-hidden');
         if (theme.recovered) row.classList.add('theme-row-recovered');
         const swatch = document.createElement('div');
         swatch.className = 'theme-swatch';
         swatch.style.background = theme.color;
         const info = document.createElement('div');
-        info.style.flex = '1';
-        info.innerHTML = `<div class="theme-row-name">${theme.name}${theme.hidden ? ' <span class="hidden-badge">Hidden</span>' : ''}</div><div class="theme-row-subs">${[...(theme.subThemes||[])].sort((a,b)=>a.localeCompare(b)).join(', ') || 'No sub-themes'}</div>`;
+        info.className = 'main';
+        info.innerHTML = `<div>${theme.name}${theme.hidden ? ' <span class="ui-badge">Hidden</span>' : ''}</div><div class="sub">${[...(theme.subThemes||[])].sort((a,b)=>a.localeCompare(b)).join(', ') || 'No sub-themes'}</div>`;
         const actions = document.createElement('div');
-        actions.className = 'theme-row-actions';
+        actions.className = 'ui-actions';
         const hideBtn = document.createElement('button');
-        hideBtn.className = 'btn-ghost';
+        hideBtn.className = 'ui-btn small';
         hideBtn.textContent = theme.hidden ? 'Show' : 'Hide';
-        hideBtn.style.padding = '5px 12px';
-        hideBtn.style.fontSize = '12px';
         hideBtn.addEventListener('click', () => {
             theme.hidden = !theme.hidden;
             state.themesUpdatedAt = Date.now();
@@ -2698,16 +2749,13 @@ function renderAdminThemes(container) {
         });
         actions.appendChild(hideBtn);
         const editBtn = document.createElement('button');
-        editBtn.className = 'btn-ghost';
+        editBtn.className = 'ui-btn small';
         editBtn.textContent = 'Edit';
-        editBtn.style.padding = '5px 12px';
-        editBtn.style.fontSize = '12px';
         editBtn.addEventListener('click', () => openThemeModal(theme.id));
         actions.appendChild(editBtn);
         row.appendChild(swatch); row.appendChild(info); row.appendChild(actions);
         list.appendChild(row);
     });
-    container.appendChild(list);
 }
 
 // Admin > Tags: categories with their tags, both editable inline. Kept
@@ -2715,10 +2763,10 @@ function renderAdminThemes(container) {
 function renderAdminTags(container) {
     container.innerHTML = '';
     const hdr = document.createElement('div');
-    hdr.className = 'admin-section-header';
-    hdr.innerHTML = '<h3>Tags</h3>';
+    hdr.className = 'ui-head admin-section-header';
+    hdr.innerHTML = '<h3 class="ui-h2">Tags</h3>';
     const addBtn = document.createElement('button');
-    addBtn.className = 'btn-primary';
+    addBtn.className = 'ui-btn primary small';
     addBtn.textContent = '+ Add Category';
     addBtn.addEventListener('click', () => openTagCatModal(null));
     hdr.appendChild(addBtn);
@@ -2726,57 +2774,53 @@ function renderAdminTags(container) {
 
     renderRecoveryNotice(container, 'tags');
 
-    const intro = document.createElement('div');
-    intro.className = 'form-hint admin-intro';
+    const intro = document.createElement('p');
+    intro.className = 'ui-hint admin-intro';
     intro.innerHTML = 'Tags cut across themes, so one task can be Work <em>and</em> Barney <em>and</em> Weekend. A category groups related tags &mdash; people, when something fits, a trip you\u2019re planning.';
     container.appendChild(intro);
 
     const cats = allTagCategories();
     if (!cats.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty-state';
-        empty.textContent = 'No tag categories yet.';
-        container.appendChild(empty);
+        container.appendChild(emptyState('No tag categories yet.'));
         return;
     }
 
     cats.forEach(cat => {
         const box = document.createElement('div');
-        box.className = 'tag-cat-box' + (cat.recovered ? ' tag-cat-recovered' : '');
+        box.className = 'ui-card flat ui-stack tag-cat-box' + (cat.recovered ? ' tag-cat-recovered' : '');
 
         const head = document.createElement('div');
-        head.className = 'tag-cat-head';
+        head.className = 'ui-head tag-cat-head';
         const swatch = document.createElement('span');
         swatch.className = 'theme-swatch tag-cat-swatch';
         swatch.style.background = cat.color;
         head.appendChild(swatch);
-        const name = document.createElement('div');
-        name.className = 'tag-cat-name';
+        const name = document.createElement('h3');
+        name.className = 'ui-h2 tag-cat-name';
         name.textContent = cat.name;
         head.appendChild(name);
         const count = document.createElement('span');
-        count.className = 'tag-cat-count';
+        count.className = 'ui-hint';
         count.textContent = (cat.tags || []).length + ' tag' + ((cat.tags||[]).length === 1 ? '' : 's');
         head.appendChild(count);
         const edit = document.createElement('button');
-        edit.className = 'btn-ghost';
+        edit.className = 'ui-btn small';
         edit.textContent = 'Edit';
-        edit.style.padding = '5px 12px';
-        edit.style.fontSize = '12px';
         edit.addEventListener('click', () => openTagCatModal(cat.id));
         head.appendChild(edit);
         box.appendChild(head);
 
         const tagWrap = document.createElement('div');
-        tagWrap.className = 'tag-cat-tags';
+        tagWrap.className = 'ui-chips';
         [...(cat.tags || [])].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
-            const chip = document.createElement('span');
-            chip.className = 'tag-admin-chip' + (tag.recovered ? ' tag-admin-recovered' : '');
-            chip.style.borderColor = cat.color;
-            chip.style.color = cat.color;
+            // No shared removable chip yet: a tinted badge with a small × inside
+            const chip = tintChip(document.createElement('span'), cat.color);
+            chip.className = 'ui-badge accent tag-admin-chip' + (tag.recovered ? ' tag-admin-recovered' : '');
             chip.textContent = tag.name;
             const del = document.createElement('button');
+            del.type = 'button';
             del.className = 'tag-admin-del';
+            del.setAttribute('aria-label', 'Delete ' + tag.name);
             del.innerHTML = '&times;';
             del.title = 'Delete "' + tag.name + '"';
             del.addEventListener('click', () => deleteTag(cat.id, tag.id));
@@ -2792,7 +2836,7 @@ function renderAdminTags(container) {
         add.className = 'tag-cat-add';
         const input = document.createElement('input');
         input.type = 'text';
-        input.className = 'form-input';
+        input.className = 'ui-input';
         input.placeholder = 'Add a tag to ' + cat.name + '\u2026';
         input.dataset.tagAddFor = cat.id;
         // Adding redraws the whole page, so the box typed into is gone: put the
@@ -2811,7 +2855,7 @@ function renderAdminTags(container) {
         input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
         add.appendChild(input);
         const addTagBtn = document.createElement('button');
-        addTagBtn.className = 'btn-small';
+        addTagBtn.className = 'ui-btn primary';
         addTagBtn.textContent = 'Add';
         addTagBtn.addEventListener('click', go);
         add.appendChild(addTagBtn);
@@ -2870,7 +2914,7 @@ function recoveredTagFixer(cat, tags) {
     const wrap = document.createElement('div');
     wrap.className = 'tag-fix';
     const head = document.createElement('div');
-    head.className = 'tag-fix-head';
+    head.className = 'ui-label';
     head.textContent = tags.length + ' to sort out \u2014 named from the tasks still carrying them';
     wrap.appendChild(head);
 
@@ -2885,9 +2929,9 @@ function recoveredTagFixer(cat, tags) {
         const shown = titles.slice(0, SHOWN);
         const on = document.createElement('div');
         on.className = 'tag-fix-on';
-        on.innerHTML = `<span class="tag-fix-count">${titles.length}</span> ` +
-            (titles.length ? shown.map(() => '<span class="tag-fix-task"></span>').join('') : '<em>no live tasks</em>') +
-            (titles.length > SHOWN ? `<span class="tag-fix-more">+${titles.length - SHOWN} more</span>` : '');
+        on.innerHTML = `<span class="ui-badge accent">${titles.length}</span> ` +
+            (titles.length ? shown.map(() => '<span class="ui-badge tag-fix-task"></span>').join('') : '<em>no live tasks</em>') +
+            (titles.length > SHOWN ? `<span class="ui-hint">+${titles.length - SHOWN} more</span>` : '');
         // set titles as text so nothing in a task name can be read as markup
         [...on.querySelectorAll('.tag-fix-task')].forEach((el, i) => { el.textContent = shown[i]; });
         if (titles.length) on.title = titles.join('\n');
@@ -2898,7 +2942,7 @@ function recoveredTagFixer(cat, tags) {
 
         const input = document.createElement('input');
         input.type = 'text';
-        input.className = 'form-input';
+        input.className = 'ui-input';
         input.placeholder = 'Name it\u2026';
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter') { e.preventDefault(); renameTag(cat.id, tag.id, input.value); }
@@ -2906,14 +2950,14 @@ function recoveredTagFixer(cat, tags) {
         actions.appendChild(input);
 
         const save = document.createElement('button');
-        save.className = 'btn-small';
+        save.className = 'ui-btn primary';
         save.textContent = 'Rename';
         save.addEventListener('click', () => renameTag(cat.id, tag.id, input.value));
         actions.appendChild(save);
 
         if (targets.length) {
             const sel = document.createElement('select');
-            sel.className = 'form-select form-select-sm';
+            sel.className = 'ui-input';
             sel.innerHTML = '<option value="">Merge into\u2026</option>';
             [...targets].sort((a,b) => a.name.localeCompare(b.name)).forEach(t => {
                 const o = document.createElement('option');
@@ -2982,12 +3026,12 @@ function openTagCatModal(catId) {
     document.getElementById('tagcat-color').value = color;
     document.getElementById('tagcat-color-hex').textContent = color;
     document.getElementById('tagcat-tags').value = cat ? (cat.tags || []).map(t => t.name).join('\n') : '';
-    document.getElementById('tagcat-modal').style.display = 'flex';
+    openSheet('tagcat-modal');
     setTimeout(() => document.getElementById('tagcat-name').focus(), 50);
 }
 
 function closeTagCatModal() {
-    document.getElementById('tagcat-modal').style.display = 'none';
+    closeSheet('tagcat-modal');
     editingTagCatId = null;
 }
 
@@ -3063,35 +3107,34 @@ function deleteTagCategory() {
 function renderAdminArchive(container) {
     container.innerHTML = '';
     const hdr = document.createElement('div');
-    hdr.className = 'admin-section-header';
-    hdr.innerHTML = '<h3>Archive</h3>';
+    hdr.className = 'ui-head admin-section-header';
+    hdr.innerHTML = '<h3 class="ui-h2">Archive</h3>';
     const archiveBtn = document.createElement('button');
-    archiveBtn.className = 'btn-outline';
+    archiveBtn.className = 'ui-btn small';
     archiveBtn.textContent = 'Archive completed now';
     archiveBtn.addEventListener('click', () => { archiveCompleted(); renderAdmin(); });
     hdr.appendChild(archiveBtn);
     container.appendChild(hdr);
 
     if (!state.archive.length) {
-        container.innerHTML += '<div class="empty-state"><p>No archived tasks yet. Tasks in the Complete column are archived at week end.</p></div>';
+        container.appendChild(emptyState('No archived tasks yet', 'Tasks in the Complete column are archived at week end.'));
         return;
     }
     [...state.archive].reverse().forEach(week => {
         const weekEl = document.createElement('div');
-        weekEl.className = 'archive-week';
+        weekEl.className = 'ui-card flat archive-week';
         const pts = week.tasks.reduce((s,t) => s+(SIZE_POINTS[t.size]||0),0);
-        weekEl.innerHTML = `<div class="archive-week-header"><span class="archive-week-label">Week of ${formatDateFull(week.weekStart)}</span><span class="archive-week-stats">${week.tasks.length} tasks · ${pts} pts</span></div>`;
+        weekEl.innerHTML = `<div class="ui-head"><h3 class="ui-h2">Week of ${formatDateFull(week.weekStart)}</h3><span class="ui-hint">${week.tasks.length} tasks · ${pts} pts</span></div>`;
         const taskList = document.createElement('div');
-        taskList.className = 'archive-task-list';
+        taskList.className = 'ui-list';
         week.tasks.forEach(t => {
             const ths = taskThemes(t);
             const tr = document.createElement('div');
-            tr.className = 'archive-task-row';
+            tr.className = 'ui-row archive-task-row';
             tr.innerHTML = `
-                ${ths.map(th => `<span class="chip chip-theme" style="background:${th.color};color:${contrastText(th.color)}">${th.name}</span>`).join('')}
-                <span style="flex:1">${t.title}</span>
-                ${t.size ? `<span class="chip chip-size">${t.size.toUpperCase()}</span>` : ''}
-                ${t.size ? `<span class="chip chip-size">${t.size.toUpperCase()}</span>` : ''}
+                ${ths.map(th => `<span class="ui-badge accent" style="--accent:${th.color}">${th.name}</span>`).join('')}
+                <span class="ui-spacer">${t.title}</span>
+                ${t.size ? `<span class="ui-badge">${t.size.toUpperCase()}</span>` : ''}
             `;
             taskList.appendChild(tr);
         });
@@ -3103,22 +3146,21 @@ function renderAdminArchive(container) {
 function renderAdminData(container) {
     container.innerHTML = '';
     const hdr = document.createElement('div');
-    hdr.className = 'admin-section-header';
-    hdr.innerHTML = '<h3>Import / Export</h3>';
+    hdr.className = 'ui-head admin-section-header';
+    hdr.innerHTML = '<h3 class="ui-h2">Import / Export</h3>';
     container.appendChild(hdr);
 
     const wrap = document.createElement('div');
-    wrap.className = 'data-actions';
+    wrap.className = 'ui-stack data-actions';
 
     const exportBtn = document.createElement('button');
-    exportBtn.className = 'btn-ghost';
+    exportBtn.className = 'ui-btn block';
     exportBtn.textContent = 'Download JSON backup';
     exportBtn.addEventListener('click', exportData);
 
     const importLabel = document.createElement('label');
-    importLabel.className = 'btn-ghost';
+    importLabel.className = 'ui-btn block';
     importLabel.textContent = 'Import JSON backup';
-    importLabel.style.display = 'block'; importLabel.style.cursor = 'pointer'; importLabel.style.textAlign='center';
     const importInput = document.createElement('input');
     importInput.type = 'file'; importInput.accept = '.json'; importInput.style.display = 'none';
     importInput.addEventListener('change', e => { if (e.target.files[0]) importData(e.target.files[0]); });
@@ -3526,12 +3568,12 @@ function openTaskModal(taskId, defaultKanbanCol) {
     renderDowPicker();
     updateSubThemeSelect();
 
-    modal.style.display = 'flex';
+    if (!modal.open) modal.showModal();
     setTimeout(() => document.getElementById('task-title').focus(), 50);
 }
 
 function closeTaskModal() {
-    document.getElementById('task-modal').style.display = 'none';
+    closeSheet('task-modal');
     editingTaskId = null;
     // If we came here from the review modal, return to it to keep triaging
     if (reopenReviewAfterTask) {
@@ -3557,7 +3599,7 @@ function renderTaskSections() {
         if (modalOpenSections.has(key)) return;
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'task-more-pill';
+        b.className = 'ui-chip';
         b.textContent = '+ ' + label;
         b.addEventListener('click', () => openTaskSection(key));
         bar.appendChild(b);
@@ -3582,7 +3624,7 @@ function renderTagPicker() {
     container.innerHTML = '';
     const cats = allTagCategories();
     if (!cats.length) {
-        container.innerHTML = '<span class="form-hint">No tag categories yet &mdash; add one in Admin &rsaquo; Tags.</span>';
+        container.innerHTML = '<p class="ui-hint">No tag categories yet &mdash; add one in Admin &rsaquo; Tags.</p>';
         return;
     }
     // Each category is folded to just its chosen tags until tapped open, so
@@ -3590,7 +3632,8 @@ function renderTagPicker() {
     const catToggle = (cat, open) => {
         const label = document.createElement('button');
         label.type = 'button';
-        label.className = 'tag-cat-label tag-cat-toggle';
+        label.className = 'ui-btn quiet small tag-cat-toggle';
+        label.setAttribute('aria-expanded', open ? 'true' : 'false');
         label.textContent = (open ? '▾ ' : '▸ ') + cat.name;
         label.addEventListener('click', () => {
             if (open) modalTagCatsOpen.delete(cat.id); else modalTagCatsOpen.add(cat.id);
@@ -3604,24 +3647,18 @@ function renderTagPicker() {
         const open = modalTagCatsOpen.has(cat.id);
         if (!open && !(cat.tags || []).some(t => modalTagIds.includes(t.id))) { folded.push(cat); return; }
         const row = document.createElement('div');
-        row.className = 'tag-picker-row';
+        row.className = 'ui-chips tag-picker-row';
         row.appendChild(catToggle(cat, open));
         if (open && !(cat.tags || []).length) {
             const none = document.createElement('span');
-            none.className = 'tag-cat-empty';
+            none.className = 'ui-hint';
             none.textContent = 'none yet';
             row.appendChild(none);
         }
         [...(cat.tags || [])].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
             const on = modalTagIds.includes(tag.id);
             if (!open && !on) return;
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'tag-chip' + (on ? ' on' : '');
-            btn.textContent = tag.name;
-            btn.style.borderColor = cat.color;
-            if (on) { btn.style.background = cat.color; btn.style.color = contrastText(cat.color); }
-            else { btn.style.color = cat.color; }
+            const btn = tintChip(chipBtn(tag.name, on), cat.color);
             btn.addEventListener('click', () => {
                 const i = modalTagIds.indexOf(tag.id);
                 if (i === -1) modalTagIds.push(tag.id); else modalTagIds.splice(i, 1);
@@ -3633,7 +3670,7 @@ function renderTagPicker() {
     });
     if (folded.length) {
         const row = document.createElement('div');
-        row.className = 'tag-picker-row tag-picker-folded';
+        row.className = 'ui-chips tag-picker-row';
         folded.forEach(cat => row.appendChild(catToggle(cat, false)));
         container.appendChild(row);
     }
@@ -3663,7 +3700,7 @@ function renderSubtaskEditor() {
 
         const input = document.createElement('input');
         input.type = 'text';
-        input.className = 'subtask-input';
+        input.className = 'ui-input subtask-input';
         input.setAttribute('data-no-clear', '');   // the row already has its own ×
         input.value = st.title;
         input.addEventListener('input', () => { modalSubtasks[idx].title = input.value; });
@@ -3679,7 +3716,7 @@ function renderSubtaskEditor() {
         if (card || editingTaskId) {
             const out = document.createElement('button');
             out.type = 'button';
-            out.className = 'icon-btn subtask-card' + (card ? ' linked' : '');
+            out.className = 'ui-btn quiet icon small subtask-card' + (card ? ' linked' : '');
             out.innerHTML = CARD_OUT_SVG;
             if (card) {
                 const col = KANBAN_COLS.find(c => c.id === card.kanbanColumn);
@@ -3705,9 +3742,10 @@ function renderSubtaskEditor() {
 
         const del = document.createElement('button');
         del.type = 'button';
-        del.className = 'icon-btn subtask-del';
+        del.className = 'ui-btn quiet icon small subtask-del';
         del.innerHTML = '&times;';
         del.title = 'Remove this step';
+        del.setAttribute('aria-label', 'Remove this step');
         del.addEventListener('click', () => { modalSubtasks.splice(idx, 1); renderSubtaskEditor(); });
         row.appendChild(del);
 
@@ -3719,7 +3757,7 @@ function renderSubtaskEditor() {
         const done = modalSubtasks.filter(st => st.done).length;
         const pct = Math.round((done / modalSubtasks.length) * 100);
         bar.style.display = '';
-        bar.innerHTML = `<span class="subtask-progress-bar"><span style="width:${pct}%"></span></span><span class="subtask-progress-text">${done}/${modalSubtasks.length} &middot; ${pct}%</span>`;
+        bar.innerHTML = `<span class="subtask-progress-bar"><span style="width:${pct}%"></span></span><span class="ui-hint">${done}/${modalSubtasks.length} &middot; ${pct}%</span>`;
     } else {
         bar.style.display = 'none';
     }
@@ -3739,12 +3777,7 @@ function renderThemePicker() {
     const container = document.getElementById('theme-picker');
     container.innerHTML = '';
     [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'theme-pick-btn' + (modalThemeIds.includes(theme.id) ? ' active' : '');
-        btn.style.background = theme.color;
-        btn.style.color = contrastText(theme.color);
-        btn.textContent = theme.name + (theme.hidden ? ' 🕶' : '');
+        const btn = tintChip(chipBtn(theme.name + (theme.hidden ? ' 🕶' : ''), modalThemeIds.includes(theme.id)), theme.color);
         btn.addEventListener('click', () => {
             // Each chip is an independent toggle, so Work + Jim is just two taps
             const i = modalThemeIds.indexOf(theme.id);
@@ -3756,7 +3789,7 @@ function renderThemePicker() {
     });
     const add = document.createElement('button');
     add.type = 'button';
-    add.className = 'theme-pick-add';
+    add.className = 'ui-chip';
     add.textContent = '+ New theme';
     add.title = 'Create a theme without leaving this task';
     add.addEventListener('click', () => openThemeModal(null, { fromTask: true }));
@@ -3769,8 +3802,9 @@ function renderPriorityPicker() {
     PRIORITY_LEVELS.forEach(lv => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'group-btn' + (lv.value ? ' ' + lv.value : '')
-            + (modalPriority === lv.value ? ' active' : '');
+        // The level's own colour is its --accent (styles.css), so pressed paints in it
+        btn.className = 'ui-chip' + (lv.value ? ' prio-' + lv.value : '');
+        btn.setAttribute('aria-pressed', modalPriority === lv.value ? 'true' : 'false');
         btn.dataset.value = lv.value;
         btn.textContent = lv.label;
         btn.addEventListener('click', () => { modalPriority = lv.value; renderPriorityPicker(); });
@@ -3780,7 +3814,7 @@ function renderPriorityPicker() {
 
 function renderSizePicker() {
     document.querySelectorAll('#size-picker .size-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.value === modalSize);
+        btn.setAttribute('aria-pressed', btn.dataset.value === modalSize ? 'true' : 'false');
     });
 }
 
@@ -3800,7 +3834,7 @@ function updateCountdownRow() {
 
 function renderRecurTypeBtns() {
     document.querySelectorAll('.recur-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.type === modalRecurType);
+        btn.setAttribute('aria-pressed', btn.dataset.type === modalRecurType ? 'true' : 'false');
     });
 }
 
@@ -3812,7 +3846,7 @@ function renderRecurOpts() {
 
 function renderDowPicker() {
     document.querySelectorAll('.dow-btn').forEach(btn => {
-        btn.classList.toggle('active', modalRecurDow.has(parseInt(btn.dataset.day)));
+        btn.setAttribute('aria-pressed', modalRecurDow.has(parseInt(btn.dataset.day)) ? 'true' : 'false');
     });
 }
 
@@ -4045,17 +4079,17 @@ function openThemeModal(themeId, opts) {
         modalThemeFocus = 'home';
     }
     renderThemeFocusPicker();
-    modal.style.display = 'flex';
+    if (!modal.open) modal.showModal();
 }
 
 function renderThemeFocusPicker() {
     document.querySelectorAll('#theme-focus-picker .group-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.value === modalThemeFocus);
+        b.setAttribute('aria-pressed', b.dataset.value === modalThemeFocus ? 'true' : 'false');
     });
 }
 
 function closeThemeModal() {
-    document.getElementById('theme-edit-modal').style.display = 'none';
+    closeSheet('theme-edit-modal');
     editingThemeId = null;
     themeModalFromTask = false;
 }
@@ -4162,7 +4196,7 @@ function applySnooze(until) {
 }
 
 function closeSnoozeModal() {
-    document.getElementById('snooze-modal').style.display = 'none';
+    closeSheet('snooze-modal');
     snoozeTargetIds = null;
     snoozeFromBulk = false;
 }
@@ -4171,7 +4205,7 @@ function openSnoozeModal(taskIds, fromBulk) {
     snoozeTargetIds = Array.isArray(taskIds) ? taskIds : [taskIds];
     snoozeFromBulk = !!fromBulk;
     if (!snoozeTargetIds.length) return;
-    document.querySelector('#snooze-modal .modal-header h3').textContent =
+    document.querySelector('#snooze-modal > header h2').textContent =
         snoozeTargetIds.length > 1 ? `Snooze ${snoozeTargetIds.length} tasks until…` : 'Snooze until…';
     const list = document.getElementById('snooze-options');
     list.innerHTML = '';
@@ -4179,13 +4213,14 @@ function openSnoozeModal(taskIds, fromBulk) {
     [['Tomorrow', 1], ['3 days', 3], ['1 week', 7], ['2 weeks', 14], ['1 month', 30]].forEach(([label, days]) => {
         const until = addDays(today, days);
         const btn = document.createElement('button');
-        btn.className = 'move-to-option';
-        btn.innerHTML = `${label} <span class="snooze-date-hint">${formatDateShort(until)}</span>`;
+        btn.type = 'button';
+        btn.className = 'ui-row';
+        btn.innerHTML = `<span class="main"><span>${label}</span></span><span class="ui-hint">${formatDateShort(until)}</span>`;
         btn.addEventListener('click', () => applySnooze(until));
         list.appendChild(btn);
     });
     document.getElementById('snooze-date').value = '';
-    document.getElementById('snooze-modal').style.display = 'flex';
+    openSheet('snooze-modal');
 }
 
 function openMoveToModal(taskId) {
@@ -4196,19 +4231,22 @@ function openMoveToModal(taskId) {
     list.innerHTML = '';
     boardColumns().forEach(col => {
         const btn = document.createElement('button');
-        btn.className = 'move-to-option' + (task.kanbanColumn === col.id ? ' current' : '');
-        btn.textContent = col.name;
+        btn.type = 'button';
+        btn.className = 'ui-row';
+        btn.innerHTML = '<span class="main"><span></span></span>';
+        btn.querySelector('.main > span').textContent = col.name;
         if (task.kanbanColumn === col.id) {
             btn.disabled = true;
-            btn.textContent = col.name + ' (current)';
+            btn.classList.add('no-chevron');
+            btn.insertAdjacentHTML('beforeend', '<span class="ui-badge">Current</span>');
         }
         btn.addEventListener('click', () => {
             moveToColumn(taskId, col.id);
-            modal.style.display = 'none';
+            modal.close();
         });
         list.appendChild(btn);
     });
-    modal.style.display = 'flex';
+    if (!modal.open) modal.showModal();
 }
 
 // ============ DATA ============
@@ -4242,7 +4280,7 @@ function applyTheme() {
 // Admin no tab is highlighted.
 function showView(view) {
     currentView = view;
-    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+    document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.view === view ? 'true' : 'false'));
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + view).classList.add('active');
     if (view === 'lists') markListsVisited();
@@ -4268,7 +4306,7 @@ function init() {
     document.querySelectorAll('[data-admin-open]').forEach(btn => {
         btn.addEventListener('click', () => {
             currentAdminTab = btn.dataset.adminOpen;
-            document.getElementById('settings-modal').style.display = 'none';
+            closeSheet('settings-modal');
             showView('admin');
         });
     });
@@ -4499,10 +4537,10 @@ function init() {
         document.getElementById('settings-reminder').checked = !!state.settings.reminderEnabled;
         document.getElementById('settings-reminder-time').value = state.settings.reminderTime || '09:00';
         document.getElementById('reminder-time-row').style.display = state.settings.reminderEnabled ? '' : 'none';
-        document.getElementById('settings-modal').style.display = 'flex';
+        openSheet('settings-modal');
     });
-    document.getElementById('settings-close').addEventListener('click', () => document.getElementById('settings-modal').style.display = 'none');
-    document.getElementById('settings-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
+    document.getElementById('settings-close').addEventListener('click', () => closeSheet('settings-modal'));
+    document.getElementById('settings-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.close(); });
     document.getElementById('settings-dark').addEventListener('change', e => {
         state.settings.theme = e.target.checked ? 'dark' : 'light'; applyTheme(); saveState();
     });
@@ -4580,8 +4618,8 @@ function init() {
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { periodicChecks(); render(); } });
 
     // Move-to modal
-    document.getElementById('move-to-close').addEventListener('click', () => document.getElementById('move-to-modal').style.display = 'none');
-    document.getElementById('move-to-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
+    document.getElementById('move-to-close').addEventListener('click', () => closeSheet('move-to-modal'));
+    document.getElementById('move-to-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.close(); });
 
     // Review modal
     // Keep remaining: everything still in the queue was reviewed, so mark it
@@ -4619,29 +4657,34 @@ function init() {
         if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
         const tg = e.target;
         if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName))) return;
-        if ([...document.querySelectorAll('.modal-overlay')].some(m => getComputedStyle(m).display !== 'none')) return;
+        if (document.querySelector('dialog[open]')) return;
         e.preventDefault();
         undoLast();
     });
+
+    // The sheets are <dialog>s, whose Escape would close the top one behind
+    // this handler's back (and skip closeTaskModal's return to Review). Leave
+    // Escape to the handler below; the password gate can't be closed at all.
+    document.querySelectorAll('dialog.ui-sheet').forEach(d => d.addEventListener('cancel', e => e.preventDefault()));
 
     // Escape key
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
             // The theme modal can sit on top of the task modal; step back one
             // layer at a time rather than closing both at once.
-            if (document.getElementById('theme-edit-modal').style.display === 'flex') {
+            if (sheetOpen('theme-edit-modal')) {
                 closeThemeModal();
                 return;
             }
-            if (document.getElementById('tagcat-modal').style.display === 'flex') {
+            if (sheetOpen('tagcat-modal')) {
                 closeTagCatModal();
                 return;
             }
             closeTaskModal(); closeThemeModal(); hideContextMenu(); closeSnoozeModal(); closeReviewModal();
-            if (document.getElementById('filter-modal').style.display === 'flex') closeFilterModal();
-            document.getElementById('settings-modal').style.display = 'none';
-            document.getElementById('theme-edit-modal').style.display = 'none';
-            document.getElementById('move-to-modal').style.display = 'none';
+            if (sheetOpen('filter-modal')) closeFilterModal();
+            closeSheet('settings-modal');
+            closeSheet('theme-edit-modal');
+            closeSheet('move-to-modal');
         }
     });
 
@@ -4862,7 +4905,7 @@ async function apiPut(code, payload) {
 // --- Password gate helpers ---
 function showPasswordGate() {
     const gate = document.getElementById('password-gate');
-    if (gate) gate.style.display = 'flex';
+    if (gate && !gate.open) gate.showModal();
 }
 async function unlockSite() {
     const input = document.getElementById('gate-password');
@@ -4871,13 +4914,13 @@ async function unlockSite() {
     try {
         const res = await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ password: pw }) });
         if (!res.ok) {
-            if (errEl) { errEl.textContent = 'Incorrect password.'; errEl.style.display = ''; }
+            if (errEl) { errEl.textContent = 'Incorrect password.'; errEl.style.display = ''; errEl.parentElement.classList.add('error'); }
             return;
         }
         // Cookie set — reload so the gated data endpoints work and sync re-runs.
         location.reload();
     } catch(e) {
-        if (errEl) { errEl.textContent = 'Could not reach the server.'; errEl.style.display = ''; }
+        if (errEl) { errEl.textContent = 'Could not reach the server.'; errEl.style.display = ''; errEl.parentElement.classList.add('error'); }
     }
 }
 async function apiUpdateSettings(enabled, password) {
