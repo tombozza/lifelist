@@ -4272,8 +4272,14 @@ function importData(file) {
 
 // ============ SETTINGS ============
 
+// Light/dark lives in the shared switch (vendor/chassis/theme.js), per device. Before 11 Nov 2026
+// the app kept its own on/off in state.settings.theme; a device that had Dark on keeps it, once.
 function applyTheme() {
-    document.documentElement.setAttribute('data-theme', state.settings.theme || 'light');
+    try {
+        if (localStorage.getItem('lk-theme-moved')) return;
+        localStorage.setItem('lk-theme-moved', '1');
+        if (state.settings && state.settings.theme === 'dark' && window.theme && theme.get() === 'auto') theme.set('dark');
+    } catch (e) {}
 }
 
 // Switch the main view. Admin has no tab (it opens from Settings), so on
@@ -4532,7 +4538,6 @@ function init() {
 
     // Settings
     document.getElementById('settings-btn').addEventListener('click', () => {
-        document.getElementById('settings-dark').checked = state.settings.theme === 'dark';
         document.getElementById('settings-show-hidden').checked = !!state.settings.showHidden;
         document.getElementById('settings-reminder').checked = !!state.settings.reminderEnabled;
         document.getElementById('settings-reminder-time').value = state.settings.reminderTime || '09:00';
@@ -4541,9 +4546,6 @@ function init() {
     });
     document.getElementById('settings-close').addEventListener('click', () => closeSheet('settings-modal'));
     document.getElementById('settings-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.close(); });
-    document.getElementById('settings-dark').addEventListener('change', e => {
-        state.settings.theme = e.target.checked ? 'dark' : 'light'; applyTheme(); saveState();
-    });
     document.getElementById('settings-show-hidden').addEventListener('change', e => {
         state.settings.showHidden = e.target.checked; saveState(); render();
     });

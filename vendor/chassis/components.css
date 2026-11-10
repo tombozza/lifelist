@@ -249,3 +249,8 @@ body:has(.ui-tabbar) .ui-toast { bottom: calc(88px + env(safe-area-inset-bottom)
 @media (prefers-reduced-motion: reduce) {
   .ui-btn, .ui-input, .ui-toast { transition: none; animation: none; }
 }
+
+/* ── Theme switch (from theme.js) ────────────────────────────────────────────── */
+/* <theme-switch> on a Settings screen, <theme-switch compact> in a top bar. */
+theme-switch { display: block; }
+theme-switch[compact] { display: inline-flex; }

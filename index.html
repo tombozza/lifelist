@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
+    <script src="vendor/chassis/theme.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#007aff">
@@ -496,7 +497,10 @@
                 <button type="button" class="ui-btn small" data-admin-open="data">Data</button>
             </div>
         </div>
-        <label class="check"><input type="checkbox" role="switch" id="settings-dark"> Dark mode</label>
+        <div class="ui-stack setting">
+            <span class="ui-label">Appearance</span>
+            <theme-switch></theme-switch>
+        </div>
         <div class="ui-stack setting">
             <label class="check"><input type="checkbox" role="switch" id="settings-show-hidden"> Show hidden themes</label>
             <p class="ui-hint">Temporarily reveal themes marked as hidden in Lists and on the Board</p>
