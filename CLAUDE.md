@@ -335,6 +335,10 @@ name (`lk_session`):
 - `POST /api/auth` and `GET /api/settings` stay open so the static app can load and show
   its password screen.
 - Stateless session token: `HMAC(AUTH_SECRET, "authenticated")`.
+- `PUT /api/settings` with the lock on and no password keeps the current hash (the "leave
+  blank to keep" box); with no password set yet it answers "Choose a password". Turning the
+  lock off clears the hash. Same `settings.js` in golf-tracker, life-kanban, media-tracker and
+  holiday-tracker (10 Nov 2026).
 
 `golf-tracker` has the same files. Fix a bug in one, fix it in both.
 
