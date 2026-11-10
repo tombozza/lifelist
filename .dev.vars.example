@@ -1,0 +1,6 @@
+# Copy to .dev.vars for `npx wrangler pages dev .` (the real .dev.vars is gitignored).
+# Live, this is a Pages secret: `npx wrangler pages secret put AUTH_SECRET --project-name life-kanban`,
+# and it only takes effect on the NEXT deploy (./deploy.sh).
+
+# Signs the lk_session cookie used by the optional site password. Without it the code falls back to a built-in dev secret.
+AUTH_SECRET=

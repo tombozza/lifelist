@@ -1,5 +1,7 @@
 # Life Kanban
 
+Read docs/HANDOVER.md first.
+
 A personal life-admin kanban board. Vanilla JS PWA on Cloudflare Pages, with Pages
 Functions over D1. No build step.
 
@@ -357,3 +359,8 @@ node scripts/seed-d1.mjs
 ```
 
 `AUTH_SECRET` is a Pages secret and **only takes effect on the next deploy**.
+
+## Keep the handover current
+
+At the end of any session that makes a decision or changes what works or what's next, add a
+dated line to `docs/HANDOVER.md`'s Decisions and update its Status and Parked ideas.
