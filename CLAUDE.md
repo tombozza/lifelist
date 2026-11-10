@@ -266,6 +266,21 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
 - On Today, quick add and the + button plan straight onto today
   (`quickAddPlanTarget`, `modalPlanDay`) instead of going to Review.
 
+## Repeats on Today
+
+Tom (10 Nov 2026): a repeat should be able to "pop up every Monday" on Today, and
+he chooses whether a missed one follows him to the next day or only counts on
+its day. Two fields on `task.recurring`, set in the Repeat section (new repeats
+default to on + carry; older ones are unchanged, so they keep going to Backlog):
+
+- `onToday` — `checkRecurring()` wakes the occurrence straight into **Live** with
+  `planDay` = its scheduled date, at the top of that day.
+- `missed: 'carry' | 'skip'` — carry is the normal `rollOverPlan()`. Skip: a
+  past-day one is handed to `missOccurrence()` instead: filed as `wont-do` with
+  `missed: true` / `missedOn`, and the next occurrence on or after today is
+  scheduled (deterministic id, so devices agree). Works even if the app wasn't
+  opened that day, because the woken occurrence's `planDay` is its own date.
+
 ## The task modal — progressive disclosure
 
 Tom (4 Nov 2026): "it needs tidying up and more progressive disclosure". Only the

@@ -1004,3 +1004,8 @@ main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the +
 .toast.show { opacity:1; transform:translate(-50%, 0); pointer-events:auto; }
 .toast-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .toast-undo { flex-shrink:0; background:none; border:none; color:#93c5fd; font:inherit; font-weight:600; cursor:pointer; padding:4px 2px; }
+
+/* Repeat › Today */
+.recur-today { margin-top:12px; padding-top:10px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:8px; font-size:13px; }
+.recur-missed { display:flex; flex-direction:column; gap:6px; padding-left:2px; }
+.recur-missed-label { font-size:11.5px; color:var(--text-3); }

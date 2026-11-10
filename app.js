@@ -2220,9 +2220,14 @@ function dayLabel(day) {
 // same tasks over agree. Returns whether anything moved; the caller saves.
 function rollOverPlan() {
     const today = todayStr();
-    const late = state.tasks.filter(t => isLiveActive(t) && t.planDay && t.planDay < today).sort((a, b) =>
+    let all = state.tasks.filter(t => isLiveActive(t) && t.planDay && t.planDay < today);
+    // A repeat set to "only that day" doesn't follow you: a missed one is
+    // marked missed and the next occurrence is booked instead.
+    const missed = all.filter(t => t.recurring && t.recurring.onToday && t.recurring.missed === 'skip');
+    missed.forEach(missOccurrence);
+    const late = all.filter(t => !missed.includes(t)).sort((a, b) =>
         a.planDay.localeCompare(b.planDay) || byPlanOrder(a, b));
-    if (!late.length) return false;
+    if (!late.length) return missed.length > 0;
     const top = planTasks(today).reduce((m, t) => Math.min(m, t.planOrder || 0), 1);
     late.forEach((t, i) => {
         if (!t.carriedFrom) t.carriedFrom = t.planDay;
@@ -2231,6 +2236,24 @@ function rollOverPlan() {
         t.updatedAt = Date.now();
     });
     return true;
+}
+
+// An "only that day" repeat that wasn't done: it's filed as won't-do (marked
+// missed) and the next occurrence on or after today is scheduled. The next
+// one's id is deterministic, so two devices doing this agree.
+function missOccurrence(t) {
+    const rec = t.recurring;
+    let next = calcNextRecurring(rec, t.planDay);
+    const today = todayStr();
+    while (next < today) next = calcNextRecurring(rec, next);
+    const child = scheduleOccurrence(t, next, (t.runCount || 0) + 1);
+    t.spawnedChildId = child.id;
+    t.status = 'wont-do';
+    t.missed = true;
+    t.kanbanColumn = null;
+    t.missedOn = t.planDay;
+    t.recurring = null;
+    t.updatedAt = Date.now();
 }
 
 // Put a task on a day (or back in Ready with day = null), at the bottom.
@@ -3352,7 +3375,16 @@ function checkRecurring() {
         if (t.status !== 'scheduled') return;
         if ((t.scheduledFor || '9999-99-99') <= today) {
             t.status = 'active';
-            t.kanbanColumn = defaultBacklogCol(taskThemeIds(t));
+            if (t.recurring && t.recurring.onToday) {
+                // Straight onto Today for its own date, at the top. If the
+                // app wasn't opened that day, rollOverPlan() carries or skips it.
+                const day = t.scheduledFor || today;
+                t.kanbanColumn = 'live';
+                t.planDay = day;
+                t.planOrder = planTasks(day).reduce((m, x) => Math.min(m, x.planOrder || 0), 1) - 1;
+            } else {
+                t.kanbanColumn = defaultBacklogCol(taskThemeIds(t));
+            }
             t.createdDate = t.scheduledFor || today;
             t.scheduledFor = null;
             t.reviewed = true;
@@ -3446,6 +3478,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
             document.getElementById('recur-monthly-dow').value = t.recurring.dayOfWeek || 1;
             document.querySelectorAll('input[name="monthly-mode"]').forEach(r => { r.checked = r.value === modalMonthlyMode; });
         }
+        setRecurTodayFields(t.recurring);
         const inList = document.getElementById('task-in-list');
         const days = daysSince(t.createdDate);
         inList.textContent = `Added ${formatDateShort(t.createdDate)} · ${days === 0 ? 'in list since today' : days + ' day' + (days === 1 ? '' : 's') + ' in list'}`;
@@ -3462,6 +3495,8 @@ function openTaskModal(taskId, defaultKanbanCol) {
         setNotesOpen(false);
         document.getElementById('task-recurring-toggle').checked = false;
         document.getElementById('recurring-config').style.display = 'none';
+        // A new repeat lands on Today on its day unless told otherwise
+        setRecurTodayFields({ onToday: true, missed: 'carry' });
         document.getElementById('task-add-to-kanban').checked = !!defaultKanbanCol;
         document.getElementById('recur-daily-interval').value = 1;
         document.getElementById('recur-weekly-interval').value = 1;
@@ -3855,6 +3890,26 @@ function saveNewSubTheme() {
 }
 
 function getRecurringFromModal() {
+    const rec = baseRecurringFromModal();
+    if (!rec) return null;
+    // Whether each occurrence lands on Today on its date (rather than in the
+    // Backlog), and what happens if it isn't done that day
+    rec.onToday = document.getElementById('recur-on-today').checked;
+    if (rec.onToday) rec.missed = document.querySelector('input[name="recur-missed"]:checked')?.value === 'skip' ? 'skip' : 'carry';
+    return rec;
+}
+
+function setRecurTodayFields(rec) {
+    document.getElementById('recur-on-today').checked = !!(rec && rec.onToday);
+    const skip = !!(rec && rec.missed === 'skip');
+    document.querySelectorAll('input[name="recur-missed"]').forEach(r => { r.checked = r.value === (skip ? 'skip' : 'carry'); });
+    syncRecurMissed();
+}
+function syncRecurMissed() {
+    document.getElementById('recur-missed-row').style.display = document.getElementById('recur-on-today').checked ? '' : 'none';
+}
+
+function baseRecurringFromModal() {
     if (!document.getElementById('task-recurring-toggle').checked) return null;
     const type = modalRecurType;
     if (type === 'daily') {
@@ -4312,6 +4367,7 @@ function init() {
 
     document.getElementById('subtask-add-btn').addEventListener('click', addSubtaskFromInput);
     document.getElementById('task-url').addEventListener('input', syncUrlOpen);
+    document.getElementById('recur-on-today').addEventListener('change', syncRecurMissed);
     document.getElementById('task-url').addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
     document.getElementById('subtask-new-name').addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); addSubtaskFromInput(); }
