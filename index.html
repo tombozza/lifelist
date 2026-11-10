@@ -9,6 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="Life Kanban">
     <title>Life Kanban</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- Shared checkboxes, radios, switches and sliders (sites/_shared/chassis), after the app's CSS. -->
+    <link rel="stylesheet" href="vendor/chassis/controls.css">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -268,8 +270,7 @@
                 <span class="field-label">Repeat</span>
                 <div class="field-control">
                     <label class="switch">
-                        <input type="checkbox" id="task-recurring-toggle">
-                        <span class="switch-track"></span>
+                        <input type="checkbox" role="switch" id="task-recurring-toggle">
                     </label>
                 </div>
             </div>
@@ -420,8 +421,7 @@
                 <label class="toggle-row">
                     <span class="form-label" style="margin:0">Hidden</span>
                     <label class="switch">
-                        <input type="checkbox" id="theme-edit-hidden">
-                        <span class="switch-track"></span>
+                        <input type="checkbox" role="switch" id="theme-edit-hidden">
                     </label>
                 </label>
                 <div class="form-hint">Hidden themes and their tasks don't appear in Lists or on the Board</div>
@@ -430,8 +430,7 @@
                 <label class="toggle-row">
                     <span class="form-label" style="margin:0">Hide on weekends</span>
                     <label class="switch">
-                        <input type="checkbox" id="theme-edit-hide-weekend">
-                        <span class="switch-track"></span>
+                        <input type="checkbox" role="switch" id="theme-edit-hide-weekend">
                     </label>
                 </label>
                 <div class="form-hint">This theme's cards are hidden from the Board on Saturdays and Sundays</div>
@@ -524,8 +523,7 @@
                 <label class="toggle-row">
                     <span class="form-label" style="margin:0">Dark mode</span>
                     <label class="switch">
-                        <input type="checkbox" id="settings-dark">
-                        <span class="switch-track"></span>
+                        <input type="checkbox" role="switch" id="settings-dark">
                     </label>
                 </label>
             </div>
@@ -533,8 +531,7 @@
                 <label class="toggle-row">
                     <span class="form-label" style="margin:0">Show hidden themes</span>
                     <label class="switch">
-                        <input type="checkbox" id="settings-show-hidden">
-                        <span class="switch-track"></span>
+                        <input type="checkbox" role="switch" id="settings-show-hidden">
                     </label>
                 </label>
                 <div class="form-hint">Temporarily reveal themes marked as hidden in Lists and on the Board</div>
@@ -543,8 +540,7 @@
                 <label class="toggle-row">
                     <span class="form-label" style="margin:0">Daily list review reminder</span>
                     <label class="switch">
-                        <input type="checkbox" id="settings-reminder">
-                        <span class="switch-track"></span>
+                        <input type="checkbox" role="switch" id="settings-reminder">
                     </label>
                 </label>
                 <div class="form-hint">Nudges you on the Board if you haven't checked Lists yet that day. This device only.</div>
@@ -557,8 +553,7 @@
                 <label class="toggle-row">
                     <span class="form-label" style="margin:0">Require a password</span>
                     <label class="switch">
-                        <input type="checkbox" id="settings-password">
-                        <span class="switch-track"></span>
+                        <input type="checkbox" role="switch" id="settings-password">
                     </label>
                 </label>
                 <div class="form-hint">Locks this site behind a single shared password on every device. Off by default.</div>

@@ -1468,9 +1468,13 @@ function createListItem(task, opts = {}) {
     }
 
     // Complete checkbox
-    const check = document.createElement('div');
-    check.className = 'list-check' + (task.status === 'complete' ? ' checked' : '');
-    check.addEventListener('click', e => { e.stopPropagation(); completeTask(task.id); });
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'list-check';
+    check.checked = task.status === 'complete';
+    check.setAttribute('aria-label', 'Done');
+    check.addEventListener('click', e => e.stopPropagation());
+    check.addEventListener('change', () => completeTask(task.id));
     row.appendChild(check);
 
     // Body
@@ -3300,10 +3304,13 @@ function renderSubtaskEditor() {
         const row = document.createElement('div');
         row.className = 'subtask-row' + (st.done ? ' done' : '');
 
-        const check = document.createElement('div');
-        check.className = 'list-check subtask-check' + (st.done ? ' checked' : '');
-        check.addEventListener('click', () => {
-            modalSubtasks[idx].done = !modalSubtasks[idx].done;
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.className = 'list-check subtask-check';
+        check.checked = !!st.done;
+        check.setAttribute('aria-label', 'Done');
+        check.addEventListener('change', () => {
+            modalSubtasks[idx].done = check.checked;
             renderSubtaskEditor();
         });
         row.appendChild(check);

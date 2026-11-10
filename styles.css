@@ -13,6 +13,7 @@
     --text-2: #6e6e73;
     --text-3: #aeaeb2;
     --border: #d2d2d7;
+    --border-strong: rgb(0 0 0 / .22);   /* box edges and switch tracks (vendor/chassis/controls.css) */
     --border-light: #e5e5ea;
     --accent: #007aff;
     --accent-hover: #0066d6;
@@ -41,6 +42,7 @@
     --text-2: #aeaeb2;
     --text-3: #6e6e73;
     --border: #3a3a3c;
+    --border-strong: rgb(255 255 255 / .24);
     --border-light: #3a3a3c;
     --shadow: 0 1px 3px rgba(0,0,0,0.4);
     --shadow-lg: 0 4px 24px rgba(0,0,0,0.5);
@@ -154,7 +156,7 @@ main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the +
 /* ---- Lists Content ---- */
 .lists-content { }
 .list-item {
-    display:flex; align-items:center; gap:10px;
+    display:flex; align-items:center; gap:10px; font-size:13px; /* the title's size, so the tick matches it */
     padding:8px 12px; background:var(--bg-card);
     border:1px solid var(--border-light); border-radius:var(--r-sm);
     margin-bottom:4px; transition:all 0.1s; cursor:pointer;
@@ -171,16 +173,10 @@ main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the +
 .list-item.wont-do { opacity:0.35; }
 .list-item.wont-do .list-item-title { text-decoration:line-through; }
 
-.list-check {
-    width:20px; height:20px; flex-shrink:0;
-    border:2px solid var(--border); border-radius:50%; cursor:pointer;
-    display:flex; align-items:center; justify-content:center; transition:all 0.15s;
-}
-.list-check:hover { border-color:var(--complete-c); background:rgba(52,199,89,0.1); }
-.list-check.checked { background:var(--complete-c); border-color:var(--complete-c); }
-.list-check.checked::after { content:'✓'; color:#fff; font-size:11px; font-weight:600; }
+/* Ticks, the done circles' replacement and switches are drawn by vendor/chassis/controls.css.
+   Done ticks are green. */
+.list-check { --accent: var(--complete-c); }
 
-.list-select-cb { width:18px; height:18px; cursor:pointer; accent-color:var(--accent); flex-shrink:0; }
 
 .list-item-body { flex:1; min-width:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .list-item-title { font-size:13px; font-weight:450; flex-shrink:0; max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -425,7 +421,6 @@ main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the +
 .field-toggle .field-label { padding-top:0; }
 .field-toggle .field-control { display:flex; justify-content:flex-start; }
 .check-row { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--text-2); cursor:pointer; margin-top:7px; }
-.check-row input { width:14px; height:14px; accent-color:var(--accent); cursor:pointer; flex-shrink:0; }
 .footer-check { margin:0 8px 0 0; white-space:nowrap; }
 .add-notes-btn { padding:5px 10px; font-size:12px; }
 .sub-label { display:block; font-size:11px; color:var(--text-3); margin-bottom:3px; }
@@ -477,7 +472,6 @@ main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the +
 .modal-task .task-title-input:focus { box-shadow:0 0 0 3px rgba(0,122,255,0.15); }
 .modal-task .task-title-multi { padding:9px 12px; }
 .modal-task .multi-add-row { font-size:11px; color:var(--text-3); margin-top:6px; }
-.modal-task .multi-add-row input { width:13px; height:13px; }
 .modal-task .theme-pick-btn { font-weight:500; padding:5px 11px; }
 .modal-task .theme-pick-btn.active { box-shadow:0 0 0 2px var(--bg-card), 0 0 0 4px rgba(0,0,0,0.18); transform:none; }
 .modal-task .recur-btn, .modal-task .dow-btn { font-weight:500; }
@@ -502,7 +496,6 @@ main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the +
 .task-title-input::placeholder { color:var(--text-3); font-weight:400; }
 .task-title-multi { resize:vertical; line-height:1.5; }
 .multi-add-row { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; color:var(--text-2); cursor:pointer; }
-.multi-add-row input { width:15px; height:15px; accent-color:var(--accent); cursor:pointer; flex-shrink:0; }
 .form-hint { font-size:11px; color:var(--text-3); margin-top:4px; }
 
 /* ---- Theme Picker ---- */
@@ -567,12 +560,7 @@ main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the +
 
 /* ---- Toggle switch ---- */
 .toggle-row { display:flex; align-items:center; justify-content:space-between; }
-.switch { position:relative; width:44px; height:24px; flex-shrink:0; }
-.switch input { opacity:0; width:0; height:0; }
-.switch-track { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--border); border-radius:12px; transition:0.2s; }
-.switch-track::before { content:''; position:absolute; height:18px; width:18px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:0.2s; }
-.switch input:checked + .switch-track { background:var(--accent); }
-.switch input:checked + .switch-track::before { transform:translateX(20px); }
+.switch { display:inline-flex; }
 
 /* ---- Color picker ---- */
 .color-pick-row { display:flex; align-items:center; gap:10px; }
@@ -649,7 +637,7 @@ main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the +
     .theme-tabs-scroll { margin:0 -10px 16px; padding:0 10px 2px; }
     .bulk-action-bar { flex-wrap:wrap; }
     .list-item { padding:10px 10px; gap:8px; }
-    .list-item-title { max-width:none; }
+    .list-item-title { max-width:none; flex-shrink:1; min-width:0; }   /* a long title ellipsises instead of widening the page */
     .chip { font-size:10px; padding:2px 6px; }
     .board-card-menu { opacity:1; }
     /* Long-pressing a card starts a drag, so suppress the OS's own
@@ -751,7 +739,7 @@ main { margin:0 auto; padding:20px 20px 96px; }   /* room at the bottom so the +
 .subtask-progress-text { font-size:11.5px; font-weight:500; color:var(--text-2); flex-shrink:0; }
 
 .subtask-list { display:flex; flex-direction:column; gap:4px; }
-.subtask-row { display:flex; align-items:center; gap:8px; }
+.subtask-row { display:flex; align-items:center; gap:8px; font-size:13px; }
 .subtask-check { flex-shrink:0; }
 .subtask-input {
     flex:1; min-width:0; padding:6px 8px; border:1px solid transparent;

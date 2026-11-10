@@ -1,0 +1,134 @@
+/* COPY of sites/_shared/chassis/controls.css — edit the source there and run node _shared/sync.mjs */
+/* The shared form controls: one checkbox, radio, switch and slider for every app in sites/.
+
+   Source: sites/_shared/chassis/controls.css. Load it right after tokens.css.
+   Tom, 10 Nov 2026, about a hand-drawn checkbox that was too big for its label and sat off its
+   line: "We need to align stuff across all apps and never put crap in like this."
+
+   So, the rules:
+   - Don't style checkboxes, radios, switches or sliders in an app. No width, height, border,
+     ::after tick or accent-color of your own. Delete any you find. These rules draw them all.
+   - A control is sized from its label's text (1.1em, never under 16px), so it always matches
+     the words next to it and sits on their line. To make a bigger target, make the LABEL bigger
+     with padding, not the box.
+   - Wrap a control and its words in <label class="check">, or put them in a flex row with
+     align-items:center.
+   - The colour comes from --accent, and the tick from --text-on-accent. If the accent is light
+     (mint, yellow), set --text-on-accent to a dark ink, once, in the app's tokens.
+   - On/off settings are switches: <input type="checkbox" role="switch">. */
+
+input[type='checkbox'],
+input[type='radio'] {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  inline-size: max(16px, 1.1em);
+  block-size: max(16px, 1.1em);
+  min-inline-size: 0;
+  min-block-size: 0;
+  margin: 0;
+  padding: 0;
+  /* Follow the label's text. Many apps set input { font-size: 16px !important } so iOS doesn't
+     zoom into text boxes; that's for typing, not ticks, so it mustn't size the box. */
+  font-size: inherit !important;
+  line-height: inherit;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  vertical-align: -0.2em;
+  border: 1.5px solid var(--border-strong, rgb(16 18 32 / 0.25));
+  border-radius: 0.3em;
+  background: var(--surface, #fff);
+  color: var(--text-on-accent, #fff);
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+input[type='radio'] { border-radius: 50%; }
+
+/* The mark inside: a tick, a dot, or a dash for "some of them". */
+input[type='checkbox']::before,
+input[type='radio']::before {
+  content: '';
+  inline-size: 0.7em;
+  block-size: 0.7em;
+  background: currentColor;
+  transform: scale(0);
+  transition: transform 0.12s;
+}
+input[type='checkbox']::before {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.2 6.3 4.8 8.9 9.8 3.3' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.2 6.3 4.8 8.9 9.8 3.3' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+input[type='checkbox']:indeterminate::before {
+  -webkit-mask: none;
+  mask: none;
+  block-size: 0.14em;
+  min-block-size: 2px;
+  border-radius: 1px;
+  transform: scale(1);
+}
+input[type='radio']::before { inline-size: 0.42em; block-size: 0.42em; border-radius: 50%; }
+
+input[type='checkbox']:checked,
+input[type='checkbox']:indeterminate,
+input[type='radio']:checked {
+  background: var(--accent, #3b82f6);
+  border-color: var(--accent, #3b82f6);
+}
+input[type='checkbox']:checked::before,
+input[type='radio']:checked::before { transform: scale(1); }
+
+/* The switch, for on/off settings. */
+input[type='checkbox'][role='switch'] {
+  inline-size: 2em;
+  block-size: 1.15em;
+  min-inline-size: 32px;
+  min-block-size: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--border-strong, rgb(16 18 32 / 0.25));
+  place-content: center start;
+  padding: 2px;
+}
+input[type='checkbox'][role='switch']::before {
+  -webkit-mask: none;
+  mask: none;
+  inline-size: calc(1.15em - 4px);
+  block-size: calc(1.15em - 4px);
+  min-inline-size: 14px;
+  min-block-size: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transform: none;
+  transition: translate 0.15s;
+}
+input[type='checkbox'][role='switch']:checked { background: var(--accent, #3b82f6); }
+input[type='checkbox'][role='switch']:checked::before { translate: calc(max(32px, 2em) - max(14px, 1.15em - 4px) - 4px) 0; }
+
+/* States. */
+input[type='checkbox']:hover:not(:checked):not(:disabled):not([role='switch']),
+input[type='radio']:hover:not(:checked):not(:disabled) { border-color: var(--accent, #3b82f6); }
+input[type='checkbox']:focus-visible,
+input[type='radio']:focus-visible { outline: 2px solid var(--accent, #3b82f6); outline-offset: 2px; }
+input[type='checkbox']:disabled,
+input[type='radio']:disabled { opacity: 0.45; cursor: default; }
+
+/* Sliders use the browser's own, in the app's colour. */
+input[type='range'] { accent-color: var(--accent, #3b82f6); }
+
+/* A control and its words. */
+label.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+  line-height: 1.3;
+}
+/* Words that run to two lines or more (a title with a note under it): the control sits on the
+   first line, not halfway down. <label class="check top">, or class="check top" on any flex row
+   (a list item) whose font-size and line-height are the words'. */
+.check.top { align-items: flex-start; }
+.check.top > input[type='checkbox'],
+.check.top > input[type='radio'] { margin-block-start: calc((1lh - max(16px, 1.1em)) / 2); }
+label.check:has(:disabled) { cursor: default; color: var(--text-3, #868a9c); }
