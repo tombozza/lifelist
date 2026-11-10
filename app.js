@@ -151,6 +151,8 @@ function defaultState() {
         themesUpdatedAt: 0,
         tagCategories: DEFAULT_TAG_CATEGORIES.map(c => ({...c, tags: c.tags.map(t => ({...t}))})),
         tagsUpdatedAt: 0,
+        smartNotes: [],
+        smartNotesUpdatedAt: 0,
     };
 }
 
@@ -277,6 +279,8 @@ function loadState() {
                 p.tagCategories = DEFAULT_TAG_CATEGORIES.map(c => ({...c, tags: c.tags.map(t => ({...t}))}));
             }
             if (!p.tagsUpdatedAt) p.tagsUpdatedAt = 0;
+            if (!Array.isArray(p.smartNotes)) p.smartNotes = [];
+            if (!p.smartNotesUpdatedAt) p.smartNotesUpdatedAt = 0;
             migrateColumns(p.tasks);
             // Persist straight away: saveState() can't run yet (it writes the
             // `state` this function is still returning), and an unsaved
@@ -1347,6 +1351,20 @@ function notesTasks() {
 }
 
 function renderNotes() {
+    const y = window.scrollY;
+    renderNoteBar();
+    const parked = noteSel === 'parked' || (noteSel !== 'new' && !getSmartNote(noteSel) && !noteDraft);
+    const sub = document.querySelector('#view-notes .notes-sub');
+    if (sub) sub.style.display = parked && !noteDraft ? '' : 'none';
+    const tf = document.getElementById('notes-tag-filter');
+    tf.style.display = parked && !noteDraft ? '' : 'none';
+    if (noteDraft) renderNoteBuilder();
+    else if (!parked) renderSmartNote(getSmartNote(noteSel));
+    else renderParkedNotes();
+    window.scrollTo(0, y);
+}
+
+function renderParkedNotes() {
     renderTagFilter('notes-tag-filter');
     const container = document.getElementById('notes-content');
     container.innerHTML = '';
@@ -1373,6 +1391,298 @@ function renderNotes() {
             .sort((a,b) => (a.title||'').localeCompare(b.title||''))
             .forEach(t => container.appendChild(createListItem(t)));
     });
+}
+
+// ---- Saved notes (smart lists) ----
+// A saved note is a standing filter: "everything in Shop › Black Friday",
+// "Shop but not Black Friday", "anything tagged Mum". It lists every active
+// task that matches, wherever it lives (list, board, parked), so shopping and
+// errands can sit off the board and still be one tap away.
+//
+// note = { id, name, inc: {themes, subs, tags}, exc: {themes, subs, tags} }
+// subs are "themeId::Sub-theme name" — a sub-theme name alone is ambiguous
+// (House and Garden both have Maintenance). Inside a group any one match will
+// do; every group that has something in it must match; anything in exc rules
+// the task out. Synced wholesale via smartNotesUpdatedAt, like tags.
+
+let noteSel = (() => { try { return localStorage.getItem('lk-note-sel') || 'parked'; } catch { return 'parked'; } })();
+let noteDraft = null;      // the filter being built or edited, or null
+
+function getSmartNote(id) { return (state.smartNotes || []).find(n => n.id === id) || null; }
+function setNoteSel(id) {
+    noteSel = id;
+    try { localStorage.setItem('lk-note-sel', id); } catch {}
+}
+function emptyRules() { return { themes: [], subs: [], tags: [] }; }
+function subKey(themeId, name) { return themeId + '::' + name; }
+function splitSubKey(k) { const i = k.indexOf('::'); return [k.slice(0, i), k.slice(i + 2)]; }
+function hasRules(r) { return !!(r && (r.themes.length || r.subs.length || r.tags.length)); }
+
+function rulesHit(t, r) {
+    const ths = taskThemeIds(t);
+    const tags = taskTagIds(t);
+    return {
+        themes: r.themes.some(id => ths.includes(id)),
+        subs: r.subs.some(k => { const [tid, name] = splitSubKey(k); return ths.includes(tid) && (t.subTheme || '') === name; }),
+        tags: r.tags.some(id => tags.includes(id)),
+    };
+}
+function noteMatches(t, note) {
+    if (t.status !== 'active') return false;
+    if (!hasRules(note.inc)) return false;
+    const hit = rulesHit(t, note.inc);
+    for (const g of ['themes', 'subs', 'tags']) if (note.inc[g].length && !hit[g]) return false;
+    const out = rulesHit(t, note.exc);
+    return !(out.themes || out.subs || out.tags);
+}
+function noteTasks(note) {
+    return state.tasks.filter(t => noteMatches(t, note))
+        .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+}
+
+function saveSmartNotes() {
+    state.smartNotesUpdatedAt = Date.now();
+    saveState();
+}
+
+function renderNoteBar() {
+    const bar = document.getElementById('notes-bar');
+    bar.innerHTML = '';
+    const pill = (label, id, active) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'notes-pill' + (active ? ' active' : '');
+        b.textContent = label;
+        b.addEventListener('click', () => {
+            noteDraft = null;
+            setNoteSel(id);
+            renderNotes();
+        });
+        bar.appendChild(b);
+    };
+    const onParked = !noteDraft && (noteSel === 'parked' || !getSmartNote(noteSel));
+    pill('Parked', 'parked', onParked);
+    (state.smartNotes || []).forEach(n => pill(n.name, n.id, !noteDraft && noteSel === n.id || (noteDraft && noteDraft.id === n.id)));
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'notes-pill notes-pill-new' + (noteDraft && !noteDraft.id ? ' active' : '');
+    add.textContent = '+ Filter';
+    add.title = 'Filter by theme, sub-theme or tag — then save it as a note';
+    add.addEventListener('click', () => {
+        noteDraft = { id: null, name: '', inc: emptyRules(), exc: emptyRules() };
+        renderNotes();
+    });
+    bar.appendChild(add);
+}
+
+function noteRows(container, tasks) {
+    tasks.forEach(t => container.appendChild(createListItem(t)));
+}
+
+function renderSmartNote(note) {
+    const container = document.getElementById('notes-content');
+    container.innerHTML = '';
+    const tasks = noteTasks(note);
+
+    const head = document.createElement('div');
+    head.className = 'note-head';
+    head.innerHTML = `<div class="note-head-text"><div class="note-title"></div><div class="note-rules"></div></div>`;
+    head.querySelector('.note-title').textContent = note.name;
+    head.querySelector('.note-rules').textContent = describeRules(note) + ' · ' + tasks.length;
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'btn-small btn-ghost';
+    edit.textContent = 'Edit';
+    edit.addEventListener('click', () => {
+        noteDraft = JSON.parse(JSON.stringify(note));
+        renderNotes();
+    });
+    head.appendChild(edit);
+    container.appendChild(head);
+
+    // Adding here files the item straight into the note's theme / sub-theme /
+    // tag and parks it, so it never lands on the board or clutters Lists.
+    const form = document.createElement('form');
+    form.className = 'note-add';
+    form.innerHTML = '<input type="text" class="form-input" autocomplete="off"><button type="submit" class="btn-small">Add</button>';
+    const input = form.querySelector('input');
+    input.placeholder = 'Add to ' + note.name + '\u2026';
+    form.addEventListener('submit', e => {
+        e.preventDefault();
+        const title = input.value.trim();
+        if (!title) return;
+        addTask(noteNewTaskData(note, title));
+        const fresh = document.querySelector('#notes-content .note-add input');
+        if (fresh) fresh.focus({ preventScroll: true });
+    });
+    container.appendChild(form);
+
+    if (!tasks.length) {
+        const e = document.createElement('div');
+        e.className = 'empty-state';
+        e.innerHTML = '<p>Nothing matches yet</p>';
+        container.appendChild(e);
+        return;
+    }
+    noteRows(container, tasks);
+}
+
+function noteNewTaskData(note, title) {
+    const inc = note.inc;
+    let themeId = inc.themes[0] || '';
+    let subTheme = '';
+    if (inc.subs.length) {
+        const [tid, name] = splitSubKey(inc.subs.find(k => !themeId || splitSubKey(k)[0] === themeId) || inc.subs[0]);
+        themeId = tid; subTheme = name;
+    }
+    return withThemeIds({
+        title, subTheme,
+        tags: inc.tags.slice(0, 1),
+        inNotes: true, reviewed: true,
+    }, themeId ? [themeId] : []);
+}
+
+function ruleNames(r) {
+    // "Shop › Black Friday" already says Shop, so don't say it twice
+    const covered = new Set(r.subs.map(k => splitSubKey(k)[0]));
+    return [
+        ...r.themes.filter(id => !covered.has(id)).map(id => getTheme(id)?.name).filter(Boolean),
+        ...r.subs.map(k => { const [tid, name] = splitSubKey(k); return (getTheme(tid)?.name || '?') + ' › ' + name; }),
+        ...r.tags.map(id => getTag(id)?.name).filter(Boolean),
+    ];
+}
+function describeRules(note) {
+    const inc = ruleNames(note.inc), exc = ruleNames(note.exc);
+    return (inc.join(' + ') || 'Nothing') + (exc.length ? ', not ' + exc.join(', ') : '');
+}
+
+// The builder is a live filter: tap a pill once to show what has it, again to
+// leave it out, a third time to clear it. The results update underneath, and
+// "Save as note" keeps the filter.
+function renderNoteBuilder() {
+    const d = noteDraft;
+    const container = document.getElementById('notes-content');
+    container.innerHTML = '';
+    const box = document.createElement('div');
+    box.className = 'note-builder';
+
+    const hint = document.createElement('div');
+    hint.className = 'note-hint';
+    hint.textContent = 'Tap once to show, twice to leave out, again to clear. Pick a theme to see its sub-themes.';
+    box.appendChild(hint);
+
+    const stateOf = (g, v) => d.inc[g].includes(v) ? 'inc' : d.exc[g].includes(v) ? 'exc' : '';
+    const cycle = (g, v) => {
+        const st = stateOf(g, v);
+        d.inc[g] = d.inc[g].filter(x => x !== v);
+        d.exc[g] = d.exc[g].filter(x => x !== v);
+        if (st === '') d.inc[g].push(v);
+        else if (st === 'inc') d.exc[g].push(v);
+        renderNotes();
+    };
+    const pill = (g, v, label, color) => {
+        const st = stateOf(g, v);
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'nf-pill' + (st ? ' ' + st : '');
+        b.textContent = (st === 'exc' ? '\u2212 ' : '') + label;
+        if (color) b.style.setProperty('--nf', color);
+        b.title = st === 'inc' ? 'Showing — tap to leave out' : st === 'exc' ? 'Left out — tap to clear' : 'Tap to show';
+        b.addEventListener('click', () => cycle(g, v));
+        return b;
+    };
+    const group = (label, pills) => {
+        if (!pills.length) return;
+        const g = document.createElement('div');
+        g.className = 'nf-group';
+        const l = document.createElement('div');
+        l.className = 'nf-label';
+        l.textContent = label;
+        g.appendChild(l);
+        const row = document.createElement('div');
+        row.className = 'nf-pills';
+        pills.forEach(p => row.appendChild(p));
+        g.appendChild(row);
+        box.appendChild(g);
+    };
+
+    const themes = [...state.themes].sort((a, b) => a.name.localeCompare(b.name));
+    group('Themes', themes.map(th => pill('themes', th.id, th.name, th.color)));
+    // Sub-themes only for the themes picked — listing every theme's would
+    // bury the tags, and a "Mum" sub-theme reads just like the Mum tag
+    const picked = themes.filter(th => d.inc.themes.includes(th.id)
+        || d.inc.subs.concat(d.exc.subs).some(k => splitSubKey(k)[0] === th.id));
+    picked.forEach(th => {
+        const subs = [...(th.subThemes || [])].sort((a, b) => a.localeCompare(b));
+        group(th.name + ' sub-themes', subs.map(n => pill('subs', subKey(th.id, n), n, th.color)));
+    });
+    allTagCategories().filter(c => (c.tags || []).length).forEach(c =>
+        group(c.name, c.tags.map(tag => pill('tags', tag.id, tag.name, c.color))));
+    container.appendChild(box);
+
+    // Save bar
+    const save = document.createElement('div');
+    save.className = 'note-save';
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.className = 'form-input';
+    name.placeholder = 'Name this note, e.g. Black Friday';
+    name.value = d.name;
+    name.addEventListener('input', () => { d.name = name.value; });
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.className = 'btn-small';
+    ok.textContent = d.id ? 'Save' : 'Save as note';
+    const commit = () => {
+        const n = d.name.trim() || ruleNames(d.inc).join(' + ');
+        if (!hasRules(d.inc) || !n) { name.focus(); return; }
+        const rec = { id: d.id || genId(), name: n, inc: d.inc, exc: d.exc };
+        state.smartNotes = d.id
+            ? state.smartNotes.map(x => x.id === d.id ? rec : x)
+            : [...(state.smartNotes || []), rec];
+        saveSmartNotes();
+        noteDraft = null;
+        setNoteSel(rec.id);
+        renderNotes();
+    };
+    ok.addEventListener('click', commit);
+    name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+    save.appendChild(name);
+    save.appendChild(ok);
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn-small btn-ghost';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => { noteDraft = null; renderNotes(); });
+    save.appendChild(cancel);
+    if (d.id) {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-small btn-ghost note-del';
+        del.textContent = 'Delete note';
+        del.addEventListener('click', () => {
+            if (!confirm('Delete the note "' + d.name + '"? The tasks in it stay where they are.')) return;
+            state.smartNotes = state.smartNotes.filter(x => x.id !== d.id);
+            saveSmartNotes();
+            noteDraft = null;
+            setNoteSel('parked');
+            renderNotes();
+        });
+        save.appendChild(del);
+    }
+    container.appendChild(save);
+
+    const label = document.createElement('div');
+    label.className = 'list-group-label';
+    if (!hasRules(d.inc)) {
+        label.textContent = 'Pick something to show';
+        container.appendChild(label);
+        return;
+    }
+    const tasks = noteTasks(d);
+    label.textContent = describeRules(d) + ' · ' + tasks.length;
+    container.appendChild(label);
+    noteRows(container, tasks);
 }
 
 function renderListContent() {
@@ -2827,6 +3137,7 @@ function createTask(data) {
         planOrder: data.planOrder || 0,
         // Items captured straight to the list start unreviewed; anything
         // created already on the board counts as triaged
+        inNotes: !!data.inNotes,
         reviewed: data.reviewed || !!data.kanbanColumn,
         updatedAt: Date.now(),
     };
@@ -4551,7 +4862,7 @@ saveState = function() {
 async function pushToCloud() {
     if (!syncEnabled || syncPaused) return;
     try {
-        const payload = { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt, tagCategories: state.tagCategories, tagsUpdatedAt: state.tagsUpdatedAt };
+        const payload = { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt, tagCategories: state.tagCategories, tagsUpdatedAt: state.tagsUpdatedAt, smartNotes: state.smartNotes, smartNotesUpdatedAt: state.smartNotesUpdatedAt };
         await apiPut(SYNC_CODE, payload);
     } catch(e) { if (String(e).indexOf('locked') === -1) console.error('Sync push failed:', e); }
 }
@@ -4586,6 +4897,7 @@ async function pullFromCloud() {
         });
         if ((state.themesUpdatedAt||0) > (d.themesUpdatedAt||0)) localContrib = true;
         if ((state.tagsUpdatedAt||0) > (d.tagsUpdatedAt||0)) localContrib = true;
+        if ((state.smartNotesUpdatedAt||0) > (d.smartNotesUpdatedAt||0)) localContrib = true;
 
         // --- Merge tasks: newest updatedAt wins per task ---
         const merged = new Map();
@@ -4608,6 +4920,13 @@ async function pullFromCloud() {
         // are not an edit. A device that has never touched its tags must take
         // whatever the cloud has, or it would push its defaults back over the
         // real thing the moment anything else got saved. ---
+        // --- Saved notes: wholesale, same rule as tags — a device that has
+        // never edited its notes takes the cloud's copy ---
+        if (Array.isArray(d.smartNotes) && ((d.smartNotesUpdatedAt||0) > (state.smartNotesUpdatedAt||0) || !state.smartNotesUpdatedAt)) {
+            state.smartNotes = d.smartNotes;
+            state.smartNotesUpdatedAt = d.smartNotesUpdatedAt || 0;
+        }
+
         if (d.tagCategories && ((d.tagsUpdatedAt||0) > (state.tagsUpdatedAt||0) || !state.tagsUpdatedAt)) {
             state.tagCategories = d.tagCategories;
             state.tagsUpdatedAt = d.tagsUpdatedAt || 0;

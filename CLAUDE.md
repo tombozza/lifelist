@@ -138,6 +138,27 @@ snoozed. Parked tasks are excluded from `getFilteredTasks()`, `needsReview()`
 and `isStale()`, and `moveToKanban()` un-parks anything put on the board.
 Don't confuse it with `task.notes`, which is the free-text field.
 
+### Saved notes (smart lists)
+
+Tom (10 Nov 2026): shopping and errands shouldn't clog Today or the board, but he
+wants them as lists to pull up in the shop or at his mum's. The Notes view has a
+pill row (`renderNoteBar`): **Parked** (the original `inNotes` list), each saved
+note, and **+ Filter**. A saved note is a standing filter in `state.smartNotes`:
+`{id, name, inc:{themes,subs,tags}, exc:{themes,subs,tags}}`, where subs are
+`"themeId::Sub-theme"` (names alone collide across themes). `noteMatches()`:
+any one match within a group, every non-empty `inc` group must match, anything
+in `exc` rules it out, active tasks only, wherever they live. Examples: Shop ›
+Black Friday; Shop but not Black Friday; tag Mum.
+
+- **+ Filter is the builder and a live filter at once** (`renderNoteBuilder`):
+  tri-state pills (show → leave out → clear) with the matches listed underneath,
+  then "Save as note". Sub-theme pills only appear once their theme is picked.
+- Quick add inside a note files the item into the note's theme / sub-theme /
+  first tag and **parks it** (`inNotes`), so it stays off the board and out of Lists.
+- Synced wholesale by `smartNotesUpdatedAt`, with the same guard as tags
+  (`remote newer || !local stamp`); only real edits stamp it.
+- The selected note is per-device (`localStorage lk-note-sel`).
+
 ## Priority
 
 Five levels in `PRIORITY_LEVELS` / `PRIORITY_ORDER`: urgent, high, medium, low,
