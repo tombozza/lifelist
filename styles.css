@@ -371,10 +371,10 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 /* ---- Task window layouts (test) — app-only until one is picked, then it
    moves into the shared components ---- */
 #task-modal .lay-hide { display:none !important; }
-#task-modal:is(.lay-a,.lay-b,.lay-d) .field-label { display:none; }
-#task-modal:is(.lay-a,.lay-b,.lay-d) #subtheme-field .field-label { display:block; }
-#task-modal:is(.lay-a,.lay-b,.lay-c,.lay-d) .field { flex-direction:column; align-items:stretch; gap:var(--sp-2); }
-#task-modal:is(.lay-a,.lay-b,.lay-c,.lay-d) .field-label { flex:none; padding-top:0; }
+#task-modal:is(.lay-a,.lay-b,.lay-e) .field-label { display:none; }
+#task-modal:is(.lay-a,.lay-b) #subtheme-field .field-label { display:block; }
+#task-modal:is(.lay-a,.lay-b,.lay-e) .field { flex-direction:column; align-items:stretch; gap:var(--sp-2); }
+#task-modal:is(.lay-a,.lay-b) .field-label { flex:none; padding-top:0; }
 
 /* A · property list */
 #task-modal.lay-a > .body { gap:0; }
@@ -396,39 +396,13 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .lay-bar-btn[aria-pressed="true"] { color:var(--accent); background:var(--surface-2); }
 
 /* B and D: the theme row is one line that scrolls */
-#task-modal:is(.lay-b,.lay-d) #theme-picker.scroll .ui-chip { min-height:32px; }
 
-/* C · two panes */
-#task-modal.lay-c { inline-size:min(900px, 100% - 32px); }
-.lay-cols { display:grid; gap:var(--sp-3) var(--sp-5); grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); grid-template-areas:"title side" "main side"; grid-template-rows:auto 1fr; align-items:start; }
-.lay-cols > .ui-stack:first-child { grid-area:title; }
-.lay-cols > .lay-csum { display:none; grid-area:sum; }
-.lay-side { grid-area:side; display:grid; gap:var(--sp-3); border-left:1px solid var(--border); padding-left:var(--sp-4); }
-.lay-main { grid-area:main; display:grid; gap:var(--sp-3); }
-@media (max-width: 760px) {
-    .lay-cols { grid-template-columns:minmax(0,1fr); grid-template-areas:"title" "sum" "side" "main"; }
-    .lay-cols > .lay-csum { display:flex; min-height:44px; padding:var(--sp-2) var(--sp-3); border:1px solid var(--border); border-radius:var(--r-md); }
-    .lay-side { display:none; border-left:0; padding-left:0; }
-    .lay-cols.details-open .lay-side { display:grid; }
-    .lay-cols.details-open > .lay-csum::after { transform:rotate(135deg); }
-}
-
-/* D · quick add, then a full page */
-.lay-details { justify-self:start; }
-#task-modal.lay-d.lay-full { inline-size:min(680px, 100% - 32px); block-size:min(92vh, 900px); max-block-size:none; }
-.lay-group { display:grid; gap:var(--sp-3); }
-@media (max-width: 560px) {
-    #task-modal.lay-d.lay-full { inline-size:100%; block-size:100dvh; max-block-size:100dvh; margin:0; border-radius:0; }
-}
 /* Smaller chips inside every test layout — the 36px pills were most of the clutter */
-#task-modal:is(.lay-a,.lay-b,.lay-c,.lay-d) .ui-chip { min-height:30px; padding:0 10px; font-size:var(--text-sm); }
-#task-modal:is(.lay-a,.lay-b,.lay-c,.lay-d) #multi-add-row { font-size:var(--text-sm); color:var(--text-2); }
+#task-modal:is(.lay-a,.lay-b,.lay-e) .ui-chip { min-height:30px; padding:0 10px; font-size:var(--text-sm); }
+#task-modal:is(.lay-a,.lay-b,.lay-e) #multi-add-row { font-size:var(--text-sm); color:var(--text-2); }
 /* A one-line scrolling row must not widen the sheet: let every column shrink */
-#task-modal:is(.lay-a,.lay-b,.lay-c,.lay-d) > .body { grid-template-columns:minmax(0,1fr); }
-#task-modal:is(.lay-a,.lay-b,.lay-c,.lay-d) :is(.field, .field-control, [data-block], [data-section], .lay-group) { min-width:0; }
-@media (max-width: 560px) {
-    #task-modal.lay-c { inline-size:100%; }
-}
+#task-modal:is(.lay-a,.lay-b,.lay-e) > .body { grid-template-columns:minmax(0,1fr); }
+#task-modal:is(.lay-a,.lay-b,.lay-e) :is(.field, .field-control, [data-block], [data-section]) { min-width:0; }
 
 /* Theme, sub-theme and tags: one block, every row one line (11 Nov 2026) */
 #task-modal .subtheme-row { display:none; }
@@ -441,3 +415,11 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 #task-modal :is(#theme-picker, .subtheme-chips, .tag-pick-chips).ui-chips.scroll { margin-inline:0; padding-inline:0; gap:6px; }
 #task-modal > .body { grid-template-columns:minmax(0,1fr); }
 #task-modal .tag-pick-name { text-transform:none; letter-spacing:0; font-size:var(--text-sm); flex-basis:84px; }
+
+/* E · sections (default): each field under its own heading */
+#task-modal.lay-e > .body { gap:0; }
+#task-modal.lay-e > .body > .ui-stack:first-child { padding-bottom:var(--sp-3); }
+.lay-sec { padding:var(--sp-3) 0; border-top:1px solid var(--border); min-width:0; }
+.lay-sec-h { margin:0 0 var(--sp-2); font-size:var(--text-sm); font-weight:600; color:var(--text-2); }
+#task-modal.lay-e #subtheme-field .field-label, #task-modal.lay-e .field-toggle .field-label { display:none; }
+#task-modal.lay-e .tag-picker { gap:8px; }

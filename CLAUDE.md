@@ -301,9 +301,14 @@ name at the start (`renderTagPicker`). A tag tap is **one per category**: it rep
 that category's other tag, and tapping the chosen one clears it. Tags are not a
 section any more, and the old folded-category picker (`modalTagCatsOpen`) is unused.
 
-**Test layouts** (Settings › Task window layout, per device, `lk-task-layout`): A–D only
-rearrange this same modal (`applyTaskLayout` / `refreshTaskLayout`). Waiting on Tom to
-pick one; then build it in and delete the rest.
+**Layouts** (Settings › Task window layout, per device, `lk-task-layout`). The default
+is **E, Sections** (Tom: "Can you not just have sections for themes, sub-themes, tags
+etc?"): every part sits open under its own heading (Theme, Sub-theme, Tags, Priority and
+size, Dates, Repeat, Sub-tasks, Link, Notes); Sub-theme hides until a theme is picked.
+A (property list), B (composer bar) and "Old window" stay selectable for comparison. C and
+D were rejected ("a no go") and removed; a saved `c`/`d` falls back to E. All of them only
+rearrange this same modal (`applyTaskLayout` / `refreshTaskLayout`). Once Tom confirms E,
+build it into the HTML and delete the others plus the setting.
 
 ## No theme chips on cards
 

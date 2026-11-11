@@ -3597,10 +3597,18 @@ function layIcon(k) {
     return `<svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${LAY_ICONS[k] || ''}</svg>`;
 }
 
-function taskLayout() { try { return localStorage.getItem('lk-task-layout') || ''; } catch { return ''; } }
+// 'e' (plain sections) is the default since 11 Nov 2026; 'old' is the
+// progressive-disclosure window it replaced, kept for comparison.
+function taskLayout() {
+    let v = '';
+    try { v = localStorage.getItem('lk-task-layout') || ''; } catch {}
+    if (v === 'old') return '';
+    // C and D were tried and dropped (Tom, 11 Nov 2026)
+    return ['a', 'b', 'e'].includes(v) ? v : 'e';
+}
 let layOrig = null;        // the modal body's own children, in their own order
+let layThemeOrig = null;   // the theme block's rows (theme, sub-theme, tags)
 let layOpen = new Set();   // sections the person has opened in this layout
-let layFull = false;       // D: showing the full details page
 
 function layBody() { return document.querySelector('#task-modal > .body'); }
 function layBlock(k) {
@@ -3681,10 +3689,14 @@ function restoreTaskLayout() {
     const modal = document.getElementById('task-modal');
     const body = layBody();
     if (!layOrig) layOrig = [...body.children];
+    // E moves the rows out of the theme block too, so put those back first
+    const themeBlock = modal.querySelector('[data-block="theme"]');
+    if (!layThemeOrig) layThemeOrig = [...themeBlock.children];
+    layThemeOrig.forEach(el => themeBlock.appendChild(el));
     layOrig.forEach(el => body.appendChild(el));
     modal.querySelectorAll('.lay-gen').forEach(el => el.remove());
     modal.querySelectorAll('.lay-hide').forEach(el => el.classList.remove('lay-hide'));
-    modal.classList.remove('lay-a', 'lay-b', 'lay-c', 'lay-d', 'lay-full');
+    modal.classList.remove('lay-a', 'lay-b', 'lay-c', 'lay-d', 'lay-e', 'lay-full');
 }
 
 function applyTaskLayout() {
@@ -3697,7 +3709,6 @@ function applyTaskLayout() {
     modal.classList.add('lay-' + lay);
     layShow(document.getElementById('task-more'), false);
     layOpen = new Set();
-    layFull = !!editingTaskId;
     // An edited task opens what already has something in it
     if (editingTaskId) LAY_KEYS.forEach(([k]) => { if (k !== 'theme' && laySummary(k)) layOpen.add(k); });
 
@@ -3737,49 +3748,32 @@ function applyTaskLayout() {
         body.appendChild(bar);
     }
 
-    if (lay === 'c') {
+    if (lay === 'e') {
+        // Tom (11 Nov 2026): "Can you not just have sections for themes,
+        // sub-themes, tags etc?" — every field is its own headed section, all open.
         LAY_KEYS.forEach(([k]) => layOpen.add(k));
         setNotesOpen(true);
-        const grid = layGen('div', 'lay-cols');
-        const csum = layGen('button', 'ui-row lay-csum', '<span class="main"><span>Details</span><span class="sub"></span></span>');
-        csum.addEventListener('click', () => {
-            if (layOpen.has('details')) layOpen.delete('details'); else layOpen.add('details');
-            refreshTaskLayout();
+        const parts = [
+            ['Theme', document.querySelector('#task-modal [data-block="theme"] > .field:first-child')],
+            ['Sub-theme', document.getElementById('subtheme-field')],
+            ['Tags', document.getElementById('tags-field')],
+            ['Priority and size', layBlock('priority')],
+            ['Dates', layBlock('dates')],
+            ['Repeat', layBlock('repeat')],
+            ['Sub-tasks', layBlock('subtasks')],
+            ['Link', layBlock('link')],
+            ['Notes', layBlock('notes')],
+        ];
+        let after = title;
+        parts.forEach(([label, el]) => {
+            const sec = layGen('section', 'lay-sec', `<h3 class="lay-sec-h">${label}</h3>`);
+            if (el.id === 'subtheme-field') sec.classList.add('lay-sec-sub');
+            sec.appendChild(el);
+            after.after(sec);
+            after = sec;
         });
-        const side = layGen('div', 'lay-side');
-        const main = layGen('div', 'lay-main');
-        ['theme', 'priority', 'dates', 'repeat'].forEach(k => side.appendChild(layBlock(k)));
-        ['subtasks', 'link', 'notes'].forEach(k => main.appendChild(layBlock(k)));
-        main.appendChild(document.getElementById('task-in-list'));
-        body.insertBefore(grid, title);
-        grid.append(title, csum, side, main);
     }
 
-    if (lay === 'd') {
-        const more = layGen('button', 'ui-btn lay-details', 'Add details');
-        more.addEventListener('click', () => { layFull = true; applyTaskLayoutFull(); });
-        layBlock('theme').after(more);
-        if (layFull) applyTaskLayoutFull();
-    }
-    refreshTaskLayout();
-}
-
-// D's full page: everything visible, in three groups
-function applyTaskLayoutFull() {
-    const modal = document.getElementById('task-modal');
-    const body = layBody();
-    modal.classList.add('lay-full');
-    body.querySelectorAll('.lay-details').forEach(el => el.remove());
-    LAY_KEYS.forEach(([k]) => layOpen.add(k));
-    setNotesOpen(true);
-    const groups = [['About', ['theme']], ['When', ['priority', 'dates', 'repeat']], ['More', ['subtasks', 'link', 'notes']]];
-    let after = body.firstElementChild;
-    groups.forEach(([label, keys]) => {
-        const g = layGen('section', 'ui-card lay-group', `<span class="ui-label">${label}</span>`);
-        keys.forEach(k => g.appendChild(layBlock(k)));
-        after.after(g);
-        after = g;
-    });
     refreshTaskLayout();
 }
 
@@ -3811,18 +3805,11 @@ function refreshTaskLayout() {
         LAY_KEYS.forEach(([k]) => { if (k !== 'theme') layShow(layBlock(k), layOpen.has(k)); });
         modal.querySelectorAll('.lay-bar-btn').forEach(b => b.setAttribute('aria-pressed', layOpen.has(b.dataset.key) ? 'true' : 'false'));
     }
-    if (lay === 'c') {
+    if (lay === 'e') {
         LAY_KEYS.forEach(([k]) => layShow(layBlock(k), true));
-        const bits = ['theme', 'dates', 'repeat'].map(laySummary).filter(Boolean);
-        modal.querySelector('.lay-csum .sub').textContent = bits.join(' \u00b7 ') || 'Theme, tags, dates, repeat';
-        modal.querySelector('.lay-cols').classList.toggle('details-open', layOpen.has('details'));
-    }
-    if (lay === 'd') {
-        if (layFull) {
-            LAY_KEYS.forEach(([k]) => layShow(layBlock(k), true));
-        } else {
-            LAY_KEYS.forEach(([k]) => layShow(layBlock(k), k === 'theme'));
-        }
+        // No theme yet means no sub-themes to show
+        const sub = modal.querySelector('.lay-sec-sub');
+        if (sub) layShow(sub, modalThemeIds.length > 0);
     }
 }
 
@@ -4817,7 +4804,7 @@ function init() {
     document.getElementById('settings-close').addEventListener('click', () => closeSheet('settings-modal'));
     document.getElementById('settings-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.close(); });
     const layoutSel = document.getElementById('settings-task-layout');
-    layoutSel.value = taskLayout();
+    layoutSel.value = taskLayout() || 'old';
     layoutSel.addEventListener('change', () => {
         try { localStorage.setItem('lk-task-layout', layoutSel.value); } catch {}
     });

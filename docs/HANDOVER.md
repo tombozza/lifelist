@@ -96,6 +96,7 @@ Newest first. Most have a longer explanation in `CLAUDE.md`.
 
 - 2026-11-11: Theme, sub-theme and tags became one always-open block in the task window: every row one sideways-scrolling line, sub-themes as chips, one tag per category (a tap replaces that category's other tag). Tom: tags under chevrons meant expanding five menus. Applies to the current window and all four test layouts.
 - 2026-11-11: Tom said the task window "doesn't work at all" (too many big pills, scattered options). Four test layouts built behind Settings › Task window layout (per device): A property list, B composer bar, C two panes, D quick add then a full page. They only rearrange the same modal DOM (`applyTaskLayout`), so saving and sync are unchanged. When Tom picks one, build it in properly, move its styles into the shared components and delete the other three plus the setting.
+- 2026-11-11: Task window layout E, Sections, is now the default (Tom: "Can you not just have sections for themes, sub-themes, tags etc?"): every part open under its own heading. C and D removed (Tom: "a no go"); a saved C/D falls back to E. A, B and the old window stay in Settings for comparison. Service worker v74.
 - 2026-11-11: Shared light/dark switch (`_shared/chassis/theme.js`, Tom: "add dark/light switches across all apps"): theme.js loads first in `<head>`; Auto / Light / Dark is in Settings › Appearance and replaces the app's own Dark mode checkbox (a saved Dark carries over once, `lk-theme-moved`). Service worker v70. Checked in Light and Dark at phone width. Deployed live the same day (Tom's go-ahead).
 - 2026-11-10: Every screen is now built from the shared components (`_shared/chassis/components.css`, the `ui-` classes), loaded after tokens.css and controls.css; the app's own buttons, cards, fields, pop-ups and neutral colour tokens are gone, and it keeps only its accent, priority and spotlight colours. Pop-ups are `<dialog class="ui-sheet">`; Today's tick is a real checkbox. Its own light/dark switch still defaults to light. Deployed live the same day (10 Nov 2026, Tom's go-ahead).
 - 2026-11-10: Repeats can go straight onto Today on their day, with a per-repeat choice to
@@ -161,7 +162,7 @@ Newest first. Most have a longer explanation in `CLAUDE.md`.
 - **Stale docs:** `CLAUDE.md` and `deploy.sh` comments still say GitHub Pages
   (`tombozza.github.io/lifelist`) auto-deploys on push. Tom unpublished it on 15 Jul 2026 and the
   repo is now private, so this is out of date (unconfirmed whether the Pages setting is fully off).
-- **Testing (11 Nov 2026):** four task-window layouts in Settings; waiting for Tom to pick one.
+- **Testing (11 Nov 2026):** task window defaults to Sections (E); A, B and the old window still in Settings. Waiting for Tom to confirm E, then delete the rest.
 - Waiting on Tom to live in Today for a while and say what's missing.
 
 ## Parked ideas
