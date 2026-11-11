@@ -94,6 +94,7 @@ the sync code can read and write the blob.
 
 Newest first. Most have a longer explanation in `CLAUDE.md`.
 
+- 2026-11-11: shared `ui-badge` good/warn/bad text now mixes 30% of `--text` into the status colour (the green and amber were about 2.7:1 in Light; now 4.5:1 or better in both themes). Synced copy of `components.css`, deployed 11 Nov.
 - 2026-11-11: Theme, sub-theme and tags became one always-open block in the task window: every row one sideways-scrolling line, sub-themes as chips, one tag per category (a tap replaces that category's other tag). Tom: tags under chevrons meant expanding five menus. Applies to the current window and all four test layouts.
 - 2026-11-11: Tom said the task window "doesn't work at all" (too many big pills, scattered options). Four test layouts built behind Settings › Task window layout (per device): A property list, B composer bar, C two panes, D quick add then a full page. They only rearrange the same modal DOM (`applyTaskLayout`), so saving and sync are unchanged. When Tom picks one, build it in properly, move its styles into the shared components and delete the other three plus the setting.
 - 2026-11-11: On a phone the task window is now a full-screen page, not a card sliding up (Tom: "Does it need to be a modal on mobile or can it be a page?"); new shared `ui-sheet page` variant. Chips run full width, Tags start folded, a gap under each heading. Service worker v76.
