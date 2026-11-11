@@ -421,6 +421,11 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 #task-modal.lay-e > .body > .ui-stack:first-child { padding-bottom:var(--sp-3); }
 .lay-sec { border-top:1px solid var(--border); min-width:0; }
 .lay-sec-h { width:100%; }
-#task-modal.lay-e .lay-sec-body { padding:0 0 var(--sp-3) 32px; }
+#task-modal.lay-e .lay-sec-body { padding:var(--sp-2) 0 var(--sp-3) 32px; }
+/* A phone gets the whole width for the chips (Tom, 11 Nov 2026) */
+@media (max-width: 560px) {
+  #task-modal.lay-e .lay-sec-body { padding-left:0; }
+  #task-modal > .body { padding-inline:var(--sp-4); }
+}
 #task-modal.lay-e #subtheme-field .field-label, #task-modal.lay-e .field-toggle .field-label { display:none; }
 #task-modal.lay-e .tag-picker { gap:8px; }

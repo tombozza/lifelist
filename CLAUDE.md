@@ -306,7 +306,9 @@ is **E, Sections** (Tom: "Can you not just have sections for themes, sub-themes,
 etc?", then "with the icons and collapsable sections from option A"): every part is its
 own section (`laySecParts`) under an A-style icon heading with a summary and a chevron that
 folds it: Theme, Sub-theme, Tags, Priority, Dates, Repeat, Sub-tasks, Link, Notes. A new task
-opens Theme, Sub-theme and Tags; an edited task opens whatever already holds a value.
+opens Theme and Sub-theme (Tom: "tags collapsed by default"); an edited task opens whatever
+already holds a value. On a phone the window is a full-screen page (`ui-sheet page`, added to
+the shared components) and the chips run the full width, with no indent under the icon.
 Sub-theme hides until a theme is picked.
 A (property list), B (composer bar) and "Old window" stay selectable for comparison. C and
 D were rejected ("a no go") and removed; a saved `c`/`d` falls back to E. All of them only

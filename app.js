@@ -3775,9 +3775,10 @@ function applyTaskLayout() {
         // Tom (11 Nov 2026): "Can you not just have sections for themes,
         // sub-themes, tags etc?", then "with the icons and collapsable sections
         // from option A". Every field is its own section with an icon heading
-        // that folds it. Theme, sub-theme and tags start open on a new task;
+        // that folds it. Theme and sub-theme start open on a new task;
         // the rest open when they hold something.
-        if (!editingTaskId) ['theme', 'sub', 'tags'].forEach(k => layOpen.add(k));
+        // Tags start folded (Tom: "tags collapsed by default")
+        if (!editingTaskId) ['theme', 'sub'].forEach(k => layOpen.add(k));
         else ['theme', 'sub', 'tags'].forEach(k => { if (laySecSummary(k)) layOpen.add(k); });
         if (layOpen.has('notes')) setNotesOpen(true);
         let after = title;

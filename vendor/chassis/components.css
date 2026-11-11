@@ -229,6 +229,12 @@ select.ui-input {
   .ui-sheet > footer { padding-bottom: max(var(--sp-5), env(safe-area-inset-bottom)); }
   .ui-sheet > footer .ui-btn { flex: 1; }
 }
+/* <dialog class="ui-sheet page">: a sheet with a lot in it (a full edit form) fills the whole
+   phone screen like a page instead of sliding up as a card; on wider screens it's a normal sheet. */
+@media (max-width: 560px) {
+  .ui-sheet.page { inline-size: 100%; block-size: 100dvh; max-block-size: 100dvh; margin: 0; border-radius: 0; box-shadow: none; }
+  .ui-sheet.page > header { padding-top: max(var(--sp-4), env(safe-area-inset-top)); }
+}
 
 /* ── Toast and empty state ───────────────────────────────────────────────────── */
 /* <div class="ui-toast" role="status">Saved</div>: add it, remove it after about 2.5s. */
