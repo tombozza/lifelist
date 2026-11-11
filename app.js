@@ -3586,6 +3586,8 @@ const LAY_KEYS = [
 ];
 const LAY_ICONS = {
     tags: '<path d="M3 8.5V3h5.5L14 8.5 8.5 14z"/><circle cx="6" cy="6" r="1"/>',
+    theme: '<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/>',
+    sub: '<path d="M4 2.5v6a2 2 0 0 0 2 2h6M9.5 8l2.5 2.5L9.5 13"/>',
     priority: '<path d="M4 14V2.5M4 3h8l-1.5 3L12 9H4"/>',
     dates: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 7h11M5.5 2v3M10.5 2v3"/>',
     repeat: '<path d="M3 7a5 5 0 0 1 9-2.5M13 9a5 5 0 0 1-9 2.5M12 2v2.5H9.5M4 14v-2.5h2.5"/>',
@@ -3659,6 +3661,26 @@ function laySummary(k) {
     return '';
 }
 
+// Layout E's sections: [key, heading, the node it folds]
+function laySecParts() {
+    return [
+        ['theme', 'Theme', document.querySelector('#task-modal [data-block="theme"] > .field:first-child') || document.querySelector('#task-modal .lay-sec[data-key="theme"] > .lay-sec-body')],
+        ['sub', 'Sub-theme', document.getElementById('subtheme-field')],
+        ['tags', 'Tags', document.getElementById('tags-field')],
+        ['priority', 'Priority', layBlock('priority')],
+        ['dates', 'Dates', layBlock('dates')],
+        ['repeat', 'Repeat', layBlock('repeat')],
+        ['subtasks', 'Sub-tasks', layBlock('subtasks')],
+        ['link', 'Link', layBlock('link')],
+        ['notes', 'Notes', layBlock('notes')],
+    ];
+}
+function laySecSummary(k) {
+    if (k === 'theme') return modalThemeIds.map(id => getTheme(id)?.name).filter(Boolean).join(', ');
+    if (k === 'sub') return modalSubTheme || '';
+    return laySummary(k);
+}
+
 function layGen(tag, cls, html) {
     const el = document.createElement(tag);
     el.className = 'lay-gen ' + (cls || '');
@@ -3696,6 +3718,7 @@ function restoreTaskLayout() {
     layOrig.forEach(el => body.appendChild(el));
     modal.querySelectorAll('.lay-gen').forEach(el => el.remove());
     modal.querySelectorAll('.lay-hide').forEach(el => el.classList.remove('lay-hide'));
+    modal.querySelectorAll('.lay-sec-body').forEach(el => el.classList.remove('lay-sec-body'));
     modal.classList.remove('lay-a', 'lay-b', 'lay-c', 'lay-d', 'lay-e', 'lay-full');
 }
 
@@ -3750,24 +3773,26 @@ function applyTaskLayout() {
 
     if (lay === 'e') {
         // Tom (11 Nov 2026): "Can you not just have sections for themes,
-        // sub-themes, tags etc?" — every field is its own headed section, all open.
-        LAY_KEYS.forEach(([k]) => layOpen.add(k));
-        setNotesOpen(true);
-        const parts = [
-            ['Theme', document.querySelector('#task-modal [data-block="theme"] > .field:first-child')],
-            ['Sub-theme', document.getElementById('subtheme-field')],
-            ['Tags', document.getElementById('tags-field')],
-            ['Priority and size', layBlock('priority')],
-            ['Dates', layBlock('dates')],
-            ['Repeat', layBlock('repeat')],
-            ['Sub-tasks', layBlock('subtasks')],
-            ['Link', layBlock('link')],
-            ['Notes', layBlock('notes')],
-        ];
+        // sub-themes, tags etc?", then "with the icons and collapsable sections
+        // from option A". Every field is its own section with an icon heading
+        // that folds it. Theme, sub-theme and tags start open on a new task;
+        // the rest open when they hold something.
+        if (!editingTaskId) ['theme', 'sub', 'tags'].forEach(k => layOpen.add(k));
+        else ['theme', 'sub', 'tags'].forEach(k => { if (laySecSummary(k)) layOpen.add(k); });
+        if (layOpen.has('notes')) setNotesOpen(true);
         let after = title;
-        parts.forEach(([label, el]) => {
-            const sec = layGen('section', 'lay-sec', `<h3 class="lay-sec-h">${label}</h3>`);
-            if (el.id === 'subtheme-field') sec.classList.add('lay-sec-sub');
+        laySecParts().forEach(([k, label, el]) => {
+            const sec = layGen('section', 'lay-sec');
+            sec.dataset.key = k;
+            if (k === 'sub') sec.classList.add('lay-sec-sub');
+            const head = layGen('button', 'ui-row lay-prop lay-sec-h', `<span class="lay-ico">${layIcon(k)}</span><span class="main"><span>${label}</span><span class="sub"></span></span>`);
+            head.setAttribute('aria-expanded', 'false');
+            head.addEventListener('click', () => {
+                if (layOpen.has(k)) layOpen.delete(k); else { layOpen.add(k); if (k === 'notes') setNotesOpen(true); }
+                refreshTaskLayout();
+            });
+            sec.appendChild(head);
+            el.classList.add('lay-sec-body');
             sec.appendChild(el);
             after.after(sec);
             after = sec;
@@ -3806,7 +3831,17 @@ function refreshTaskLayout() {
         modal.querySelectorAll('.lay-bar-btn').forEach(b => b.setAttribute('aria-pressed', layOpen.has(b.dataset.key) ? 'true' : 'false'));
     }
     if (lay === 'e') {
-        LAY_KEYS.forEach(([k]) => layShow(layBlock(k), true));
+        laySecParts().forEach(([k, , el]) => {
+            const sec = el.closest('.lay-sec');
+            if (!sec) return;
+            const open = layOpen.has(k);
+            const head = sec.querySelector('.lay-sec-h');
+            head.querySelector('.sub').textContent = laySecSummary(k) || (['theme', 'sub', 'tags', 'priority'].includes(k) ? 'Choose' : 'Add');
+            head.classList.toggle('open', open);
+            head.setAttribute('aria-expanded', open ? 'true' : 'false');
+            el.style.display = '';
+            layShow(el, open);
+        });
         // No theme yet means no sub-themes to show
         const sub = modal.querySelector('.lay-sec-sub');
         if (sub) layShow(sub, modalThemeIds.length > 0);

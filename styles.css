@@ -419,7 +419,8 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 /* E · sections (default): each field under its own heading */
 #task-modal.lay-e > .body { gap:0; }
 #task-modal.lay-e > .body > .ui-stack:first-child { padding-bottom:var(--sp-3); }
-.lay-sec { padding:var(--sp-3) 0; border-top:1px solid var(--border); min-width:0; }
-.lay-sec-h { margin:0 0 var(--sp-2); font-size:var(--text-sm); font-weight:600; color:var(--text-2); }
+.lay-sec { border-top:1px solid var(--border); min-width:0; }
+.lay-sec-h { width:100%; }
+#task-modal.lay-e .lay-sec-body { padding:0 0 var(--sp-3) 32px; }
 #task-modal.lay-e #subtheme-field .field-label, #task-modal.lay-e .field-toggle .field-label { display:none; }
 #task-modal.lay-e .tag-picker { gap:8px; }

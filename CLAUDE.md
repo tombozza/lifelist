@@ -303,8 +303,11 @@ section any more, and the old folded-category picker (`modalTagCatsOpen`) is unu
 
 **Layouts** (Settings › Task window layout, per device, `lk-task-layout`). The default
 is **E, Sections** (Tom: "Can you not just have sections for themes, sub-themes, tags
-etc?"): every part sits open under its own heading (Theme, Sub-theme, Tags, Priority and
-size, Dates, Repeat, Sub-tasks, Link, Notes); Sub-theme hides until a theme is picked.
+etc?", then "with the icons and collapsable sections from option A"): every part is its
+own section (`laySecParts`) under an A-style icon heading with a summary and a chevron that
+folds it: Theme, Sub-theme, Tags, Priority, Dates, Repeat, Sub-tasks, Link, Notes. A new task
+opens Theme, Sub-theme and Tags; an edited task opens whatever already holds a value.
+Sub-theme hides until a theme is picked.
 A (property list), B (composer bar) and "Old window" stay selectable for comparison. C and
 D were rejected ("a no go") and removed; a saved `c`/`d` falls back to E. All of them only
 rearrange this same modal (`applyTaskLayout` / `refreshTaskLayout`). Once Tom confirms E,
