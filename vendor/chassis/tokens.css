@@ -27,7 +27,9 @@
 
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1); --dur: 200ms;
 
-  --success: #16a34a; --warning: #d97706; --danger: #dc2626;
+  /* Light green and amber are the deeper shades (11 Nov 2026): the bright ones were about 3:1 on
+     white, too faint for words; these are 5:1. Dark keeps the bright ones (below). */
+  --success: #15803d; --warning: #b45309; --danger: #dc2626;
   --accent: #3b82f6;          /* every app overrides this with its identity colour */
   --magic: var(--accent);     /* the magic mark's colour */
 
@@ -44,6 +46,7 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
     --bg: #0a0b0f; --surface: #131419; --surface-2: #1a1c23;
+    --success: #16a34a; --warning: #d97706;
     --border: rgb(255 255 255 / 0.07); --border-strong: rgb(255 255 255 / 0.14);
     --text: #f3f4f8; --text-2: #a8acbc; --text-3: #6c7084;
     --overlay: rgb(0 0 0 / 0.6);
@@ -54,6 +57,7 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
   --bg: #0a0b0f; --surface: #131419; --surface-2: #1a1c23;
+  --success: #16a34a; --warning: #d97706;
   --border: rgb(255 255 255 / 0.07); --border-strong: rgb(255 255 255 / 0.14);
   --text: #f3f4f8; --text-2: #a8acbc; --text-3: #6c7084;
   --overlay: rgb(0 0 0 / 0.6);
