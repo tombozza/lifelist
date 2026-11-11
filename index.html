@@ -185,6 +185,7 @@
             </label>
         </div>
 
+        <div data-block="theme">
         <div class="field">
             <span class="field-label">Themes</span>
             <div class="field-control">
@@ -209,6 +210,7 @@
                 </div>
             </div>
         </div>
+        </div><!-- /theme block -->
 
         <!-- Everything below the themes stays folded away until asked for:
              one "+" chip per section (see renderTaskSections) -->
@@ -500,6 +502,19 @@
         <div class="ui-stack setting">
             <span class="ui-label">Appearance</span>
             <theme-switch></theme-switch>
+        </div>
+        <div class="ui-stack setting">
+            <label class="ui-field">
+                <span>Task window layout (test)</span>
+                <select id="settings-task-layout" class="ui-input">
+                    <option value="">Current</option>
+                    <option value="a">A · Property list</option>
+                    <option value="b">B · Composer bar</option>
+                    <option value="c">C · Two panes</option>
+                    <option value="d">D · Quick add, then details</option>
+                </select>
+            </label>
+            <p class="ui-hint">Trying out new layouts for the new and edit task window. This device only, and every one saves the same way.</p>
         </div>
         <div class="ui-stack setting">
             <label class="check"><input type="checkbox" role="switch" id="settings-show-hidden"> Show hidden themes</label>

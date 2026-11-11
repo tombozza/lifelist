@@ -3568,9 +3568,268 @@ function openTaskModal(taskId, defaultKanbanCol) {
     renderDowPicker();
     updateSubThemeSelect();
 
+    applyTaskLayout();
     if (!modal.open) modal.showModal();
     setTimeout(() => document.getElementById('task-title').focus(), 50);
 }
+
+// ============ TASK WINDOW LAYOUTS (test, 11 Nov 2026) ============
+// Tom asked to try four layouts for the task window side by side. Each one
+// only REARRANGES the same modal DOM (moving nodes keeps their listeners), so
+// every field, the save path and sync are untouched. Picked per device in
+// Settings (localStorage lk-task-layout); '' is the current window. Once Tom
+// picks one, fold it in properly and delete the rest.
+
+const LAY_KEYS = [
+    ['theme', 'Theme'], ['tags', 'Tags'], ['priority', 'Priority'], ['dates', 'Dates'],
+    ['repeat', 'Repeat'], ['subtasks', 'Sub-tasks'], ['link', 'Link'], ['notes', 'Notes'],
+];
+const LAY_ICONS = {
+    tags: '<path d="M3 8.5V3h5.5L14 8.5 8.5 14z"/><circle cx="6" cy="6" r="1"/>',
+    priority: '<path d="M4 14V2.5M4 3h8l-1.5 3L12 9H4"/>',
+    dates: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 7h11M5.5 2v3M10.5 2v3"/>',
+    repeat: '<path d="M3 7a5 5 0 0 1 9-2.5M13 9a5 5 0 0 1-9 2.5M12 2v2.5H9.5M4 14v-2.5h2.5"/>',
+    subtasks: '<path d="M2.5 4l1.2 1.2L6 3M2.5 10l1.2 1.2L6 9M8 4.5h5.5M8 10.5h5.5"/>',
+    link: '<path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9M9.5 6.5a3 3 0 0 0-4.2 0L3 8.8a3 3 0 0 0 4.2 4.2l.9-.9"/>',
+    notes: '<path d="M3 2.5h10v8l-3 3H3z"/><path d="M5.5 6h5M5.5 9h3"/>',
+};
+function layIcon(k) {
+    return `<svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${LAY_ICONS[k] || ''}</svg>`;
+}
+
+function taskLayout() { try { return localStorage.getItem('lk-task-layout') || ''; } catch { return ''; } }
+let layOrig = null;        // the modal body's own children, in their own order
+let layOpen = new Set();   // sections the person has opened in this layout
+let layFull = false;       // D: showing the full details page
+
+function layBody() { return document.querySelector('#task-modal > .body'); }
+function layBlock(k) {
+    return k === 'theme'
+        ? document.querySelector('#task-modal [data-block="theme"]')
+        : document.querySelector(`#task-modal [data-section="${k}"]`);
+}
+function layShow(el, on) {
+    if (!el) return;
+    if (on) { el.style.display = ''; el.classList.remove('lay-hide'); }
+    else el.classList.add('lay-hide');
+}
+
+// What each section currently holds, in a few words
+function laySummary(k) {
+    if (k === 'theme') {
+        const names = modalThemeIds.map(id => getTheme(id)?.name).filter(Boolean);
+        return names.length ? names.join(', ') + (modalSubTheme ? ' \u203a ' + modalSubTheme : '') : '';
+    }
+    if (k === 'tags') return modalTagIds.map(id => getTag(id)?.name).filter(Boolean).join(', ');
+    if (k === 'priority') {
+        const p = PRIORITY_LEVELS.find(l => l.value === modalPriority);
+        const bits = [];
+        if (modalPriority) bits.push(p ? p.label : modalPriority);
+        if (modalSize && modalSize !== 'xs') bits.push(modalSize.toUpperCase());
+        return bits.join(' \u00b7 ');
+    }
+    if (k === 'dates') {
+        const on = document.getElementById('task-do').value, by = document.getElementById('task-due').value;
+        return [on && 'On ' + formatDateShort(on), by && 'By ' + formatDateShort(by)].filter(Boolean).join(' \u00b7 ');
+    }
+    if (k === 'repeat') {
+        const r = getRecurringFromModal();
+        if (!r) return '';
+        const every = r.interval > 1 ? 'Every ' + r.interval + ' ' : '';
+        const base = r.type === 'daily' ? (every ? every + 'days' : 'Daily')
+            : r.type === 'weekly' ? (every ? every + 'weeks' : 'Weekly') + ' on ' + ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][r.dayOfWeek ?? 1]
+            : (every ? every + 'months' : 'Monthly');
+        return base + (r.onToday ? ' \u00b7 on Today' : '');
+    }
+    if (k === 'subtasks') {
+        if (!modalSubtasks.length) return '';
+        return modalSubtasks.filter(st => st.done).length + '/' + modalSubtasks.length;
+    }
+    if (k === 'link') { const u = normaliseUrl(document.getElementById('task-url').value); return u ? urlHost(u) : ''; }
+    if (k === 'notes') { const n = document.getElementById('task-notes').value.trim(); return n ? (n.length > 32 ? n.slice(0, 32) + '\u2026' : n) : ''; }
+    return '';
+}
+
+function layGen(tag, cls, html) {
+    const el = document.createElement(tag);
+    el.className = 'lay-gen ' + (cls || '');
+    if (html != null) el.innerHTML = html;
+    if (tag === 'button') el.type = 'button';
+    return el;
+}
+
+// Themes you use most come first, so the usual one is one tap away
+function layThemeOrder() {
+    const count = {};
+    const since = addDays(todayStr(), -90);
+    state.tasks.forEach(t => {
+        if ((t.createdDate || '') < since) return;
+        taskThemeIds(t).forEach(id => { count[id] = (count[id] || 0) + 1; });
+    });
+    const picker = document.getElementById('theme-picker');
+    const btns = [...picker.children];
+    const add = btns.find(b => !b.dataset.themeId);
+    btns.filter(b => b.dataset.themeId)
+        .sort((a, b) => (modalThemeIds.includes(b.dataset.themeId) - modalThemeIds.includes(a.dataset.themeId))
+            || ((count[b.dataset.themeId] || 0) - (count[a.dataset.themeId] || 0)))
+        .forEach(b => picker.appendChild(b));
+    if (add) picker.appendChild(add);
+}
+
+function restoreTaskLayout() {
+    const modal = document.getElementById('task-modal');
+    const body = layBody();
+    if (!layOrig) layOrig = [...body.children];
+    layOrig.forEach(el => body.appendChild(el));
+    modal.querySelectorAll('.lay-gen').forEach(el => el.remove());
+    modal.querySelectorAll('.lay-hide').forEach(el => el.classList.remove('lay-hide'));
+    modal.classList.remove('lay-a', 'lay-b', 'lay-c', 'lay-d', 'lay-full');
+    document.getElementById('theme-picker').classList.remove('scroll');
+}
+
+function applyTaskLayout() {
+    restoreTaskLayout();
+    const lay = taskLayout();
+    if (!lay) return;
+    const modal = document.getElementById('task-modal');
+    const body = layBody();
+    const title = body.firstElementChild;
+    modal.classList.add('lay-' + lay);
+    layShow(document.getElementById('task-more'), false);
+    layOpen = new Set();
+    layFull = !!editingTaskId;
+    // An edited task opens what already has something in it
+    if (editingTaskId) LAY_KEYS.forEach(([k]) => { if (k !== 'theme' && laySummary(k)) layOpen.add(k); });
+
+    if (lay === 'a') {
+        if (!editingTaskId) layOpen.add('theme');
+        let after = title;
+        LAY_KEYS.forEach(([k, label]) => {
+            const row = layGen('button', 'ui-row lay-prop', `<span class="lay-ico">${k === 'theme' ? '<svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/></svg>' : layIcon(k)}</span><span class="main"><span>${label}</span><span class="sub"></span></span>`);
+            row.dataset.key = k;
+            row.addEventListener('click', () => {
+                if (layOpen.has(k)) layOpen.delete(k); else { layOpen.add(k); if (k === 'notes') setNotesOpen(true); }
+                refreshTaskLayout();
+            });
+            after.after(row);
+            const block = layBlock(k);
+            row.after(block);
+            after = block;
+        });
+    }
+
+    if (lay === 'b') {
+        document.getElementById('theme-picker').classList.add('scroll');
+        const sum = layGen('div', 'ui-chips lay-sum');
+        title.after(sum);
+        const bar = layGen('div', 'lay-bar');
+        LAY_KEYS.filter(([k]) => k !== 'theme').forEach(([k, label]) => {
+            const b = layGen('button', 'ui-btn quiet icon lay-bar-btn', layIcon(k));
+            b.dataset.key = k;
+            b.title = label;
+            b.setAttribute('aria-label', label);
+            b.addEventListener('click', () => {
+                if (layOpen.has(k)) layOpen.delete(k); else { layOpen.add(k); if (k === 'notes') setNotesOpen(true); }
+                refreshTaskLayout();
+                if (layOpen.has(k)) layBlock(k).scrollIntoView({ block: 'nearest' });
+            });
+            bar.appendChild(b);
+        });
+        body.appendChild(bar);
+    }
+
+    if (lay === 'c') {
+        LAY_KEYS.forEach(([k]) => layOpen.add(k));
+        setNotesOpen(true);
+        const grid = layGen('div', 'lay-cols');
+        const csum = layGen('button', 'ui-row lay-csum', '<span class="main"><span>Details</span><span class="sub"></span></span>');
+        csum.addEventListener('click', () => {
+            if (layOpen.has('details')) layOpen.delete('details'); else layOpen.add('details');
+            refreshTaskLayout();
+        });
+        const side = layGen('div', 'lay-side');
+        const main = layGen('div', 'lay-main');
+        ['theme', 'tags', 'priority', 'dates', 'repeat'].forEach(k => side.appendChild(layBlock(k)));
+        ['subtasks', 'link', 'notes'].forEach(k => main.appendChild(layBlock(k)));
+        main.appendChild(document.getElementById('task-in-list'));
+        body.insertBefore(grid, title);
+        grid.append(title, csum, side, main);
+    }
+
+    if (lay === 'd') {
+        document.getElementById('theme-picker').classList.add('scroll');
+        const more = layGen('button', 'ui-btn lay-details', 'Add details');
+        more.addEventListener('click', () => { layFull = true; applyTaskLayoutFull(); });
+        layBlock('theme').after(more);
+        if (layFull) applyTaskLayoutFull();
+    }
+    refreshTaskLayout();
+}
+
+// D's full page: everything visible, in three groups
+function applyTaskLayoutFull() {
+    const modal = document.getElementById('task-modal');
+    const body = layBody();
+    modal.classList.add('lay-full');
+    body.querySelectorAll('.lay-details').forEach(el => el.remove());
+    LAY_KEYS.forEach(([k]) => layOpen.add(k));
+    setNotesOpen(true);
+    const groups = [['About', ['theme', 'tags']], ['When', ['priority', 'dates', 'repeat']], ['More', ['subtasks', 'link', 'notes']]];
+    let after = body.firstElementChild;
+    groups.forEach(([label, keys]) => {
+        const g = layGen('section', 'ui-card lay-group', `<span class="ui-label">${label}</span>`);
+        keys.forEach(k => g.appendChild(layBlock(k)));
+        after.after(g);
+        after = g;
+    });
+    refreshTaskLayout();
+}
+
+function refreshTaskLayout() {
+    const lay = taskLayout();
+    const modal = document.getElementById('task-modal');
+    if (!lay || !modal.classList.contains('lay-' + lay)) return;
+    if (lay === 'a') {
+        modal.querySelectorAll('.lay-prop').forEach(row => {
+            const k = row.dataset.key;
+            row.querySelector('.sub').textContent = laySummary(k) || (k === 'theme' ? 'Choose' : 'Add');
+            row.classList.toggle('open', layOpen.has(k));
+            layShow(layBlock(k), layOpen.has(k));
+        });
+    }
+    if (lay === 'b') {
+        layThemeOrder();
+        const sum = modal.querySelector('.lay-sum');
+        sum.innerHTML = '';
+        LAY_KEYS.filter(([k]) => k !== 'theme').forEach(([k]) => {
+            const v = laySummary(k);
+            if (!v) return;
+            const c = layGen('button', 'ui-chip lay-sum-chip', '');
+            c.innerHTML = layIcon(k);
+            c.appendChild(document.createTextNode(v));
+            c.addEventListener('click', () => { layOpen.add(k); refreshTaskLayout(); layBlock(k).scrollIntoView({ block: 'nearest' }); });
+            sum.appendChild(c);
+        });
+        layShow(sum, sum.childNodes.length > 0);
+        LAY_KEYS.forEach(([k]) => { if (k !== 'theme') layShow(layBlock(k), layOpen.has(k)); });
+        modal.querySelectorAll('.lay-bar-btn').forEach(b => b.setAttribute('aria-pressed', layOpen.has(b.dataset.key) ? 'true' : 'false'));
+    }
+    if (lay === 'c') {
+        LAY_KEYS.forEach(([k]) => layShow(layBlock(k), true));
+        const bits = ['theme', 'tags', 'dates', 'repeat'].map(laySummary).filter(Boolean);
+        modal.querySelector('.lay-csum .sub').textContent = bits.join(' \u00b7 ') || 'Theme, tags, dates, repeat';
+        modal.querySelector('.lay-cols').classList.toggle('details-open', layOpen.has('details'));
+    }
+    if (lay === 'd') {
+        if (layFull) {
+            LAY_KEYS.forEach(([k]) => layShow(layBlock(k), true));
+        } else {
+            layThemeOrder();
+            LAY_KEYS.forEach(([k]) => layShow(layBlock(k), k === 'theme'));
+        }
+    }
+}
+
 
 function closeTaskModal() {
     closeSheet('task-modal');
@@ -3778,6 +4037,7 @@ function renderThemePicker() {
     container.innerHTML = '';
     [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const btn = tintChip(chipBtn(theme.name + (theme.hidden ? ' 🕶' : ''), modalThemeIds.includes(theme.id)), theme.color);
+        btn.dataset.themeId = theme.id;
         btn.addEventListener('click', () => {
             // Each chip is an independent toggle, so Work + Jim is just two taps
             const i = modalThemeIds.indexOf(theme.id);
@@ -4546,6 +4806,15 @@ function init() {
     });
     document.getElementById('settings-close').addEventListener('click', () => closeSheet('settings-modal'));
     document.getElementById('settings-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.close(); });
+    const layoutSel = document.getElementById('settings-task-layout');
+    layoutSel.value = taskLayout();
+    layoutSel.addEventListener('change', () => {
+        try { localStorage.setItem('lk-task-layout', layoutSel.value); } catch {}
+    });
+    // Anything done inside the task window updates the layout's summaries
+    ['click', 'input', 'change'].forEach(ev =>
+        document.getElementById('task-modal').addEventListener(ev, () => setTimeout(refreshTaskLayout, 0)));
+
     document.getElementById('settings-show-hidden').addEventListener('change', e => {
         state.settings.showHidden = e.target.checked; saveState(); render();
     });
