@@ -94,6 +94,7 @@ the sync code can read and write the blob.
 
 Newest first. Most have a longer explanation in `CLAUDE.md`.
 
+- 2026-11-11: Shared light/dark switch (`_shared/chassis/theme.js`, Tom: "add dark/light switches across all apps"): theme.js loads first in `<head>`; Auto / Light / Dark is in Settings › Appearance and replaces the app's own Dark mode checkbox (a saved Dark carries over once, `lk-theme-moved`). Service worker v70. Checked in Light and Dark at phone width. Deployed live the same day (Tom's go-ahead).
 - 2026-11-10: Every screen is now built from the shared components (`_shared/chassis/components.css`, the `ui-` classes), loaded after tokens.css and controls.css; the app's own buttons, cards, fields, pop-ups and neutral colour tokens are gone, and it keeps only its accent, priority and spotlight colours. Pop-ups are `<dialog class="ui-sheet">`; Today's tick is a real checkbox. Its own light/dark switch still defaults to light. Deployed live the same day (10 Nov 2026, Tom's go-ahead).
 - 2026-11-10: Repeats can go straight onto Today on their day, with a per-repeat choice to
   carry a missed one forward or mark it missed and book the next. New repeats default to on +
