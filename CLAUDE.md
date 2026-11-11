@@ -285,13 +285,25 @@ default to on + carry; older ones are unchanged, so they keep going to Backlog):
 
 ## The task modal — progressive disclosure
 
-Tom (4 Nov 2026): "it needs tidying up and more progressive disclosure". Only the
-title and Themes are always shown. Tags, Priority & size, Dates, Repeat, Sub-tasks
-and Notes are `[data-section]` blocks behind "+" pills (`TASK_SECTIONS`,
-`renderTaskSections`, `openTaskSection`); editing a task opens the sections that
-already hold a value. The old Details / Notes tabs are gone. In Tags, each category
-is folded to its chosen tags (`modalTagCatsOpen`); untouched categories share one
-line. New fields belong in a section, not loose in the modal.
+Tom (4 Nov 2026): "it needs tidying up and more progressive disclosure". The
+title and the **theme block** are always shown; Priority & size, Dates, Repeat,
+Sub-tasks, Link and Notes are `[data-section]` blocks behind "+" pills
+(`TASK_SECTIONS`, `renderTaskSections`, `openTaskSection`); editing a task opens the
+sections that already hold a value. New fields belong in a section, not loose in the modal.
+
+**Theme, sub-theme and tags are one block** (`[data-block="theme"]`, 11 Nov 2026).
+Tom: tags hidden under chevrons meant opening five menus, and "most of the time I will
+be adding one theme, one sub-theme, one tag per tag group". So every row is one line
+that scrolls sideways (`.ui-chips.scroll`): themes (chosen first, then most used in the
+last 90 days, `layThemeOrder`), sub-themes as chips (`renderSubThemeChips`; the old
+`<select>` stays hidden as the value holder), then one row per tag category with its
+name at the start (`renderTagPicker`). A tag tap is **one per category**: it replaces
+that category's other tag, and tapping the chosen one clears it. Tags are not a
+section any more, and the old folded-category picker (`modalTagCatsOpen`) is unused.
+
+**Test layouts** (Settings › Task window layout, per device, `lk-task-layout`): A–D only
+rearrange this same modal (`applyTaskLayout` / `refreshTaskLayout`). Waiting on Tom to
+pick one; then build it in and delete the rest.
 
 ## No theme chips on cards
 

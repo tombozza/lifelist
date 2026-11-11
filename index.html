@@ -189,13 +189,14 @@
         <div class="field">
             <span class="field-label">Themes</span>
             <div class="field-control">
-                <div id="theme-picker" class="ui-chips"></div>
+                <div id="theme-picker" class="ui-chips scroll"></div>
             </div>
         </div>
 
         <div class="field" id="subtheme-field">
             <span class="field-label">Sub-theme</span>
             <div class="field-control">
+                <div id="subtheme-chips" class="ui-chips scroll subtheme-chips"></div>
                 <div class="subtheme-row">
                     <select id="task-subtheme" class="ui-input" aria-label="Sub-theme">
                         <option value="">None</option>
@@ -210,18 +211,18 @@
                 </div>
             </div>
         </div>
-        </div><!-- /theme block -->
+        <div class="field" id="tags-field">
+            <span class="field-label">Tags</span>
+            <div class="field-control">
+                <div id="tag-picker" class="tag-picker"></div>
+            </div>
+        </div>
+        </div><!-- /theme block: theme, sub-theme and tags are one decision -->
 
         <!-- Everything below the themes stays folded away until asked for:
              one "+" chip per section (see renderTaskSections) -->
         <div class="ui-chips task-more" id="task-more"></div>
 
-        <div class="field" data-section="tags">
-            <span class="field-label">Tags</span>
-            <div class="field-control">
-                <div id="tag-picker" class="ui-stack tag-picker"></div>
-            </div>
-        </div>
 
         <div class="field" data-section="priority">
             <span class="field-label">Priority &amp; size</span>

@@ -3581,7 +3581,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
 // picks one, fold it in properly and delete the rest.
 
 const LAY_KEYS = [
-    ['theme', 'Theme'], ['tags', 'Tags'], ['priority', 'Priority'], ['dates', 'Dates'],
+    ['theme', 'Theme & tags'], ['priority', 'Priority'], ['dates', 'Dates'],
     ['repeat', 'Repeat'], ['subtasks', 'Sub-tasks'], ['link', 'Link'], ['notes', 'Notes'],
 ];
 const LAY_ICONS = {
@@ -3618,7 +3618,8 @@ function layShow(el, on) {
 function laySummary(k) {
     if (k === 'theme') {
         const names = modalThemeIds.map(id => getTheme(id)?.name).filter(Boolean);
-        return names.length ? names.join(', ') + (modalSubTheme ? ' \u203a ' + modalSubTheme : '') : '';
+        const tags = modalTagIds.map(id => getTag(id)?.name).filter(Boolean);
+        return [names.length ? names.join(', ') + (modalSubTheme ? ' \u203a ' + modalSubTheme : '') : '', ...tags].filter(Boolean).join(' \u00b7 ');
     }
     if (k === 'tags') return modalTagIds.map(id => getTag(id)?.name).filter(Boolean).join(', ');
     if (k === 'priority') {
@@ -3684,7 +3685,6 @@ function restoreTaskLayout() {
     modal.querySelectorAll('.lay-gen').forEach(el => el.remove());
     modal.querySelectorAll('.lay-hide').forEach(el => el.classList.remove('lay-hide'));
     modal.classList.remove('lay-a', 'lay-b', 'lay-c', 'lay-d', 'lay-full');
-    document.getElementById('theme-picker').classList.remove('scroll');
 }
 
 function applyTaskLayout() {
@@ -3719,7 +3719,6 @@ function applyTaskLayout() {
     }
 
     if (lay === 'b') {
-        document.getElementById('theme-picker').classList.add('scroll');
         const sum = layGen('div', 'ui-chips lay-sum');
         title.after(sum);
         const bar = layGen('div', 'lay-bar');
@@ -3749,7 +3748,7 @@ function applyTaskLayout() {
         });
         const side = layGen('div', 'lay-side');
         const main = layGen('div', 'lay-main');
-        ['theme', 'tags', 'priority', 'dates', 'repeat'].forEach(k => side.appendChild(layBlock(k)));
+        ['theme', 'priority', 'dates', 'repeat'].forEach(k => side.appendChild(layBlock(k)));
         ['subtasks', 'link', 'notes'].forEach(k => main.appendChild(layBlock(k)));
         main.appendChild(document.getElementById('task-in-list'));
         body.insertBefore(grid, title);
@@ -3757,7 +3756,6 @@ function applyTaskLayout() {
     }
 
     if (lay === 'd') {
-        document.getElementById('theme-picker').classList.add('scroll');
         const more = layGen('button', 'ui-btn lay-details', 'Add details');
         more.addEventListener('click', () => { layFull = true; applyTaskLayoutFull(); });
         layBlock('theme').after(more);
@@ -3774,7 +3772,7 @@ function applyTaskLayoutFull() {
     body.querySelectorAll('.lay-details').forEach(el => el.remove());
     LAY_KEYS.forEach(([k]) => layOpen.add(k));
     setNotesOpen(true);
-    const groups = [['About', ['theme', 'tags']], ['When', ['priority', 'dates', 'repeat']], ['More', ['subtasks', 'link', 'notes']]];
+    const groups = [['About', ['theme']], ['When', ['priority', 'dates', 'repeat']], ['More', ['subtasks', 'link', 'notes']]];
     let after = body.firstElementChild;
     groups.forEach(([label, keys]) => {
         const g = layGen('section', 'ui-card lay-group', `<span class="ui-label">${label}</span>`);
@@ -3798,7 +3796,6 @@ function refreshTaskLayout() {
         });
     }
     if (lay === 'b') {
-        layThemeOrder();
         const sum = modal.querySelector('.lay-sum');
         sum.innerHTML = '';
         LAY_KEYS.filter(([k]) => k !== 'theme').forEach(([k]) => {
@@ -3816,7 +3813,7 @@ function refreshTaskLayout() {
     }
     if (lay === 'c') {
         LAY_KEYS.forEach(([k]) => layShow(layBlock(k), true));
-        const bits = ['theme', 'tags', 'dates', 'repeat'].map(laySummary).filter(Boolean);
+        const bits = ['theme', 'dates', 'repeat'].map(laySummary).filter(Boolean);
         modal.querySelector('.lay-csum .sub').textContent = bits.join(' \u00b7 ') || 'Theme, tags, dates, repeat';
         modal.querySelector('.lay-cols').classList.toggle('details-open', layOpen.has('details'));
     }
@@ -3824,7 +3821,6 @@ function refreshTaskLayout() {
         if (layFull) {
             LAY_KEYS.forEach(([k]) => layShow(layBlock(k), true));
         } else {
-            layThemeOrder();
             LAY_KEYS.forEach(([k]) => layShow(layBlock(k), k === 'theme'));
         }
     }
@@ -3842,7 +3838,7 @@ function closeTaskModal() {
 }
 
 const TASK_SECTIONS = [
-    ['tags', 'Tags'], ['priority', 'Priority'], ['dates', 'Dates'],
+    ['priority', 'Priority'], ['dates', 'Dates'],
     ['repeat', 'Repeat'], ['subtasks', 'Sub-tasks'], ['link', 'Link'], ['notes', 'Notes'],
 ];
 
@@ -3881,58 +3877,43 @@ function openTaskSection(key) {
 function renderTagPicker() {
     const container = document.getElementById('tag-picker');
     container.innerHTML = '';
-    const cats = allTagCategories();
+    const cats = allTagCategories().filter(c => (c.tags || []).length);
     if (!cats.length) {
         container.innerHTML = '<p class="ui-hint">No tag categories yet &mdash; add one in Admin &rsaquo; Tags.</p>';
         return;
     }
-    // Each category is folded to just its chosen tags until tapped open, so
-    // a long People list doesn't swamp the modal
-    const catToggle = (cat, open) => {
-        const label = document.createElement('button');
-        label.type = 'button';
-        label.className = 'ui-btn quiet small tag-cat-toggle';
-        label.setAttribute('aria-expanded', open ? 'true' : 'false');
-        label.textContent = (open ? '▾ ' : '▸ ') + cat.name;
-        label.addEventListener('click', () => {
-            if (open) modalTagCatsOpen.delete(cat.id); else modalTagCatsOpen.add(cat.id);
-            renderTagPicker();
-        });
-        return label;
-    };
-    // Folded categories with nothing chosen share one line at the bottom
-    const folded = [];
+    // Tom (11 Nov 2026): no folded menus — every category is one line that
+    // scrolls sideways, with its name at the start. Usually it's one tag per
+    // category, so a tap picks that tag and drops the category's other one;
+    // tapping the chosen tag clears it.
     cats.forEach(cat => {
-        const open = modalTagCatsOpen.has(cat.id);
-        if (!open && !(cat.tags || []).some(t => modalTagIds.includes(t.id))) { folded.push(cat); return; }
         const row = document.createElement('div');
-        row.className = 'ui-chips tag-picker-row';
-        row.appendChild(catToggle(cat, open));
-        if (open && !(cat.tags || []).length) {
-            const none = document.createElement('span');
-            none.className = 'ui-hint';
-            none.textContent = 'none yet';
-            row.appendChild(none);
-        }
-        [...(cat.tags || [])].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
-            const on = modalTagIds.includes(tag.id);
-            if (!open && !on) return;
-            const btn = tintChip(chipBtn(tag.name, on), cat.color);
-            btn.addEventListener('click', () => {
-                const i = modalTagIds.indexOf(tag.id);
-                if (i === -1) modalTagIds.push(tag.id); else modalTagIds.splice(i, 1);
-                renderTagPicker();
+        row.className = 'tag-pick-row';
+        const name = document.createElement('span');
+        name.className = 'tag-pick-name';
+        name.textContent = cat.name;
+        row.appendChild(name);
+        const chips = document.createElement('div');
+        chips.className = 'ui-chips scroll tag-pick-chips';
+        const ids = new Set(cat.tags.map(t => t.id));
+        // Chosen first, so it's visible without scrolling
+        [...cat.tags].sort((a, b) => (modalTagIds.includes(b.id) - modalTagIds.includes(a.id)) || a.name.localeCompare(b.name))
+            .forEach(tag => {
+                const on = modalTagIds.includes(tag.id);
+                const btn = tintChip(chipBtn(tag.name, on), cat.color);
+                btn.addEventListener('click', () => {
+                    const keep = modalTagIds.filter(id => !ids.has(id));
+                    modalTagIds = on ? keep : [...keep, tag.id];
+                    const x = chips.scrollLeft;
+                    renderTagPicker();
+                    const fresh = container.querySelectorAll('.tag-pick-chips')[[...cats].indexOf(cat)];
+                    if (fresh && !on) fresh.scrollLeft = 0; else if (fresh) fresh.scrollLeft = x;
+                });
+                chips.appendChild(btn);
             });
-            row.appendChild(btn);
-        });
+        row.appendChild(chips);
         container.appendChild(row);
     });
-    if (folded.length) {
-        const row = document.createElement('div');
-        row.className = 'ui-chips tag-picker-row';
-        folded.forEach(cat => row.appendChild(catToggle(cat, false)));
-        container.appendChild(row);
-    }
 }
 
 // ---- Sub-task editor ----
@@ -4054,6 +4035,9 @@ function renderThemePicker() {
     add.title = 'Create a theme without leaving this task';
     add.addEventListener('click', () => openThemeModal(null, { fromTask: true }));
     container.appendChild(add);
+    // One line, chosen first then the ones used most, so the usual theme is
+    // in view without scrolling
+    layThemeOrder();
 }
 
 function renderPriorityPicker() {
@@ -4138,6 +4122,32 @@ function updateSubThemeSelect() {
     if (modalSubTheme && !withSubs.some(t => (t.subThemes||[]).includes(modalSubTheme))) modalSubTheme = '';
     sel.value = modalSubTheme;
     if (!themes.length) hideNewSubTheme();
+    renderSubThemeChips(withSubs);
+}
+
+// Sub-themes as one row of chips instead of a dropdown: one tap to pick,
+// tap again to clear. Several themes chosen: each chip says whose it is.
+function renderSubThemeChips(withSubs) {
+    const host = document.getElementById('subtheme-chips');
+    host.innerHTML = '';
+    const many = withSubs.length > 1;
+    withSubs.forEach(t => {
+        [...t.subThemes].sort((a, b) => (b === modalSubTheme) - (a === modalSubTheme) || a.localeCompare(b)).forEach(n => {
+            const on = modalSubTheme === n;
+            const btn = tintChip(chipBtn((many ? t.name + ' \u203a ' : '') + n, on), t.color);
+            btn.addEventListener('click', () => {
+                modalSubTheme = on ? '' : n;
+                updateSubThemeSelect();
+            });
+            host.appendChild(btn);
+        });
+    });
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'ui-chip';
+    add.textContent = '+ New';
+    add.addEventListener('click', showNewSubTheme);
+    host.appendChild(add);
 }
 
 // Which theme a brand-new sub-theme should be filed under: unambiguous with

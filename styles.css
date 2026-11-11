@@ -429,3 +429,15 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 @media (max-width: 560px) {
     #task-modal.lay-c { inline-size:100%; }
 }
+
+/* Theme, sub-theme and tags: one block, every row one line (11 Nov 2026) */
+#task-modal .subtheme-row { display:none; }
+.subtheme-chips .ui-chip, .tag-pick-chips .ui-chip, #theme-picker .ui-chip { min-height:30px; padding:0 10px; font-size:var(--text-sm); }
+.tag-picker { display:grid; gap:6px; min-width:0; }
+.tag-pick-row { display:flex; align-items:center; gap:8px; min-width:0; }
+.tag-pick-name { flex:0 0 92px; font-size:var(--text-xs); font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:0.04em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tag-pick-chips { flex:1; min-width:0; }
+#task-modal .field-control, #task-modal .field { min-width:0; }
+#task-modal :is(#theme-picker, .subtheme-chips, .tag-pick-chips).ui-chips.scroll { margin-inline:0; padding-inline:0; gap:6px; }
+#task-modal > .body { grid-template-columns:minmax(0,1fr); }
+#task-modal .tag-pick-name { text-transform:none; letter-spacing:0; font-size:var(--text-sm); flex-basis:84px; }
