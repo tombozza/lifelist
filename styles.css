@@ -246,7 +246,10 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .subtheme-new > select.ui-input { flex:0 1 auto; inline-size:auto; max-width:40%; }
 /* min-width:0 or the date inputs' intrinsic width overflows the 1fr tracks */
 .date-grid { display:grid; grid-template-columns:1fr 1fr; gap: var(--sp-3); }
-.date-grid .ui-input { min-width:0; }
+.date-grid > * { min-width:0; }
+/* iOS draws date boxes at their own width and centres the text; make them fit the column */
+.date-grid input[type="date"] { min-width:0; width:100%; -webkit-appearance:none; appearance:none; text-align:left; }
+.date-grid input[type="date"]::-webkit-date-and-time-value { text-align:left; }
 .prio-urgent  { --accent: var(--p-urgent); }
 .prio-high    { --accent: var(--p-high); }
 .prio-medium  { --accent: var(--p-med); }

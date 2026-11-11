@@ -265,6 +265,12 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
   (`nudgePlanOrder`, `dropIntoPlan`) so hidden tasks keep their places, and adding
   while on Work stamps the first work theme (`todayFocusThemeIds`) so the new task
   doesn't vanish.
+- **"Do on" is the plan day** (11 Nov 2026, Tom: a task set to do on tomorrow wasn't on
+  tomorrow's list). Saving a Do on date makes the task Live with `planDay` = that date (a past
+  date means today); the modal shows a Live task's `planDay` in the box; only a *changed* date
+  moves an existing task; clearing it sends a Live task back to Ready; leaving Live clears a
+  `doDate` that matched the day. Older off-board Do on tasks land on Today on their day
+  (`checkAutoKanban`), not in the backlog. "Do by" still only nudges to the backlog 3 days out.
 - On Today, quick add and the + button plan straight onto today
   (`quickAddPlanTarget`, `modalPlanDay`) instead of going to Review.
 

@@ -3235,7 +3235,11 @@ function updateTask(id, data) {
     Object.assign(task, data);
     // Leaving Live (to the backlog, Blocked, a list, a snooze) takes the
     // task off whichever day it was planned for.
-    if (task.planDay && task.kanbanColumn !== 'live' && task.status !== 'complete') { task.planDay = null; task.carriedFrom = null; }
+    if (task.planDay && task.kanbanColumn !== 'live' && task.status !== 'complete') {
+        // its "Do on" was that day, so it goes too
+        if (task.doDate === task.planDay) task.doDate = '';
+        task.planDay = null; task.carriedFrom = null;
+    }
     task.updatedAt = Date.now();
     saveState();
     render();
@@ -3445,7 +3449,15 @@ function checkAutoKanban() {
         if (t.status !== 'active' || t.kanbanColumn || t.autoKanbaned || isSnoozed(t)) return;
         const doDue = t.doDate && t.doDate <= today;
         const deadlineNear = t.dueDate && addDays(t.dueDate, -3) <= today;
-        if (doDue || deadlineNear) {
+        if (doDue) {
+            // "Do on" means on Today that day (rollover brings a past one to today)
+            t.kanbanColumn = 'live';
+            t.planDay = t.doDate < today ? today : t.doDate;
+            t.planOrder = 0;
+            t.autoKanbaned = true;
+            t.updatedAt = Date.now();
+            changed = true;
+        } else if (deadlineNear) {
             t.kanbanColumn = defaultBacklogCol(taskThemeIds(t));
             t.autoKanbaned = true;
             t.updatedAt = Date.now();
@@ -3497,7 +3509,9 @@ function openTaskModal(taskId, defaultKanbanCol) {
         modalSize = t.size || 'xs';
         document.getElementById('task-due').value = t.dueDate || '';
         document.getElementById('task-countdown').checked = !!t.countdown;
-        document.getElementById('task-do').value = t.doDate || '';
+        // A Live task's day IS its "Do on" (Tom, 11 Nov 2026), so show the day it's on
+        document.getElementById('task-do').value = (t.kanbanColumn === 'live' && t.planDay) || t.doDate || '';
+        document.getElementById('task-do').dataset.orig = document.getElementById('task-do').value;
         document.getElementById('task-notes').value = t.notes || '';
         document.getElementById('task-url').value = t.url || '';
         syncUrlOpen();
@@ -4301,10 +4315,33 @@ function saveTaskModal() {
             ? (existingKanbanCol || modalKanbanCol || defaultBacklogCol(modalThemeIds))
             : (existingKanbanCol || null),
     };
+    // Tom (11 Nov 2026): "I set a task to do on date and set tomorrow… it
+    // isn't on tomorrow's list". "Do on" now plans the task onto that day of
+    // Today (Live, planDay); clearing it on a Live task sends it back to Ready.
+    const doOn = data.doDate;
+    const before = editingTaskId ? state.tasks.find(t => t.id === editingTaskId) : null;
+    // Only a changed date moves an existing task, so editing something that
+    // was sent back to the backlog doesn't drag it onto Today again.
+    const doChanged = !before || doOn !== (document.getElementById('task-do').dataset.orig || '');
+    if (!data.recurring && doChanged && (!before || before.status === 'active')) {
+        if (doOn) {
+            const day = doOn < todayStr() ? todayStr() : doOn;
+            data.kanbanColumn = 'live';
+            if (!before || before.planDay !== day || before.kanbanColumn !== 'live') {
+                data.planDay = day;
+                data.planOrder = nextPlanOrder(planTasks(day).filter(t => t.id !== editingTaskId));
+                data.carriedFrom = null;
+            }
+            data.autoKanbaned = true;
+        } else if (before && before.kanbanColumn === 'live' && before.planDay) {
+            data.planDay = null;
+            data.carriedFrom = null;
+        }
+    }
     if (editingTaskId) {
         // Re-arm auto-kanban if the dates changed
         const existing = state.tasks.find(t=>t.id===editingTaskId);
-        if (existing && (existing.doDate !== data.doDate || existing.dueDate !== data.dueDate)) {
+        if (!doOn && existing && (existing.doDate !== data.doDate || existing.dueDate !== data.dueDate)) {
             data.autoKanbaned = false;
         }
         if (data.recurring && existing && !existing.recurRoot) data.recurRoot = editingTaskId;
@@ -4341,7 +4378,7 @@ function applyStepsToCards(steps) {
 
 // A new task made from Today lands on the day that was showing (if it's Live)
 function withPlanDay(data) {
-    if (!modalPlanDay || data.kanbanColumn !== 'live') return data;
+    if (!modalPlanDay || data.kanbanColumn !== 'live' || data.planDay) return data;
     return { ...data, planDay: modalPlanDay, planOrder: nextPlanOrder(planTasks(modalPlanDay)) };
 }
 
