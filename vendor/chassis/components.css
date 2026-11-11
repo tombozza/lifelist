@@ -152,9 +152,11 @@ select.ui-input {
   font-size: var(--text-xs); font-weight: 600; line-height: 1.5; white-space: nowrap;
 }
 .ui-badge.accent { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); }
-.ui-badge.good { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
-.ui-badge.warn { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
-.ui-badge.bad { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.ui-badge.good { background: color-mix(in srgb, var(--success) 16%, transparent); color: color-mix(in srgb, var(--success) 70%, var(--text)); }
+.ui-badge.warn { background: color-mix(in srgb, var(--warning) 18%, transparent); color: color-mix(in srgb, var(--warning) 70%, var(--text)); }
+.ui-badge.bad { background: color-mix(in srgb, var(--danger) 14%, transparent); color: color-mix(in srgb, var(--danger) 70%, var(--text)); }
+/* good/warn/bad text leans 30% towards --text (11 Nov 2026): the raw green and amber were ~2.7:1 on their tint in
+   Light. Now about 4.5:1 or better in Light and 5:1 or better in Dark. */
 
 /* ── Notes ───────────────────────────────────────────────────────────────────── */
 .ui-note { display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface-2); font-size: var(--text-sm); color: var(--text-2); }
