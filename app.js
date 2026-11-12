@@ -5119,6 +5119,8 @@ function init() {
         if (!pw || pw.length < 4) { alert('Choose a password of at least 4 characters.'); return; }
         try {
             await apiUpdateSettings(true, pw);
+            // Sign this device in with the new password, or the next sync locks it out.
+            await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ password: pw }) });
             document.getElementById('settings-password-input').value = '';
             document.getElementById('password-set-row').style.display = 'none';
             refreshPasswordUI(true);

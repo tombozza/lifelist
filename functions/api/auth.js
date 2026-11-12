@@ -16,7 +16,7 @@ export async function onRequestPost({ request, env }) {
   if (!body.password || (await sha256Hex(body.password)) !== row.password_hash) {
     return json({ error: { message: 'Incorrect password.' } }, 401);
   }
-  const token = await sessionToken(env);
+  const token = await sessionToken(env, row.password_hash);
   return json({ ok: true }, 200, {
     'Set-Cookie': `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`,
   });

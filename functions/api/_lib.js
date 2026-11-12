@@ -13,13 +13,14 @@ export async function sha256Hex(text) {
   return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
 }
 
-// Stateless session token = HMAC(AUTH_SECRET, "authenticated"). Single-user site.
-export async function sessionToken(env) {
+// Stateless session token = HMAC(AUTH_SECRET, "authenticated:" + password hash). Single-user site.
+// Tied to the hash so a new password (or turning the lock off and on) signs every other device out.
+export async function sessionToken(env, passwordHash) {
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(env.AUTH_SECRET || 'dev-insecure-secret'),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('authenticated'));
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`authenticated:${passwordHash}`));
   return hex(sig);
 }
 
@@ -34,8 +35,8 @@ export const SESSION_COOKIE = 'lk_session';
 // Returns true when the site is either open, or password-gated and the caller holds a valid cookie.
 export async function isAuthorized(context) {
   const { request, env } = context;
-  const row = await env.DB.prepare('SELECT password_enabled FROM settings WHERE id = 1').first();
+  const row = await env.DB.prepare('SELECT password_enabled, password_hash FROM settings WHERE id = 1').first();
   if (!row || !row.password_enabled) return true;
   const token = getCookie(request, SESSION_COOKIE);
-  return !!token && token === (await sessionToken(env));
+  return !!token && token === (await sessionToken(env, row.password_hash));
 }
