@@ -106,6 +106,7 @@ let selectedIds = new Set();
 let editingTaskId = null;
 let editingThemeId = null;
 let ctxTaskId = null;
+let ctxInvoker = null;   // the ⋯ button the menu is open under
 let draggedId = null;
 let snoozedExpanded = new Set();
 let snoozeTargetIds = null;
@@ -339,31 +340,89 @@ function undoLast() {
 }
 
 // A small message at the bottom of the screen, optionally with an Undo
-// button — the phone's way to undo, where there's no Ctrl-Z.
+// button — the phone's way to undo, where there's no Ctrl-Z. The shared
+// .ui-toast (vendor/chassis/components.css): "Deleted <button>Undo</button>",
+// .bad (role=alert) for something that failed. An open sheet sits in the top
+// layer and would cover a plain toast, so then the toast goes INSIDE the sheet
+// as a manual popover (the components.css note), where Undo can still be tapped.
 let toastTimer = null;
 function showToast(msg, opts) {
-    // The shared .ui-toast (vendor/chassis/components.css): add it, remove it after a while.
+    opts = opts || {};
     const old = document.getElementById('toast');
     if (old) old.remove();
     const el = document.createElement('div');
     el.id = 'toast';
-    el.className = 'ui-toast toast';
-    el.setAttribute('role', 'status');
-    const text = document.createElement('span');
-    text.className = 'toast-text';
-    text.textContent = msg;
-    el.appendChild(text);
-    if (opts && opts.undo) {
+    el.className = 'ui-toast' + (opts.bad ? ' bad' : '');
+    el.setAttribute('role', opts.bad ? 'alert' : 'status');
+    el.appendChild(document.createTextNode(msg));
+    if (opts.undo) {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'ui-btn small';
         b.textContent = 'Undo';
         b.addEventListener('click', () => { el.remove(); undoLast(); });
         el.appendChild(b);
     }
-    document.body.appendChild(el);
+    const sheets = [...document.querySelectorAll('dialog[open]')];
+    const sheet = sheets[sheets.length - 1];
+    if (sheet && el.showPopover) {
+        el.popover = 'manual';
+        sheet.appendChild(el);
+        el.showPopover();
+    } else {
+        document.body.appendChild(el);
+    }
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.remove(), opts && opts.undo ? 6000 : 2500);
+    toastTimer = setTimeout(() => el.remove(), opts.undo ? 6000 : 2500);
+}
+
+// The colour picker in the theme and tag-category sheets: the shared
+// .ui-swatches (a radiogroup of round buttons, colour in --c). <prefix>-color is
+// a hidden input holding the value, so the save code just reads it. The last
+// swatch is "Custom": a native colour input laid over it, so any colour can
+// still be picked, and a colour that isn't in the palette (an older theme's)
+// shows there, chosen. A tap updates aria-checked in place, so nothing moves.
+const SWATCH_COLORS = [
+    ['Blue', '#007AFF'], ['Indigo', '#5856D6'], ['Purple', '#AF52DE'], ['Pink', '#FF2D55'],
+    ['Red', '#FF3B30'], ['Orange', '#FF9500'], ['Yellow', '#FFCC00'], ['Green', '#34C759'],
+    ['Mint', '#00C7BE'], ['Teal', '#30B0C7'], ['Cyan', '#32ADE6'], ['Brown', '#A2845E'], ['Grey', '#8E8E93'],
+];
+const SWATCH_RAINBOW = 'conic-gradient(#ff3b30, #ffcc00, #34c759, #32ade6, #5856d6, #ff2d55, #ff3b30)';
+function setSwatchColor(prefix, color) {
+    document.getElementById(prefix + '-color').value = color;
+    const group = document.getElementById(prefix + '-swatches');
+    if (!group.childElementCount) {
+        SWATCH_COLORS.forEach(([name, hex]) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.setAttribute('role', 'radio');
+            b.setAttribute('aria-label', name);
+            b.dataset.color = hex;
+            b.style.setProperty('--c', hex);
+            b.addEventListener('click', () => setSwatchColor(prefix, hex));
+            group.appendChild(b);
+        });
+        const custom = document.createElement('label');
+        custom.className = 'swatch-custom';
+        custom.setAttribute('role', 'radio');
+        custom.title = 'Custom colour';
+        const input = document.createElement('input');
+        input.type = 'color';
+        input.setAttribute('aria-label', 'Custom colour');
+        ['input', 'change'].forEach(ev => input.addEventListener(ev, () => setSwatchColor(prefix, input.value)));
+        custom.appendChild(input);
+        group.appendChild(custom);
+    }
+    const want = String(color || '').toLowerCase();
+    let matched = false;
+    group.querySelectorAll('[data-color]').forEach(b => {
+        const on = b.dataset.color.toLowerCase() === want;
+        if (on) matched = true;
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    const custom = group.querySelector('.swatch-custom');
+    custom.setAttribute('aria-checked', matched ? 'false' : 'true');
+    custom.style.setProperty('--c', matched ? SWATCH_RAINBOW : color);
+    if (/^#[0-9a-f]{6}$/i.test(color)) custom.querySelector('input').value = color;
 }
 
 // Pop-ups are <dialog class="ui-sheet"> (vendor/chassis/components.css), opened with showModal().
@@ -959,7 +1018,7 @@ function syncQuickAddVisibility() {
     document.getElementById('quick-add').style.display = currentView === 'admin' ? 'none' : '';
     // + adds a task, which means nothing on Admin, and there it sat on top of
     // the tag boxes' Add buttons
-    document.getElementById('fab').style.display = currentView === 'admin' ? 'none' : '';
+    document.getElementById('fab').hidden = currentView === 'admin';
     // On Today it lines up with the centred list beneath it
     document.getElementById('quick-add').classList.toggle('quick-add-narrow', currentView === 'today');
     const target = quickAddPlanTarget();
@@ -976,6 +1035,9 @@ function quickAddPlanTarget() {
 }
 
 function render() {
+    // A redraw replaces the ⋯ buttons; a menu left hanging from a removed one
+    // would lose its place, so close it
+    if (ctxInvoker && !ctxInvoker.isConnected) hideContextMenu();
     if (currentView === 'lists') renderLists();
     else if (currentView === 'today') renderToday();
     else if (currentView === 'board') renderBoard();
@@ -1621,9 +1683,9 @@ function renderNoteBuilder() {
     };
     const pill = (g, v, label, color) => {
         const st = stateOf(g, v);
-        // Three states on one shared chip: pressed = show, .nf-exc = leave out (no shared look for it yet)
+        // Three states on one shared chip: pressed = show, .out = leave out
         const b = tintChip(chipBtn((st === 'exc' ? '\u2212 ' : '') + label, st === 'inc'), color);
-        if (st === 'exc') b.classList.add('nf-exc');
+        if (st === 'exc') b.classList.add('out');
         b.title = st === 'inc' ? 'Showing — tap to leave out' : st === 'exc' ? 'Left out — tap to clear' : 'Tap to show';
         b.addEventListener('click', () => cycle(g, v));
         return b;
@@ -1968,7 +2030,7 @@ function createListItem(task, opts = {}) {
         menu.className = 'ui-btn quiet icon small list-item-menu';
         menu.setAttribute('aria-label', 'More');
         menu.innerHTML = '⋯';
-        menu.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
+        menuButtonFor(menu, task.id);
         right.appendChild(menu);
     }
 
@@ -2146,7 +2208,7 @@ function createBoardCard(task) {
     card.addEventListener('dragend', () => card.classList.remove('dragging'));
     card.addEventListener('click', () => openTaskModal(task.id));
     // Right-click opens the same menu as ⋯ (which only shows on hover)
-    card.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, task.id); });
+    card.addEventListener('contextmenu', e => { e.preventDefault(); card.querySelector('.board-card-menu').click(); });
 
     // Priority is the card's left edge, the same as a list row — a bar across
     // the top sat right where the eye starts reading the title
@@ -2168,10 +2230,11 @@ function createBoardCard(task) {
 
     // The corner is the ⋯ menu's alone (on hover with a mouse, always on touch)
     const menuBtn = document.createElement('button');
+    menuBtn.type = 'button';
     menuBtn.className = 'board-card-menu';
     menuBtn.innerHTML = '⋯';
     menuBtn.setAttribute('aria-label', 'Card options');
-    menuBtn.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, task.id); });
+    menuButtonFor(menuBtn, task.id);
     head.appendChild(menuBtn);
     card.appendChild(head);
 
@@ -2795,7 +2858,7 @@ function renderAdminTags(container) {
 
     cats.forEach(cat => {
         const box = document.createElement('div');
-        box.className = 'ui-card flat ui-stack tag-cat-box' + (cat.recovered ? ' tag-cat-recovered' : '');
+        box.className = 'ui-card flat ui-stack tag-cat-box' + (cat.recovered ? ' warn' : '');
 
         const head = document.createElement('div');
         head.className = 'ui-head tag-cat-head';
@@ -2821,14 +2884,14 @@ function renderAdminTags(container) {
         const tagWrap = document.createElement('div');
         tagWrap.className = 'ui-chips';
         [...(cat.tags || [])].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
-            // No shared removable chip yet: a tinted badge with a small × inside
-            const chip = tintChip(document.createElement('span'), cat.color);
-            chip.className = 'ui-badge accent tag-admin-chip' + (tag.recovered ? ' tag-admin-recovered' : '');
+            // The shared removable chip: <span class="ui-chip small">Name <button class="x">×</button></span>
+            const chip = document.createElement('span');
+            chip.className = 'ui-chip small' + (tag.recovered ? ' tag-admin-recovered' : '');
             chip.textContent = tag.name;
             const del = document.createElement('button');
             del.type = 'button';
-            del.className = 'tag-admin-del';
-            del.setAttribute('aria-label', 'Delete ' + tag.name);
+            del.className = 'x';
+            del.setAttribute('aria-label', 'Remove ' + tag.name);
             del.innerHTML = '&times;';
             del.title = 'Delete "' + tag.name + '"';
             del.addEventListener('click', () => deleteTag(cat.id, tag.id));
@@ -3031,8 +3094,7 @@ function openTagCatModal(catId) {
     document.getElementById('tagcat-delete').style.display = cat ? '' : 'none';
     document.getElementById('tagcat-name').value = cat ? cat.name : '';
     const color = cat ? cat.color : '#5856D6';
-    document.getElementById('tagcat-color').value = color;
-    document.getElementById('tagcat-color-hex').textContent = color;
+    setSwatchColor('tagcat', color);
     document.getElementById('tagcat-tags').value = cat ? (cat.tags || []).map(t => t.name).join('\n') : '';
     openSheet('tagcat-modal');
     setTimeout(() => document.getElementById('tagcat-name').focus(), 50);
@@ -4534,16 +4596,14 @@ function openThemeModal(themeId, opts) {
     if (themeId) {
         const theme = getTheme(themeId);
         document.getElementById('theme-edit-name').value = theme.name;
-        document.getElementById('theme-edit-color').value = theme.color;
-        document.getElementById('theme-edit-color-hex').textContent = theme.color;
+        setSwatchColor('theme-edit', theme.color);
         document.getElementById('theme-edit-subthemes').value = (theme.subThemes||[]).join('\n');
         document.getElementById('theme-edit-hidden').checked = !!theme.hidden;
         document.getElementById('theme-edit-hide-weekend').checked = !!theme.hideWeekend;
         modalThemeFocus = themeFocus(theme);
     } else {
         document.getElementById('theme-edit-name').value = '';
-        document.getElementById('theme-edit-color').value = '#007AFF';
-        document.getElementById('theme-edit-color-hex').textContent = '#007AFF';
+        setSwatchColor('theme-edit', '#007AFF');
         document.getElementById('theme-edit-subthemes').value = '';
         document.getElementById('theme-edit-hidden').checked = false;
         document.getElementById('theme-edit-hide-weekend').checked = false;
@@ -4609,45 +4669,49 @@ function deleteTheme() {
 
 // ============ CONTEXT MENU ============
 
-function openContextMenu(e, taskId) {
+// The ⋯ menu is the shared .ui-menu popover (#context-menu, one for every
+// task). Each ⋯ button is its popovertarget, so the browser opens it under that
+// button, closes it on an outside tap or Escape, and never scrolls the page.
+// The click listener runs before the browser toggles it: it picks the task and
+// the rows, and closes the menu if it is open under another task's ⋯ so this
+// tap reopens it here instead of just shutting it.
+function menuButtonFor(btn, taskId) {
+    btn.setAttribute('popovertarget', 'context-menu');
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const menu = document.getElementById('context-menu');
+        if (menu.matches(':popover-open') && ctxInvoker !== btn) menu.hidePopover();
+        prepareContextMenu(btn, taskId);
+    });
+}
+
+function prepareContextMenu(btn, taskId) {
     ctxTaskId = taskId;
+    ctxInvoker = btn;
     const task = state.tasks.find(t => t.id === taskId);
     const menu = document.getElementById('context-menu');
-    const toKanban = menu.querySelector('[data-action="to-kanban"]');
-    const moveTo = menu.querySelector('[data-action="move-to"]');
-    const fromKanban = menu.querySelector('[data-action="from-kanban"]');
-    const toList = menu.querySelector('[data-action="to-list"]');
+    const show = (action, on) => { menu.querySelector(`[data-action="${action}"]`).hidden = !on; };
     const offBoard = !task.kanbanColumn && task.offKanban;
-    if (task.kanbanColumn) {
-        toKanban.style.display = 'none';
-        moveTo.style.display = '';
-        fromKanban.style.display = '';
-        toList.style.display = 'none';
-    } else {
-        toKanban.style.display = '';
-        moveTo.style.display = 'none';
-        fromKanban.style.display = 'none';
-        toList.style.display = offBoard ? '' : 'none';
-    }
+    show('to-kanban', !task.kanbanColumn);
+    show('move-to', !!task.kanbanColumn);
+    show('from-kanban', !!task.kanbanColumn);
+    show('to-list', !task.kanbanColumn && offBoard);
     const parked = inNotes(task);
-    menu.querySelector('[data-action="to-notes"]').style.display = parked ? 'none' : '';
-    menu.querySelector('[data-action="from-notes"]').style.display = parked ? '' : 'none';
-    menu.querySelector('[data-action="snooze"]').style.display = isSnoozed(task) ? 'none' : '';
-    menu.querySelector('[data-action="unsnooze"]').style.display = isSnoozed(task) ? '' : 'none';
-    menu.querySelector('[data-action="plan-today"]').style.display =
-        (task.status === 'active' && !(task.kanbanColumn === 'live' && task.planDay === todayStr())) ? '' : 'none';
-    menu.querySelector('[data-action="spotlight"]').style.display = task.spotlight ? 'none' : '';
-    menu.querySelector('[data-action="unspotlight"]').style.display = task.spotlight ? '' : 'none';
-    menu.style.display = 'block';
-    let top = e.clientY + 4, left = e.clientX;
-    if (left + 190 > window.innerWidth) left = window.innerWidth - 195;
-    if (top + 200 > window.innerHeight) top = e.clientY - 204;
-    menu.style.top = top + 'px'; menu.style.left = left + 'px';
+    show('to-notes', !parked);
+    show('from-notes', parked);
+    show('snooze', !isSnoozed(task));
+    show('unsnooze', isSnoozed(task));
+    show('plan-today', task.status === 'active' && !(task.kanbanColumn === 'live' && task.planDay === todayStr()));
+    show('spotlight', !task.spotlight);
+    show('unspotlight', !!task.spotlight);
 }
 
 function hideContextMenu() {
-    document.getElementById('context-menu').style.display = 'none';
+    const menu = document.getElementById('context-menu');
+    if (menu.matches(':popover-open')) menu.hidePopover();
     ctxTaskId = null;
+    ctxInvoker = null;
 }
 
 function snoozeTask(id, until) {
@@ -4931,9 +4995,6 @@ function init() {
     document.getElementById('theme-edit-close').addEventListener('click', closeThemeModal);
     document.getElementById('theme-edit-delete').addEventListener('click', deleteTheme);
     document.getElementById('theme-edit-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeThemeModal(); });
-    document.getElementById('theme-edit-color').addEventListener('input', e => {
-        document.getElementById('theme-edit-color-hex').textContent = e.target.value;
-    });
 
     // Tag category modal
     document.getElementById('tagcat-save').addEventListener('click', saveTagCatModal);
@@ -4941,32 +5002,29 @@ function init() {
     document.getElementById('tagcat-close').addEventListener('click', closeTagCatModal);
     document.getElementById('tagcat-delete').addEventListener('click', deleteTagCategory);
     document.getElementById('tagcat-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeTagCatModal(); });
-    document.getElementById('tagcat-color').addEventListener('input', e => {
-        document.getElementById('tagcat-color-hex').textContent = e.target.value;
-    });
 
     // Context menu
     document.getElementById('context-menu').addEventListener('click', e => {
-        const action = e.target.dataset.action;
-        if (!action || !ctxTaskId) return;
-        if (action === 'edit') openTaskModal(ctxTaskId);
-        else if (action === 'to-kanban') moveToKanban(ctxTaskId);
-        else if (action === 'plan-today') planFor(ctxTaskId, todayStr());
-        else if (action === 'move-to') { openMoveToModal(ctxTaskId); }
-        else if (action === 'snooze') { openSnoozeModal(ctxTaskId); }
-        else if (action === 'unsnooze') updateTask(ctxTaskId, { snoozedUntil: '' });
-        else if (action === 'spotlight' || action === 'unspotlight') toggleSpotlight(ctxTaskId);
-        else if (action === 'from-kanban') backToList(ctxTaskId);
-        else if (action === 'to-list') moveToThemedList(ctxTaskId);
-        else if (action === 'to-notes') moveToNotes(ctxTaskId);
-        else if (action === 'from-notes') moveOutOfNotes(ctxTaskId);
-        else if (action === 'complete') completeTask(ctxTaskId);
-        else if (action === 'wont-do') markWontDo(ctxTaskId);
-        else if (action === 'delete') { if(confirm('Delete this task?')) deleteTask(ctxTaskId); }
+        const item = e.target.closest('[data-action]');
+        const id = ctxTaskId;
+        if (!item || !id) return;
+        const action = item.dataset.action;
+        // Close first, so a sheet the action opens isn't fighting the popover
         hideContextMenu();
-    });
-    document.addEventListener('click', e => {
-        if (!e.target.closest('.context-menu') && !e.target.closest('.list-item-menu') && !e.target.closest('.board-card-menu')) hideContextMenu();
+        if (action === 'edit') openTaskModal(id);
+        else if (action === 'to-kanban') moveToKanban(id);
+        else if (action === 'plan-today') planFor(id, todayStr());
+        else if (action === 'move-to') { openMoveToModal(id); }
+        else if (action === 'snooze') { openSnoozeModal(id); }
+        else if (action === 'unsnooze') updateTask(id, { snoozedUntil: '' });
+        else if (action === 'spotlight' || action === 'unspotlight') toggleSpotlight(id);
+        else if (action === 'from-kanban') backToList(id);
+        else if (action === 'to-list') moveToThemedList(id);
+        else if (action === 'to-notes') moveToNotes(id);
+        else if (action === 'from-notes') moveOutOfNotes(id);
+        else if (action === 'complete') completeTask(id);
+        else if (action === 'wont-do') markWontDo(id);
+        else if (action === 'delete') { if(confirm('Delete this task?')) deleteTask(id); }
     });
 
     // Filters
@@ -5516,7 +5574,7 @@ async function syncNow() {
         if (pulled) await pushToCloud();
     } finally { syncStatus.busy = false; }
     const st = syncState();
-    showToast(st.tip);
+    showToast(st.tip, { bad: st.kind === 'bad' });
 }
 
 async function pullFromCloud() {

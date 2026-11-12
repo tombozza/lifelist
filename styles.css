@@ -43,17 +43,6 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .view { display:none; }
 .view.active { display:block; }
 
-/* ---- FAB (no shared floating button yet) ---- */
-#fab {
-    position:fixed; bottom:28px; right:28px; width:56px; height:56px;
-    border-radius: var(--r-full); background: var(--accent); color: var(--text-on-accent); border:none;
-    display:flex; align-items:center; justify-content:center;
-    cursor:pointer; box-shadow: var(--shadow-lg);
-    z-index:90; transition: transform 0.15s;
-}
-#fab:hover { transform:scale(1.05); }
-#fab:active { transform:scale(0.96); }
-
 /* ---- Quick add ---- */
 .quick-add { display:flex; align-items:center; gap: var(--sp-2); margin-bottom: var(--sp-4); }
 .quick-add > .ui-input, .quick-add > .clearx-wrap { flex:1; min-width:0; }
@@ -87,9 +76,6 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 
 /* ---- Lists: task rows in a shared list on a card ---- */
 .list-box { margin-bottom: var(--sp-3); }
-/* A grid item won't shrink below its content, so a long nowrap title widened the
-   whole list past the screen; let rows shrink (worth adding to .ui-list itself) */
-.list-box > .ui-list > * { min-width:0; }
 .list-group-label { display:block; padding: var(--sp-3) var(--sp-1) var(--sp-2); }
 .list-item { cursor:pointer; }
 .list-item.priority-urgent  { box-shadow: inset 3px 0 0 var(--p-urgent); }
@@ -195,32 +181,13 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
     width:var(--drag-width, 260px);
 }
 
-/* ---- Context menu (no shared pop-over menu yet) ---- */
-.context-menu {
-    position:fixed; background: var(--surface); border:1px solid var(--border-strong); border-radius: var(--r-md);
-    box-shadow: var(--shadow-lg); padding: var(--sp-1); min-width:190px; z-index:500;
-}
-.context-menu button {
-    display:block; width:100%; min-height:36px; padding: var(--sp-2) var(--sp-3); border:none; background:none;
-    text-align:left; font: inherit; font-size: var(--text-sm); color: var(--text); border-radius: var(--r-sm); cursor:pointer;
-}
-.context-menu button:hover { background: var(--surface-2); }
-.context-menu .ctx-danger { color: var(--danger); }
-.ctx-divider { height:1px; background: var(--border); margin:3px 0; }
-
 /* ---- Admin ---- */
 .admin-tabs { max-inline-size:480px; margin-bottom: var(--sp-5); }
 .theme-swatch { width:24px; height:24px; border-radius: var(--r-full); flex-shrink:0; }
 .tag-cat-swatch { width:18px; height:18px; }
 .theme-row-hidden { opacity:0.55; }
-.theme-row-recovered, .tag-cat-recovered { border:1px dashed var(--warning); }
-.tag-admin-chip { padding-right:4px; }
+.theme-row-recovered { border:1px dashed var(--warning); }
 .tag-admin-recovered { font-style:italic; }
-.tag-admin-del {
-    border:none; background:none; color:inherit; opacity:0.55; cursor:pointer;
-    font: inherit; font-size:14px; line-height:1; padding:0 4px; min-width:20px; min-height:20px;
-}
-.tag-admin-del:hover { opacity:1; }
 .tag-cat-add, .note-add, .note-save, .tag-fix-actions { display:flex; gap: var(--sp-2); align-items:center; flex-wrap:wrap; }
 .tag-cat-add > .ui-input, .tag-cat-add > .clearx-wrap,
 .note-add > .ui-input, .note-add > .clearx-wrap,
@@ -276,8 +243,6 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .tag-picker-row { align-items:center; }
 
 /* ---- Theme and tag-category sheets ---- */
-.color-pick-row { display:flex; align-items:center; gap: var(--sp-3); font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-2); }
-.color-input { width:48px; height: var(--tap); padding:2px; border:1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface); cursor:pointer; }
 .setting { gap: var(--sp-1); }
 .settings-admin { display:grid; grid-template-columns:repeat(4, 1fr); gap: var(--sp-2); }
 
@@ -289,8 +254,6 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .note-add, .note-save { margin-bottom: var(--sp-3); }
 .note-del { margin-left:auto; }
 .note-builder { display:grid; gap: var(--sp-3); margin-bottom: var(--sp-3); }
-/* Left out of a saved note: the third state of a filter chip (no shared look for it yet) */
-.ui-chip.nf-exc { color: var(--danger); border-color: var(--danger); text-decoration:line-through; }
 
 /* ---- Today ---- */
 /* The top tier: a calm list for today and nothing else. Ready sits behind
@@ -318,8 +281,10 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .todo-meta { display:flex; flex-wrap:wrap; gap: var(--sp-1); margin-top: var(--sp-1); }
 .todo-side { display:flex; gap: var(--sp-1); flex-shrink:0; }
 .todo-actions { padding: 0 var(--sp-4) var(--sp-3) 46px; }
-.todo-pick { position:relative; overflow:hidden; }
-.todo-pick input {
+/* A native date or colour input laid invisibly over its button, so a tap opens the
+   browser's own picker (Today's "Pick a day", the Custom colour swatch) */
+.todo-pick, .swatch-custom { position:relative; overflow:hidden; }
+:is(.todo-pick, .swatch-custom) input {
     position:absolute; inset:0; width:100%; height:100%; opacity:0;
     border:none; padding:0; margin:0; cursor:pointer;
 }
@@ -327,14 +292,9 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 /* Quiet on purpose: Ready is there when wanted, not competing with today */
 .today-pull { display:flex; margin: var(--sp-5) auto 0; }
 
-/* ---- Toast: the shared one, with room for its Undo ---- */
-.toast { display:flex; align-items:center; gap: var(--sp-3); }
-.toast-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
 /* ---- Phones ---- */
 @media (max-width: 768px) {
     main { padding: var(--sp-3) var(--sp-4) 88px; }
-    #fab { bottom:20px; right:16px; width:52px; height:52px; }
     .lists-toolbar { flex-direction:column; align-items:stretch; }
     /* Filters collapse behind a button; only search + Filters button show */
     .lists-toolbar-left { flex-wrap:nowrap; }

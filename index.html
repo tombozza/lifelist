@@ -161,8 +161,8 @@
 
 </main>
 
-<!-- FAB -->
-<button id="fab" title="Add task">
+<!-- The shared floating button (.ui-fab) -->
+<button id="fab" class="ui-fab" title="Add task" aria-label="Add task">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
 
@@ -397,10 +397,9 @@
         </label>
         <div class="ui-field">
             <span>Colour</span>
-            <div class="color-pick-row">
-                <input type="color" id="theme-edit-color" value="#007AFF" class="color-input" aria-label="Colour">
-                <span id="theme-edit-color-hex">#007AFF</span>
-            </div>
+            <!-- The shared colour picker; app.js fills it (renderSwatches). The hidden input holds the value. -->
+            <div class="ui-swatches" role="radiogroup" aria-label="Colour" id="theme-edit-swatches"></div>
+            <input type="hidden" id="theme-edit-color" value="#007AFF">
         </div>
         <div class="ui-field">
             <span>Focus</span>
@@ -444,10 +443,9 @@
         </label>
         <div class="ui-field">
             <span>Colour</span>
-            <div class="color-pick-row">
-                <input type="color" id="tagcat-color" value="#5856D6" class="color-input" aria-label="Colour">
-                <span id="tagcat-color-hex">#5856D6</span>
-            </div>
+            <!-- The shared colour picker; app.js fills it (renderSwatches). The hidden input holds the value. -->
+            <div class="ui-swatches" role="radiogroup" aria-label="Colour" id="tagcat-swatches"></div>
+            <input type="hidden" id="tagcat-color" value="#5856D6">
         </div>
         <label class="ui-field">
             <span>Tags (one per line)</span>
@@ -464,25 +462,27 @@
 </dialog>
 
 <!-- ============ CONTEXT MENU ============ -->
-<!-- No shared pop-over menu yet; this one is app-made, from the shared tokens. -->
-<div id="context-menu" class="context-menu" style="display:none;">
-    <button data-action="edit">Edit</button>
-    <button data-action="spotlight" class="ctx-spotlight">★ Spotlight</button>
-    <button data-action="unspotlight" class="ctx-spotlight" style="display:none;">★ Remove spotlight</button>
-    <button data-action="plan-today">Do today</button>
-    <button data-action="to-kanban">Add to Kanban</button>
-    <button data-action="move-to" style="display:none;">Move to…</button>
-    <button data-action="from-kanban" style="display:none;">Take off board</button>
-    <button data-action="to-list" style="display:none;">Move to themed list</button>
-    <button data-action="to-notes">Move to Notes</button>
-    <button data-action="from-notes" style="display:none;">Move back to list</button>
-    <button data-action="snooze">Snooze…</button>
-    <button data-action="unsnooze" style="display:none;">Unsnooze</button>
-    <div class="ctx-divider"></div>
-    <button data-action="complete">Mark complete</button>
-    <button data-action="wont-do">Won't do</button>
-    <div class="ctx-divider"></div>
-    <button data-action="delete" class="ctx-danger">Delete</button>
+<!-- The shared pop-over menu (.ui-menu). Every ⋯ button points at it with
+     popovertarget="context-menu", so it opens under that button; app.js
+     (prepareContextMenu) picks the task and the rows before it opens. -->
+<div id="context-menu" class="ui-menu" popover>
+    <button type="button" data-action="edit">Edit</button>
+    <button type="button" data-action="spotlight" class="ctx-spotlight">★ Spotlight</button>
+    <button type="button" data-action="unspotlight" class="ctx-spotlight" hidden>★ Remove spotlight</button>
+    <button type="button" data-action="plan-today">Do today</button>
+    <button type="button" data-action="to-kanban">Add to Kanban</button>
+    <button type="button" data-action="move-to" hidden>Move to…</button>
+    <button type="button" data-action="from-kanban" hidden>Take off board</button>
+    <button type="button" data-action="to-list" hidden>Move to themed list</button>
+    <button type="button" data-action="to-notes">Move to Notes</button>
+    <button type="button" data-action="from-notes" hidden>Move back to list</button>
+    <button type="button" data-action="snooze">Snooze…</button>
+    <button type="button" data-action="unsnooze" hidden>Unsnooze</button>
+    <hr>
+    <button type="button" data-action="complete">Mark complete</button>
+    <button type="button" data-action="wont-do">Won't do</button>
+    <hr>
+    <button type="button" data-action="delete" class="danger">Delete</button>
 </div>
 
 <!-- ============ SETTINGS MODAL ============ -->
