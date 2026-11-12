@@ -22,6 +22,8 @@ functions/
   api/sync/[code].js  the state sync endpoint
 migrations/d1/0001_init.sql
 scripts/            seed-d1.mjs, seed-data.json
+ai/                 AI Updates: schema.js (contract), guide.md (for ChatGPT), logic.js (pure), updates.js (Settings sheet)
+tests/              node --test tests/*.test.mjs (AI Updates logic)
 deploy.sh           ← use this, not a bare wrangler command
 ```
 

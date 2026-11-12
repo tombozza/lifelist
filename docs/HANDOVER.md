@@ -38,7 +38,7 @@ locally, use Settings › Data › Download JSON backup on the live site, then I
 
 Direct-upload Pages project, so a git push publishes nothing. `deploy.sh` pins Tom's
 Cloudflare account, copies only `index.html app.js styles.css sw.js manifest.json icons/
-vendor/ functions/` into a temp folder and deploys that. Not deployed: `CLAUDE.md`, `docs/`,
+vendor/ functions/` plus `ai/*.js` into a temp folder and deploys that. Not deployed: `CLAUDE.md`, `docs/`,
 `.claude/`, `scripts/`, `migrations/`, `.backups/`. A new top-level asset must be added to the
 `cp` lines or it won't ship. Bump `CACHE_NAME` in `sw.js` on every asset change (v68 at the
 time of writing). Schema changes: add a file to `migrations/d1/`, then
@@ -46,6 +46,7 @@ time of writing). Schema changes: add a file to `migrations/d1/`, then
 
 ## How it's built
 
+- **AI Updates:** `ai/` holds the ChatGPT contract (`schema.js`, `guide.md`), the pure logic (`logic.js`: names → records, actions → app calls, the context) and the Settings sheet glue (`updates.js`, a module loaded after `app.js`). Tests: `node --test tests/*.test.mjs` (no package.json needed).
 - **Client:** plain JS. `app.js` (~5,000 lines, all logic), `index.html`, `styles.css`,
   `sw.js` (network-first service worker), `vendor/` (shared chassis CSS from `_shared`, plus
   `fuzzy.js` search and `clearx.js` clear buttons). It is registered in `_shared/apps.json`, so
@@ -61,8 +62,8 @@ time of writing). Schema changes: add a file to `migrations/d1/`, then
 - **API (Pages Functions):** `functions/_middleware.js` (password gate on `/api/*`),
   `api/auth.js`, `api/settings.js`, `api/sync/[code].js` (GET/PUT the blob). Auth is the shared
   gate copied from golf-tracker, see `../../CLAUDE.md`, "The shared password gate".
-- **External services:** Cloudflare only (Pages + D1, account in `../../CLAUDE.md`). No AI, no
-  third-party APIs, no CDN scripts.
+- **External services:** Cloudflare only (Pages + D1, account in `../../CLAUDE.md`). No AI calls
+  (AI Updates is copy and paste with ChatGPT), no third-party APIs, no CDN scripts.
 
 ## Config and secrets
 
@@ -94,6 +95,7 @@ the sync code can read and write the blob.
 
 Newest first. Most have a longer explanation in `CLAUDE.md`.
 
+- 12 Nov 2026: **AI Updates** (Settings › AI Updates, `sites/ai-updates`): paste a ChatGPT block, preview, tick, Apply; "Copy for ChatGPT" gives today's date, themes with sub-themes, tag categories with tags and up to 300 open tasks. v1 actions `add_task` (incl. repeats, via `scheduleOccurrence` like the task window), `update_task`, `complete_task` (done or won't do), `move_task`, `snooze_task`. Everything applies through the app's own functions, exposed at the end of `app.js` as `window.lifeListApp`; nothing creates themes, tags, categories or saved notes, and nothing deletes. Contract, guide and logic in `ai/` (`schema.js`, `guide.md`, `logic.js`, `updates.js`); tests `node --test tests/*.test.mjs`. `deploy.sh` now copies `ai/*.js`; `vendor/magic/` and `vendor/ai-protocol/` are shared copies (`node _shared/sync.mjs`). Service worker life-kanban-v82. Not committed or deployed.
 - 12 Nov 2026: moved the last stand-ins onto shared pieces (deployed 12 Nov, checked live): the ⋯ menu is one shared `.ui-menu` popover every ⋯ points at (opens under the button that opened it; right-click a card opens it from the card's ⋯); the Undo toast is a `.ui-toast` with a button (6s), sync errors use `.ui-toast.bad`; Settings › Tags chips are `span.ui-chip.small` with ×; the Notes filter's leave-out state is the shared `.out`; theme and tag-category colours are `.ui-swatches` (13 colours plus a Custom swatch over a native picker); the + is `.ui-fab`; own list min-width workaround deleted. Kept app-made on purpose: the tiny board-card ⋯ (no shared compact corner button), category-tinted tag badges on cards, and the test task-window chip sizes. There is no done/in-plan card, so nothing became `.ui-card.highlight`. Shared fix: a toast now sits above a `.ui-fab`. Checked 375px light and dark on every tab. Service worker life-kanban-v81.
 - 2026-11-12: deployed the shared components update (missing pieces + four CSS fixes); cache bumped (life-kanban-v80; checked from outside only); live checked.
 - 2026-11-11: Sync blob fix (deployed 11 Nov, v79; not committed). The synced blob was 1.28 MB, the archive 2,676 copies of 240 tasks, growing ~100 KB a week toward D1's ~2 MB row limit: archiving removed a task locally with no tombstone, so the next pull put it back and the next week re-archived it. Now archiving writes an archive tombstone into `deletedIds` (`{id, ts, archived:true}`, which older cached code already obeys; new code lets a later edit beat it), `compactArchive()` keeps one entry per task (earliest week, newest copy) on load and every merge, and `autoArchive()` runs after every merge and on the minute tick, archiving whatever was completed before this week under its completion week (was: Mondays only, everything into the current week). Tombstones kept 2 years (was 60 days). Top-bar sync dot (green / amber / red; words on wider screens; tap to sync now) and a size warning over 1.5 MB; Settings › Archive shows the data size and a Compact archive button. Simulated on the downloaded live blob: 1,248 KB → 188 KB, no task or archived id lost, converges with old-code devices. Service worker v79. Code comment: the ARCHIVE block in `app.js`.
@@ -174,6 +176,7 @@ Newest first. Most have a longer explanation in `CLAUDE.md`.
 - **Testing (11 Nov 2026):** task window defaults to Sections (E); A, B and the old window still in Settings. Waiting for Tom to confirm E, then delete the rest.
 - **Sync blob fix (11 Nov 2026, uncommitted, not deployed):** see Decisions. Needs deploying before late December, when the old growth would have hit the D1 row limit. After deploy, open the app on each device once so all three run the new code.
 - Waiting on Tom to live in Today for a while and say what's missing.
+- **AI Updates (12 Nov 2026, uncommitted, not deployed):** built and checked in a local browser (phone width, light and dark) against a test board, not against real data. The ChatGPT contract is `ai/` (schema, guide, logic); run `node --test tests/*.test.mjs` from this folder.
 
 ## Parked ideas
 

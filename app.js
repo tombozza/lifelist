@@ -5716,6 +5716,41 @@ const SYNC_POLL_MS = 20000;
     window.addEventListener('online', () => pullFromCloud());
 })();
 
+// ---- AI UPDATES (12 Nov 2026) ----
+// Settings › AI Updates (ai/updates.js, a module loaded after this file) applies a
+// ChatGPT block through these: the same functions the UI uses, so ids, updatedAt,
+// tombstones, recurrence, undo and sync behave exactly as for a tap. Read-only access
+// to state; nothing here creates themes, tags or notes, or deletes. Called late
+// (arrow functions), so they always reach the current bindings (saveState is wrapped
+// by the sync code above).
+window.lifeListApp = {
+    get state() { return state; },
+    env: () => ({
+        today: todayStr(),
+        genId: () => genId(),
+        normaliseUrl: s => normaliseUrl(s),
+        nextPlanOrder: day => nextPlanOrder(day ? planTasks(day) : readyTasks()),
+        nextOccurrenceOnOrAfter: (rec, from) => nextOccurrenceOnOrAfter(rec, from),
+    }),
+    addTask: d => addTask(d),
+    updateTask: (id, d) => updateTask(id, d),
+    completeTask: id => completeTask(id),
+    markWontDo: id => markWontDo(id),
+    planFor: (id, day) => planFor(id, day),
+    moveToColumn: (id, col) => moveToColumn(id, col),
+    moveToKanban: id => moveToKanban(id),
+    moveToNotes: id => moveToNotes(id),
+    moveToThemedList: id => moveToThemedList(id),
+    backToList: id => backToList(id),
+    snoozeTask: (id, until) => snoozeTask(id, until),
+    scheduleOccurrence: (src, day, n) => scheduleOccurrence(src, day, n),
+    checkAutoKanban: () => checkAutoKanban(),
+    checkRecurring: () => checkRecurring(),
+    saveState: () => saveState(),
+    render: () => render(),
+    closeSettings: () => closeSheet('settings-modal'),
+};
+
 init();
 })();
 
