@@ -14,6 +14,13 @@
    - Sizes: every tappable thing is at least --tap (44px) tall, or 36px for .small. Text in a field
      is 16px, so iOS doesn't zoom in when you type. */
 
+/* ── Base ────────────────────────────────────────────────────────────────────── */
+/* 12 Nov 2026, from the components sweeps: `hidden` must win over every ui- display rule (two
+   apps had each added this line), and ui- pieces size with their padding and border included
+   (tokens.css has no reset, and a full-width .ui-input otherwise spills out of its card). */
+[hidden] { display: none !important; }
+:where([class^='ui-'], [class*=' ui-']) { box-sizing: border-box; }
+
 /* ── Layout ──────────────────────────────────────────────────────────────────── */
 .ui-page { display: grid; gap: var(--sp-6); }
 .ui-stack { display: grid; gap: var(--sp-3); }
@@ -29,6 +36,8 @@
 .ui-label { font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); }
 .ui-sub { color: var(--text-2); margin: 0; }
 .ui-hint { font-size: var(--text-sm); color: var(--text-3); margin: 0; }
+/* A section label in ordinary sentence case, for a question or a long label. */
+.ui-label.plain { text-transform: none; letter-spacing: 0; font-size: var(--text-sm); color: var(--text-2); }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────────── */
 /* .ui-btn is the everyday button. One .primary per screen. .quiet for low-key actions in a row,
@@ -57,15 +66,84 @@
 .ui-btn.danger { color: var(--danger); }
 .ui-btn.danger.primary { background: var(--danger); border-color: var(--danger); color: #fff; }
 .ui-btn.small { min-height: 36px; padding: 0 var(--sp-3); font-size: var(--text-sm); border-radius: var(--r-sm); }
-.ui-btn.icon { inline-size: var(--tap); padding: 0; }
-.ui-btn.icon.small { inline-size: 36px; }
+.ui-btn.icon { inline-size: var(--tap); padding: 0; position: relative; font-size: 18px; line-height: 1; }
+.ui-btn.icon.small { inline-size: 36px; font-size: 16px; }
+.ui-btn.icon > svg { inline-size: 1em; block-size: 1em; }
+.ui-btn.round { border-radius: var(--r-full); }
 .ui-btn.block { display: flex; inline-size: 100%; }
+
+/* More kinds (12 Nov 2026):
+   .soft  a tinted button, a step down from .primary.
+   .good  green words; .good.primary is the filled "Book it" button.
+   .large a hero call to action.
+   .link  a button that reads as a link inside a sentence.
+   .choice a button with a second line of explanation: <button class="ui-btn choice"><strong>Scan
+          it</strong><small>Take a photo of the page</small></button>.
+   .more  a show-more button with a chevron; set aria-expanded and it turns over. */
+.ui-btn.soft { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: transparent; color: var(--text); }
+.ui-btn.soft:hover { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.ui-btn.good { color: color-mix(in srgb, var(--success) 75%, var(--text)); }
+.ui-btn.good.primary { background: var(--success); border-color: var(--success); color: #fff; }
+.ui-btn.large { min-height: 52px; padding: 0 var(--sp-6); font-size: var(--text-md); border-radius: var(--r-lg); }
+.ui-btn.link {
+  display: inline; min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; color: inherit;
+  font-size: inherit; white-space: normal; vertical-align: baseline;
+  text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px;
+}
+.ui-btn.link:hover { text-decoration-color: currentColor; }
+.ui-btn.choice {
+  display: grid; justify-content: stretch; justify-items: start; align-content: center; gap: 2px; inline-size: 100%;
+  min-height: 60px; padding: var(--sp-3) var(--sp-4); text-align: start; white-space: normal;
+}
+.ui-btn.choice > small { font-size: var(--text-xs); font-weight: 400; color: var(--text-2); }
+.ui-btn.choice.primary > small { color: inherit; opacity: 0.85; }
+.ui-btn.more::after {
+  content: ''; inline-size: 7px; block-size: 7px; margin: -3px 2px 0 4px; flex: none;
+  border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform 0.15s;
+}
+.ui-btn.more[aria-expanded='true']::after { transform: translateY(4px) rotate(-135deg); }
+
+/* A toggle, such as a star, heart or bookmark: give the button aria-pressed. A .round one is a
+   "done" tick that fills in. A .primary button keeps its own fill (some apps swap to .primary
+   when pressed). */
+.ui-btn[aria-pressed='true']:not(.primary) { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong)); }
+.ui-btn.quiet[aria-pressed='true']:not(.primary) { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: transparent; }
+.ui-btn.icon[aria-pressed='true']:not(.primary) { color: var(--accent); }
+.ui-btn.round[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
+
+/* A count on an icon button or a tab bar item: <span class="ui-count">3</span> inside it.
+   Leave it empty for a plain dot. */
+.ui-count {
+  position: absolute; top: 2px; inset-inline-end: 2px; z-index: 1;
+  min-inline-size: 18px; block-size: 18px; padding: 0 5px; border-radius: var(--r-full);
+  background: var(--accent); color: var(--text-on-accent); box-shadow: 0 0 0 2px var(--surface);
+  font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.ui-count:empty { min-inline-size: 10px; block-size: 10px; padding: 0; top: 6px; inset-inline-end: 6px; }
+
+/* A round floating button: <button class="ui-fab" aria-label="Add">+</button>. It sits above the
+   tab bar when there is one. .quiet for a plain one, such as back to the top. */
+.ui-fab {
+  position: fixed; z-index: 55; inset-inline-end: max(var(--sp-4), env(safe-area-inset-right));
+  bottom: max(var(--sp-4), calc(env(safe-area-inset-bottom) + 8px));
+  inline-size: 56px; block-size: 56px; margin: 0; padding: 0; border: 0; border-radius: var(--r-full);
+  display: grid; place-items: center; background: var(--accent); color: var(--text-on-accent);
+  box-shadow: var(--shadow-lg); font: inherit; font-size: 26px; line-height: 1; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ui-fab > svg { inline-size: 24px; block-size: 24px; }
+.ui-fab.quiet { inline-size: 44px; block-size: 44px; font-size: 18px; background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.ui-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+body:has(.ui-tabbar) .ui-fab { bottom: calc(80px + env(safe-area-inset-bottom)); }
 
 /* ── Fields ──────────────────────────────────────────────────────────────────── */
 /* <label class="ui-field"><span>Name</span><input class="ui-input"><small>Hint</small></label>
    Add .error to the field and the hint turns into the error message. */
 .ui-field { display: grid; gap: 6px; min-width: 0; }
-.ui-field > span { font-size: var(--text-sm); font-weight: 600; color: var(--text-2); }
+/* The label is the field's FIRST child only, so a wrapper round the input (a clear-× button)
+   isn't styled like a label. A <div class="ui-field"> can use <label for> as its first child. */
+.ui-field > :is(span, label:not(.check)):first-child { font-size: var(--text-sm); font-weight: 600; color: var(--text-2); }
 .ui-field > small { font-size: var(--text-xs); color: var(--text-3); }
 .ui-field.error > small { color: var(--danger); }
 .ui-field.error .ui-input { border-color: var(--danger); }
@@ -101,12 +179,35 @@ select.ui-input {
 .ui-card.flat { box-shadow: none; }
 .ui-card.inset { background: var(--surface-2); border-color: transparent; box-shadow: none; }
 .ui-card > .ui-list { margin: calc(var(--sp-2) * -1) calc(var(--sp-4) * -1); }
+/* A card you tap (a <button>, <a> or <label>), and its states. A <label class="ui-card"> round a
+   radio or tick box shows as selected when it's ticked, which makes an option card:
+     <label class="ui-card check top"><input type="radio" name="tees"><span><strong>Yellow</strong><br>6,120 yards</span></label>
+   .selected (or aria-pressed / aria-checked) is the chosen one; .highlight draws the eye ("in
+   your plan"); .warn and .good tint it. */
+:is(a, button, label).ui-card { color: inherit; font: inherit; text-align: start; text-decoration: none; cursor: pointer; margin: 0; -webkit-tap-highlight-color: transparent; }
+:is(a, button, label).ui-card:hover { border-color: var(--border-strong); }
+label.ui-card.check { display: flex; }
+:is(a, button).ui-card:focus-visible, label.ui-card:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ui-card.selected, .ui-card[aria-pressed='true'], .ui-card[aria-checked='true'], label.ui-card:has(input:checked) {
+  border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--accent), var(--shadow-md);
+}
+.ui-card.highlight { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.ui-card.warn { background: color-mix(in srgb, var(--warning) 10%, var(--surface)); border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
+.ui-card.good { background: color-mix(in srgb, var(--success) 8%, var(--surface)); border-color: color-mix(in srgb, var(--success) 35%, var(--border)); }
+
+/* Big numbers: <div class="ui-stats"><div class="ui-stat"><strong>42</strong><span>Rounds</span></div>…</div> */
+.ui-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--sp-3); }
+.ui-stat { display: grid; gap: 2px; align-content: start; min-width: 0; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--surface-2); }
+.ui-stat > strong { font: 700 var(--text-2xl)/1.1 var(--font-display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--text); overflow-wrap: anywhere; }
+.ui-stat > span { font-size: var(--text-xs); font-weight: 600; color: var(--text-2); }
 
 /* ── Lists ───────────────────────────────────────────────────────────────────── */
 /* <ul class="ui-list"><li class="ui-row">…</li></ul>. A row holds an optional leading icon or
    control, a .main block (title, then .sub), and trailing bits (a badge, a .small button, a
    chevron). Make the whole row a <button> or <a> when it opens something. */
 .ui-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.ui-list > * { min-width: 0; }  /* a long title wraps instead of pushing the list off the screen */
 .ui-row {
   display: flex; align-items: center; gap: var(--sp-3);
   min-height: 52px; padding: var(--sp-2) var(--sp-4);
@@ -125,6 +226,11 @@ select.ui-input {
   border: solid var(--text-3); border-width: 2px 2px 0 0; transform: rotate(45deg);
 }
 .ui-row.no-chevron::after { content: none; }
+/* A settings row: <label class="ui-row"><span class="main">…</span><input type="checkbox" role="switch"></label>.
+   The chosen row in a list: aria-selected="true", aria-current, or .selected. */
+label.ui-row { cursor: pointer; }
+.ui-row.selected, .ui-row[aria-selected='true'], .ui-row[aria-current]:not([aria-current='false']) { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.ui-row.selected > .main > :first-child, .ui-row[aria-selected='true'] > .main > :first-child { color: var(--text); }
 
 /* ── Chips, badges ───────────────────────────────────────────────────────────── */
 /* Filter chips are buttons with aria-pressed. .ui-chips wraps; .ui-chips.scroll keeps one line
@@ -144,6 +250,22 @@ select.ui-input {
 .ui-chip[aria-pressed='true'], .ui-chip.on { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
 .ui-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ui-chip .n { font-size: var(--text-xs); opacity: 0.7; }
+/* Smaller chips (12 Nov 2026):
+   .small  a compact chip (28px).
+   <span class="ui-chip">  a tag that isn't a filter (no pointer); an <a> or <button> one still taps.
+   × to remove: <span class="ui-chip">Harry <button class="x" aria-label="Remove Harry">×</button></span>.
+   .out  a filter set to "leave these out" (a third state after on and off). */
+.ui-chip.small { min-height: 28px; padding: 0 10px; font-size: var(--text-xs); gap: 4px; }
+span.ui-chip { cursor: default; }
+span.ui-chip:hover { border-color: var(--border-strong); }
+.ui-chip > .x {
+  display: grid; place-items: center; inline-size: 22px; block-size: 22px; margin: 0 -6px 0 0; padding: 0;
+  border: 0; border-radius: var(--r-full); background: none; color: var(--text-3);
+  font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+}
+.ui-chip > .x:hover { background: var(--surface-2); color: var(--text); }
+.ui-chip[aria-pressed='true'] > .x, .ui-chip.on > .x { color: inherit; }
+.ui-chip.out { border-style: dashed; color: var(--text-3); text-decoration: line-through; }
 
 .ui-badge {
   display: inline-flex; align-items: center; gap: 4px; flex: none;
@@ -163,6 +285,82 @@ select.ui-input {
 .ui-note.warn { background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--text); }
 .ui-note.bad { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--text); }
 .ui-note.good { background: color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--text); }
+.ui-note.info { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--text); }
+
+/* ── Show more, stepper, progress, spinner ──────────────────────────────────── */
+/* <details class="ui-more"><summary>Show more</summary>…</details> */
+details.ui-more > summary {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; list-style: none; cursor: pointer;
+  color: var(--text-2); font-size: var(--text-sm); font-weight: 600; -webkit-tap-highlight-color: transparent;
+}
+details.ui-more > summary::-webkit-details-marker { display: none; }
+details.ui-more > summary::after {
+  content: ''; inline-size: 7px; block-size: 7px; margin-top: -3px; border: solid currentColor;
+  border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform 0.15s;
+}
+details.ui-more[open] > summary::after { transform: translateY(4px) rotate(-135deg); }
+details.ui-more > summary:hover { color: var(--text); }
+
+/* − 4 +: <div class="ui-stepper"><button aria-label="Fewer">−</button><output>4</output><button aria-label="More">+</button></div> */
+.ui-stepper { display: inline-flex; align-items: center; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--surface); }
+.ui-stepper > button {
+  inline-size: var(--tap); block-size: calc(var(--tap) - 2px); margin: 0; padding: 0; border: 0; border-radius: inherit;
+  background: none; color: var(--text); font: inherit; font-size: 20px; line-height: 1; cursor: pointer; touch-action: manipulation;
+}
+.ui-stepper > button:hover { background: var(--surface-2); }
+.ui-stepper > button:disabled { opacity: 0.35; cursor: default; }
+.ui-stepper > :is(output, span, input) {
+  min-inline-size: 2.5em; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.ui-stepper > input { inline-size: 3em; border: 0; padding: 0; background: none; color: inherit; font: inherit; font-size: 16px; -moz-appearance: textfield; appearance: textfield; }
+.ui-stepper > input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+/* <progress class="ui-progress" value="3" max="10"></progress>, with .good/.warn/.bad for the colour. */
+progress.ui-progress {
+  -webkit-appearance: none; appearance: none; display: block; inline-size: 100%; block-size: 8px;
+  border: 0; border-radius: var(--r-full); background: var(--surface-2); overflow: hidden; color: var(--accent);
+}
+progress.ui-progress::-webkit-progress-bar { background: var(--surface-2); border-radius: var(--r-full); }
+progress.ui-progress::-webkit-progress-value { background: currentColor; border-radius: var(--r-full); transition: inline-size 0.3s; }
+progress.ui-progress::-moz-progress-bar { background: currentColor; border-radius: var(--r-full); }
+progress.ui-progress.good { color: var(--success); }
+progress.ui-progress.warn { color: var(--warning); }
+progress.ui-progress.bad { color: var(--danger); }
+
+/* <span class="ui-spinner" role="status" aria-label="Loading"></span>: takes the text colour and size. */
+.ui-spinner {
+  display: inline-block; flex: none; inline-size: 1.25em; block-size: 1.25em; vertical-align: -0.25em;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor;
+  border-radius: 50%; animation: ui-spin 0.8s linear infinite;
+}
+@keyframes ui-spin { to { transform: rotate(1turn); } }
+
+/* ── Pop-over menu ───────────────────────────────────────────────────────────── */
+/* A ⋯ menu with no script:
+     <button class="ui-btn quiet icon small" popovertarget="m1" aria-label="More">⋯</button>
+     <div class="ui-menu" popover id="m1"><button>Rename</button><button>Move</button><hr><button class="danger">Delete</button></div>
+   It opens under its button (on the side with room). A browser that can't pin it to the button
+   shows it along the bottom of the screen. Close it from code with menu.hidePopover(). */
+.ui-menu {
+  margin: 0; padding: 4px; border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
+  min-inline-size: 200px; max-inline-size: calc(100vw - 32px);
+}
+.ui-menu:popover-open { display: grid; }
+@supports (position-area: bottom) {
+  .ui-menu { inset: auto; margin-block: 4px; position-area: bottom span-left; position-try-fallbacks: flip-block, flip-inline; }
+}
+@supports not (position-area: bottom) {
+  .ui-menu { inset: auto 16px max(16px, env(safe-area-inset-bottom)); margin: 0; }
+}
+.ui-menu > :is(button, a) {
+  display: flex; align-items: center; gap: var(--sp-2); min-height: var(--tap); padding: 0 var(--sp-3); margin: 0;
+  border: 0; border-radius: var(--r-sm); background: none; color: inherit; font: inherit; font-size: var(--text-sm);
+  text-align: start; text-decoration: none; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.ui-menu > :is(button, a):is(:hover, :focus-visible) { background: var(--surface-2); outline: none; }
+.ui-menu > .danger { color: var(--danger); }
+.ui-menu > hr { margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
 
 /* ── Tabs inside a page (segmented) ──────────────────────────────────────────── */
 /* <div class="ui-seg" role="tablist"><button role="tab" aria-selected="true">Week</button>…</div>
@@ -171,8 +369,12 @@ select.ui-input {
 .ui-seg > * {
   flex: 1; min-height: 36px; padding: 0 var(--sp-3); margin: 0; border: 0; border-radius: calc(var(--r-md) - 3px);
   background: transparent; color: var(--text-2); font: inherit; font-size: var(--text-sm); font-weight: 600;
-  cursor: pointer; white-space: nowrap; text-decoration: none; display: grid; place-items: center;
+  cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
 }
+/* .fit: only as wide as its options, for a small picker beside a label. A count: <span class="n">3</span>. */
+.ui-seg.fit { display: inline-flex; inline-size: auto; max-inline-size: 100%; flex: none; }
+.ui-seg.fit > * { flex: none; }
+.ui-seg > * > .n { font-size: var(--text-xs); opacity: 0.7; }
 .ui-seg > [aria-selected='true'], .ui-seg > [aria-pressed='true'], .ui-seg > [aria-current] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
 .ui-seg > :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
@@ -208,6 +410,8 @@ select.ui-input {
 .ui-tabbar > * > :first-child { font-size: 22px; line-height: 1; }
 .ui-tabbar > * > svg:first-child { inline-size: 24px; block-size: 24px; }
 .ui-tabbar > [aria-current] { color: var(--accent); }
+.ui-tabbar > * { position: relative; }
+.ui-tabbar .ui-count { inset-inline-end: calc(50% - 22px); top: 0; }
 
 /* ── Sheet (dialog) ──────────────────────────────────────────────────────────── */
 /* <dialog class="ui-sheet"><header><h2>Title</h2><button class="ui-btn quiet icon small"
@@ -233,6 +437,8 @@ select.ui-input {
 }
 /* <dialog class="ui-sheet page">: a sheet with a lot in it (a full edit form) fills the whole
    phone screen like a page instead of sliding up as a card; on wider screens it's a normal sheet. */
+/* .wide: a roomier sheet on a big screen (760px), for a table or a two-column form. */
+@media (min-width: 561px) { .ui-sheet.wide { inline-size: min(760px, 100% - 32px); } }
 @media (max-width: 560px) {
   .ui-sheet.page { inline-size: 100%; block-size: 100dvh; max-block-size: 100dvh; margin: 0; border-radius: 0; box-shadow: none; }
   .ui-sheet.page > header { padding-top: max(var(--sp-4), env(safe-area-inset-top)); }
@@ -242,20 +448,39 @@ select.ui-input {
 /* <div class="ui-toast" role="status">Saved</div>: add it, remove it after about 2.5s. */
 .ui-toast {
   position: fixed; left: 50%; bottom: max(24px, calc(env(safe-area-inset-bottom) + 12px)); z-index: 900;
-  transform: translateX(-50%); max-inline-size: calc(100% - 32px);
+  transform: translateX(-50%); inline-size: max-content; max-inline-size: calc(100% - 32px);
   padding: 10px 16px; border-radius: var(--r-md);
   background: var(--text); color: var(--bg); box-shadow: var(--shadow-lg);
   font-size: var(--text-sm); font-weight: 600; animation: ui-toast-in 0.2s var(--ease);
 }
+/* A toast with one action (Undo): <div class="ui-toast" role="status">Deleted <button type="button">Undo</button></div>.
+   Keep it up longer (about 6s) so there's time to tap it. */
+.ui-toast:has(> button) { display: flex; align-items: center; gap: var(--sp-3); padding-block: 4px; padding-inline-end: 6px; }
+.ui-toast > button {
+  min-height: 36px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); margin: 0;
+  background: transparent; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.ui-toast > button:hover { background: color-mix(in srgb, var(--bg) 15%, transparent); }
 body:has(.ui-tabbar) .ui-toast { bottom: calc(88px + env(safe-area-inset-bottom)); }
 @keyframes ui-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+/* .bad: a red toast for something that failed. */
+.ui-toast.bad { background: var(--danger); color: #fff; }
+/* A toast while a sheet is open: a sheet sits in the browser's top layer, above everything else,
+   so a plain toast hides under it. Give the toast popover="manual", add it INSIDE the open
+   sheet (outside it, the page can't be tapped, so Undo wouldn't work), then call
+   toast.showPopover(). It shows above the sheet, at the bottom of the screen. */
+.ui-toast[popover] { top: auto; right: auto; margin: 0; border: 0; overflow: visible; }
+.ui-toast[popover]:not(:popover-open) { display: none; }
 
+/* <div class="ui-empty"><span class="icon">🗂️</span><strong>Nothing here</strong><span>What to do next.</span>…</div>
+   Keep each line of words in its own element: loose text becomes its own grid cell. */
 .ui-empty { display: grid; justify-items: center; gap: var(--sp-2); text-align: center; padding: var(--sp-8) var(--sp-4); color: var(--text-2); }
 .ui-empty > .icon { font-size: 36px; line-height: 1; }
 .ui-empty > strong { color: var(--text); font-size: var(--text-lg); }
 
 @media (prefers-reduced-motion: reduce) {
   .ui-btn, .ui-input, .ui-toast { transition: none; animation: none; }
+  .ui-spinner { animation-duration: 2.4s; }
 }
 
 /* ── Theme switch (from theme.js) ────────────────────────────────────────────── */
