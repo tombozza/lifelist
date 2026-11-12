@@ -65,8 +65,7 @@ has been changing things in the app, ask for a fresh copy before referring to ta
 - In one block, don't add a task and then act on it by title in a later action: give the add all
   its details instead (the app checks every name before anything is applied).
 - A repeat can't also have `where`, `day`, `due`, `url` or `spotlight`. A monthly repeat is either
-  `day_of_month`, or `week_of_month` (1–4) with `weekday`; a monthly weekday repeat can't be a
-  Sunday yet. Repeats only go on add_task: to change an existing repeat, Tom edits it in the app.
+  `day_of_month`, or `week_of_month` (1–4) with `weekday`. Repeats only go on add_task: to change an existing repeat, Tom edits it in the app.
 - Priorities: none, minimal, low, medium, high, urgent. Leave priority and size out unless Tom
   says. Spotlight only when Tom asks for it.
 - Change only what Tom asked. Don't re-file, re-date or re-prioritise other tasks.

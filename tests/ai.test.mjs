@@ -172,7 +172,7 @@ test('add_task with a repeat goes through scheduleOccurrence, like the task wind
   assert.deepEqual(p({ every: 'month', day_of_month: 7, interval: 2, on_today: false }).calls[0].args[0].recurring, { type: 'monthly', interval: 2, monthlyMode: 'date', dayOfMonth: 7, onToday: false });
   assert.deepEqual(p({ every: 'month', week_of_month: 1, weekday: 'friday' }).calls[0].args[0].recurring, { type: 'monthly', interval: 1, monthlyMode: 'weekday', weekOfMonth: 1, dayOfWeek: 5, onToday: true, missed: 'carry' });
   assert.equal(p({ every: 'week' }).ok, false, 'weekly needs a weekday');
-  assert.equal(p({ every: 'month', week_of_month: 1, weekday: 'sunday' }).ok, false, 'monthly Sunday is an app bug, refused');
+  assert.equal(p({ every: 'month', week_of_month: 1, weekday: 'sunday' }).calls[0].args[0].recurring.dayOfWeek, 0, 'a monthly Sunday stays Sunday');
   assert.equal(p({ every: 'day', on_today: false, missed: 'skip' }).ok, false);
   assert.equal(planAction({ type: 'add_task', title: 'R', where: 'today', repeat: { every: 'day' } }, app.state, app.env()).ok, false, 'no where with a repeat');
 });

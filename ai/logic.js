@@ -267,8 +267,6 @@ function buildRepeat(r, problems) {
       rec = { type: 'monthly', interval, monthlyMode: 'date', dayOfMonth: r.day_of_month };
     } else {
       if (!has('weekday')) return bad('A monthly repeat on a weekday needs the weekday.');
-      // app.js reads a monthly weekday as `dayOfWeek || 1`, so Sunday (0) would become Monday.
-      if (r.weekday === 'sunday') return bad('Life List can’t repeat on a Sunday of the month yet (it would land on the Monday). Pick another day.');
       rec = { type: 'monthly', interval, monthlyMode: 'weekday', weekOfMonth: r.week_of_month, dayOfWeek: WEEKDAYS[r.weekday] };
     }
   }

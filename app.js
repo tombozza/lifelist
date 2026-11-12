@@ -968,7 +968,7 @@ function calcNextRecurring(recurring, fromDate) {
         } else {
             d.setDate(1);
             d.setMonth(d.getMonth() + (recurring.interval || 1));
-            const targetDow = recurring.dayOfWeek || 1;
+            const targetDow = recurring.dayOfWeek ?? 1;   // 0 is Sunday, so not `|| 1`
             const weekNum = recurring.weekOfMonth || 1;
             let count = 0;
             while (count < weekNum) {
@@ -988,7 +988,7 @@ function matchesRecurrence(recurring, dateStr) {
     }
     if (recurring.type === 'monthly') {
         if (recurring.monthlyMode === 'date') return d.getDate() === (recurring.dayOfMonth || 1);
-        if (d.getDay() !== (recurring.dayOfWeek || 1)) return false;
+        if (d.getDay() !== (recurring.dayOfWeek ?? 1)) return false;
         const occ = Math.floor((d.getDate() - 1) / 7) + 1;
         return occ === (recurring.weekOfMonth || 1);
     }
@@ -3734,7 +3734,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
             if (t.recurring.type === 'monthly') document.getElementById('recur-monthly-interval').value = t.recurring.interval || 1;
             document.getElementById('recur-monthly-day').value = t.recurring.dayOfMonth || 1;
             document.getElementById('recur-monthly-week').value = t.recurring.weekOfMonth || 1;
-            document.getElementById('recur-monthly-dow').value = t.recurring.dayOfWeek || 1;
+            document.getElementById('recur-monthly-dow').value = t.recurring.dayOfWeek ?? 1;
             document.querySelectorAll('input[name="monthly-mode"]').forEach(r => { r.checked = r.value === modalMonthlyMode; });
         }
         setRecurTodayFields(t.recurring);
@@ -4469,7 +4469,7 @@ function baseRecurringFromModal() {
         if (mode === 'date') {
             return { type:'monthly', interval, monthlyMode:'date', dayOfMonth: parseInt(document.getElementById('recur-monthly-day').value)||1 };
         } else {
-            return { type:'monthly', interval, monthlyMode:'weekday', weekOfMonth: parseInt(document.getElementById('recur-monthly-week').value)||1, dayOfWeek: parseInt(document.getElementById('recur-monthly-dow').value)||1 };
+            return { type:'monthly', interval, monthlyMode:'weekday', weekOfMonth: parseInt(document.getElementById('recur-monthly-week').value)||1, dayOfWeek: Number(document.getElementById('recur-monthly-dow').value || 1) };   // '0' is Sunday
         }
     }
     return null;
