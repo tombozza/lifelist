@@ -49,7 +49,7 @@ export function fingerprint(app: string, envelopeId: string | null | undefined, 
 export function appliedLog(app: string, store?: KVStore, now?: () => number): AppliedLog;
 export function checkAppSchema(s: AppSchema): AppSchema;
 export function processReply(text: string, schema: AppSchema, opts?: { log?: Pick<AppliedLog, 'has'> }): Processed;
-export function contextBlock(o: { app: string; name: string; v: number; data: unknown; now?: Date; note?: string }): string;
+export function contextBlock(o: { app: string; name: string; v: number; data: unknown; now?: Date; note?: string; contextOnly?: boolean }): string;
 
 export const HUB_URL: string;
 export function hubKey(store?: KVStore): string;

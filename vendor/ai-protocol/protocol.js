@@ -291,10 +291,13 @@ export function processReply(text, schema, opts = {}) {
  * The "Copy for ChatGPT" text: a labelled, dated, compact JSON block.
  * @param {{app:string, name:string, v:number, data:object, now?:Date, note?:string}} o
  */
-export function contextBlock({ app, name, v, data, now = new Date(), note }) {
+export function contextBlock({ app, name, v, data, now = new Date(), note, contextOnly = false }) {
   const when = now.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const body = { protocol: PROTOCOL, kind: 'context', app, v, as_of: now.toISOString(), data };
-  return `AI Updates context: ${name} (copied ${when}). Use it for ${name} actions in this conversation.${note ? ` ${note}` : ''}\n${JSON.stringify(body)}`;
+  const body = { protocol: PROTOCOL, kind: 'context', app, v, as_of: now.toISOString(), ...(contextOnly ? { context_only: true } : {}), data };
+  const use = contextOnly
+    ? `Use it to answer questions and plan; ${name} takes no AI Updates block.`
+    : `Use it for ${name} actions in this conversation.`;
+  return `AI Updates context: ${name} (copied ${when}). ${use}${note ? ` ${note}` : ''}\n${JSON.stringify(body)}`;
 }
 
 // ---------------------------------------------------------------------------------------

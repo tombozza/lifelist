@@ -201,7 +201,7 @@ export function openUpdates(o) {
       if (a === 'close' || a === 'finish') return close(st.results);
       if (a === 'copy') {
         let text;
-        try { const c = o.context(); text = contextBlock({ app: o.schema.app, name, v: o.schema.v, data: c.data, note: c.note }); }
+        try { const c = o.context(); text = contextBlock({ app: o.schema.app, name, v: o.schema.v, data: c.data, note: c.note, contextOnly: !!o.schema.contextOnly }); }
         catch (err) { st.error = err?.message ?? String(err); return render(); }
         try { await navigator.clipboard.writeText(text); st.copied = true; st.error = ''; }
         catch { st.error = 'Couldn’t copy. Your browser blocked it; try again.'; }
@@ -244,5 +244,5 @@ export function openUpdates(o) {
 /** Copy an app's context to the clipboard without opening the sheet. Call inside the tap. */
 export async function copyContext(schema, context) {
   const c = context();
-  await navigator.clipboard.writeText(contextBlock({ app: schema.app, name: schema.name ?? schema.app, v: schema.v, data: c.data, note: c.note }));
+  await navigator.clipboard.writeText(contextBlock({ app: schema.app, name: schema.name ?? schema.app, v: schema.v, data: c.data, note: c.note, contextOnly: !!schema.contextOnly }));
 }
