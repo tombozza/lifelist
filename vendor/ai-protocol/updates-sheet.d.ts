@@ -11,6 +11,8 @@ export function openUpdates(o: {
   apply: (item: Item, choice?: string) => Promise<unknown> | unknown;
   done?: (results: ApplyResult[]) => void;
   text?: string;
+  /** false hides the daily-copy sharing row (the App Hub itself). */
+  share?: boolean;
   log?: AppliedLog;
 }): Promise<(ApplyResult | null)[] | null>;
 export function copyContext(schema: AppSchema, context: () => { data: unknown; note?: string }): Promise<void>;

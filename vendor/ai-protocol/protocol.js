@@ -25,7 +25,8 @@ export const MAX_REPLY_CHARS = 500_000;
 export const APP_NAMES = {
   food_planner: 'Food Planner', finance_centre: 'Finance Centre', life_list: 'Life List', dad_hq: 'Dad HQ',
   champ_dash: 'Champ Dash', content_hub: 'Content Hub', bozza_hq: 'Bozza HQ', adhd_guide: 'ADHD Field Guide',
-  storage_log: 'Storage Log',
+  storage_log: 'Storage Log', media_tracker: 'Media Tracker', app_hub: 'App Hub', hd_checklist: 'HD Checklist',
+  diary: 'Diary', golf_tracker: 'Golf Tracker', filofax: 'Filofax', swipefy: 'Swipefy', holiday_tracker: 'Holiday Tracker',
 };
 
 /** The envelope's own schema (the apps' sections are checked separately, by each app). */
@@ -135,9 +136,9 @@ export function extractEnvelope(text) {
   if (!String(text ?? '').trim()) return { error: 'Paste the reply first.' };
   if (String(text).length > MAX_REPLY_CHARS) return { error: 'That’s far too long to be one reply. Paste just the block.' };
   const objs = findObjects(text);
-  const env = objs.find(o => o.protocol === PROTOCOL && o.kind !== 'context');
+  const env = objs.find(o => o.protocol === PROTOCOL && o.kind !== 'context' && o.kind !== 'daily');
   if (env) return { envelope: env, legacy: false };
-  if (objs.some(o => o.protocol === PROTOCOL && o.kind === 'context')) {
+  if (objs.some(o => o.protocol === PROTOCOL && (o.kind === 'context' || o.kind === 'daily'))) {
     return { error: 'That’s a context block, for pasting into ChatGPT. Paste ChatGPT’s reply here instead.' };
   }
   const old = objs.find(isLegacy);
@@ -208,6 +209,8 @@ export function checkAppSchema(s) {
   if (!/^[a-z][a-z0-9_]{1,30}$/.test(s.app ?? '')) bad('app id should be snake_case');
   if (!Number.isInteger(s.v)) bad('v should be a whole number');
   if (!Array.isArray(s.accepts) || !s.accepts.includes(s.v)) bad('accepts should list v');
+  // A context-only app gives ChatGPT its state to answer questions from, and takes no actions.
+  if (s.contextOnly) { if (!s.actions || Object.keys(s.actions).length) bad('a contextOnly app has actions: {}'); return s; }
   if (!s.actions || !Object.keys(s.actions).length) bad('no actions');
   for (const [type, a] of Object.entries(s.actions)) {
     if (!a.schema || a.schema.type !== 'object') bad(`${type}: schema should be an object schema`);
@@ -250,6 +253,7 @@ export function processReply(text, schema, opts = {}) {
     stillOpen: Array.isArray(envelope.still_open) ? envelope.still_open : [], others, section: null, note: null, items: [],
   };
   const sec = apps[schema.app];
+  if (sec && schema.contextOnly) return { ...base, note: `${schema.name ?? schema.app} takes no AI Updates changes; ChatGPT only reads its context. Nothing was changed.` };
   if (!sec) return { ...base, note: `Nothing for ${schema.name ?? schema.app} in this block.` };
   if (legacy && !Array.isArray(sec.actions)) return { ...base, note: `Nothing for ${schema.name ?? schema.app} in this block.` };
 
@@ -291,4 +295,71 @@ export function contextBlock({ app, name, v, data, now = new Date(), note }) {
   const when = now.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const body = { protocol: PROTOCOL, kind: 'context', app, v, as_of: now.toISOString(), data };
   return `AI Updates context: ${name} (copied ${when}). Use it for ${name} actions in this conversation.${note ? ` ${note}` : ''}\n${JSON.stringify(body)}`;
+}
+
+// ---------------------------------------------------------------------------------------
+// The daily copy: each app shares its context with the App Hub (design/ARCHITECTURE.md §8b)
+
+export const HUB_URL = 'https://app-hub-865.pages.dev';
+const HUB_KEY = 'ai-updates-hub-key';
+const SHARED = app => `ai-updates-shared:${app}`;
+const RESHARE_MS = 6 * 3600 * 1000;
+
+/** The App Hub key kept on this device ('' when sharing isn't set up). */
+export function hubKey(store = defaultStore()) { try { return store.getItem(HUB_KEY) || ''; } catch { return ''; } }
+
+/** Keep (or with '' forget) the App Hub key on this device. */
+export function setHubKey(key, store = defaultStore()) {
+  const k = String(key ?? '').trim();
+  try { if (k) store.setItem(HUB_KEY, k); else store.removeItem(HUB_KEY); } catch { /* blocked */ }
+  return !!k;
+}
+
+/**
+ * The App Hub's "Set up" link opens the app with #ai-hub-key=… . Keep the key and tidy the
+ * address, so it isn't left in the bar or bookmarked. Returns true when a key was taken.
+ */
+export function captureHubKey(loc = globalThis.location, hist = globalThis.history, store = defaultStore()) {
+  try {
+    const m = /(?:^#|&)ai-hub-key=([A-Za-z0-9_-]{16,128})(?=&|$)/.exec(loc?.hash || '');
+    if (!m) return false;
+    setHubKey(m[1], store);
+    const rest = loc.hash.replace(/(^#|&)ai-hub-key=[^&]*/, '$1').replace(/^#&/, '#').replace(/&$/, '');
+    hist?.replaceState?.(hist.state, '', `${loc.pathname}${loc.search}${rest === '#' ? '' : rest}`);
+    return true;
+  } catch { return false; }
+}
+
+/** When this app last shared its context from this device ({at, ok} or null). */
+export function lastShared(app, store = defaultStore()) {
+  try { return JSON.parse(store.getItem(SHARED(app)) || 'null'); } catch { return null; }
+}
+
+/**
+ * Send this app's context to the App Hub, for the daily copy. Never throws, never blocks the app.
+ * Skipped when this device has no key, or when the same data went in the last 6 hours (unless force).
+ * @returns {Promise<{shared:boolean, reason?:string}>}
+ */
+export async function shareContext(schema, context, { store = defaultStore(), fetch: f = globalThis.fetch, now = () => Date.now(), force = false } = {}) {
+  try {
+    captureHubKey(undefined, undefined, store);
+    const key = hubKey(store);
+    if (!key) return { shared: false, reason: 'no-key' };
+    if (typeof f !== 'function') return { shared: false, reason: 'no-fetch' };
+    const c = context();
+    if (!c || c.data === undefined) return { shared: false, reason: 'no-context' };
+    const sig = fingerprint(schema.app, String(schema.v), c.data);
+    const last = lastShared(schema.app, store);
+    if (!force && last?.ok && last.sig === sig && now() - last.at < RESHARE_MS) return { shared: false, reason: 'unchanged' };
+    const body = { v: schema.v, name: schema.name ?? schema.app, as_of: new Date(now()).toISOString(), data: c.data, ...(c.note ? { note: c.note } : {}) };
+    const res = await f(`${HUB_URL}/api/ai-context/${schema.app}`, {
+      method: 'PUT', headers: { 'content-type': 'application/json', 'x-hub-key': key }, body: JSON.stringify(body),
+    });
+    const ok = !!res?.ok;
+    try { store.setItem(SHARED(schema.app), JSON.stringify({ at: now(), ok, sig, status: res?.status ?? 0 })); } catch { /* blocked */ }
+    if (ok) return { shared: true };
+    return { shared: false, reason: res?.status === 401 || res?.status === 403 ? 'bad-key' : `http-${res?.status}` };
+  } catch (err) {
+    return { shared: false, reason: err?.message ?? 'failed' };
+  }
 }

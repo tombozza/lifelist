@@ -3,11 +3,22 @@
 // and ai/logic.js turns each action into calls to them. Nothing is written until Apply.
 
 import { openUpdates } from '../vendor/ai-protocol/updates-sheet.js';
+import { captureHubKey, shareContext } from '../vendor/ai-protocol/protocol.js';
 import schema from './schema.js';
 import { buildContext, resolveItem, makeHandlers } from './logic.js';
 
+// The App Hub's set-up link (#ai-hub-key=…): take it before anything else.
+captureHubKey();
+
 const app = window.lifeListApp;
 const handlers = makeHandlers(app);
+const context = () => buildContext(app.state, { today: app.env().today });
+
+// The daily copy (sites/ai-updates ARCHITECTURE §8b): share the board with the App Hub once the
+// first cloud pull has merged, and again when the app comes back to the front. shareContext
+// never throws and skips itself when there's no key or nothing changed.
+app.firstSync().then(() => shareContext(schema, context));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) app.firstSync().then(() => shareContext(schema, context)); });
 
 // Applying redraws the board; keep the page, the board's sideways scroll and each column
 // where they were (sites rule: a click never moves the page).
@@ -27,7 +38,7 @@ function open() {
   app.closeSettings();   // the sheet isn't a <dialog>, so an open Settings sheet would sit on top of it
   openUpdates({
     schema,
-    context: () => buildContext(app.state, { today: app.env().today }),
+    context,
     resolve: async item => resolveItem(item, app.state, app.env()),
     apply: async (item, choice) => {
       const handler = handlers[item.type];

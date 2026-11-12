@@ -16,3 +16,8 @@
 .au-ok { color: var(--success, #2f8a4c); font-weight: 600; font-size: .85rem; }
 .au-row select { min-height: 40px; font: inherit; font-size: 16px; padding: 0 8px; border-radius: 10px;
   border: 1px solid var(--mg-border); background: var(--mg-surface); color: var(--mg-text); width: 100%; max-width: 100%; }
+.au-share { border-top: 1px solid var(--mg-border); padding-top: 10px; }
+.au-share-btns { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.au-key { display: grid; gap: 8px; }
+.au-key input { min-height: 44px; font: inherit; font-size: 16px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--mg-border); background: var(--mg-surface); color: var(--mg-text); width: 100%; box-sizing: border-box; }

@@ -16,8 +16,12 @@
 // Rules it enforces: nothing is written until Apply; only ticked, valid, resolved actions
 // run, in the block's order; a failure is reported and the rest still run; what applied is
 // remembered on this device, so a second paste shows it as already applied (unticked).
+//
+// The daily copy (ARCHITECTURE §8b): with a context, the sheet shows whether this device shares
+// it with the App Hub, lets Tom set that up, and shares again after Apply and after Copy.
+// A schema with contextOnly: true gets only the copy and the sharing rows, no paste.
 
-import { processReply, appliedLog, contextBlock, APP_NAMES } from './protocol.js';
+import { processReply, appliedLog, contextBlock, APP_NAMES, shareContext, hubKey, setHubKey, lastShared } from './protocol.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
@@ -30,6 +34,7 @@ const ICON = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke
  * @param {(item:object, choice?:string) => Promise<any>} o.apply
  * @param {(results:object[]) => void} [o.done]
  * @param {string} [o.text]  a reply to start with (e.g. from a share or link)
+ * @param {boolean} [o.share]  false: no daily-copy sharing row (the App Hub itself)
  * @param {object} [o.log]   appliedLog override (tests)
  * @returns {Promise<object[]|null>}
  */
@@ -38,7 +43,15 @@ export function openUpdates(o) {
   const log = o.log ?? appliedLog(o.schema.app);
   return new Promise(resolveSheet => {
     const opener = document.activeElement;
-    const st = { reply: o.text ?? '', result: null, error: '', copied: false, busy: false, rows: [], results: null };
+    const st = { reply: o.text ?? '', result: null, error: '', copied: false, busy: false, rows: [], results: null, keyOpen: false, sharing: '' };
+    const canShare = !!o.context && o.share !== false;
+    const share = async force => {
+      if (!canShare) return;
+      st.sharing = 'busy'; if (!closed) render();
+      const r = await shareContext(o.schema, o.context, { force });
+      st.sharing = r.shared ? '' : (r.reason === 'unchanged' || r.reason === 'no-key' ? '' : r.reason);
+      if (!closed) render();
+    };
 
     const wrap = document.createElement('div');
     wrap.className = 'mg-scrim';
@@ -61,12 +74,41 @@ export function openUpdates(o) {
 
     const statusLabel = { ready: '', duplicate: 'Already applied on this device', invalid: 'Can’t apply', unknown: 'Not something this app does' };
 
+    function shareView() {
+      if (!canShare) return '';
+      const key = hubKey();
+      const last = lastShared(o.schema.app);
+      const time = t => new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      let line;
+      if (!key) line = 'Daily copy: not set up on this device.';
+      else if (st.sharing === 'busy') line = 'Daily copy: sharing with the App Hub…';
+      else if (st.sharing === 'bad-key' || (last && !last.ok && (last.status === 401 || last.status === 403))) line = 'Daily copy: the App Hub didn’t accept this device’s key. Set it up again.';
+      else if (last?.ok) line = `Daily copy: shared with the App Hub ${time(last.at)}.`;
+      else if (last) line = 'Daily copy: the last share didn’t reach the App Hub. It tries again next time.';
+      else line = 'Daily copy: set up; shares next time the app loads.';
+      const form = st.keyOpen ? `<div class="au-key">
+          <p class="mg-note">Easiest: on the App Hub, open AI Updates and tap <b>Set up</b> next to ${esc(name)}. Or paste the key from there:</p>
+          <label class="mg-stack" for="au-key">App Hub key<input id="au-key" type="password" autocomplete="off" spellcheck="false" value=""></label>
+          <div class="mg-actions">${key ? '<button type="button" class="mg-ghost" data-au="key-forget">Stop sharing</button>' : ''}<button type="button" class="mg-go" data-au="key-save">Save key</button></div></div>` : '';
+      return `<div class="au-share mg-actions mg-split"><span class="mg-note">${esc(line)}</span>
+          <span class="au-share-btns">${key && !st.keyOpen ? '<button type="button" class="mg-ghost" data-au="share">Share now</button>' : ''}
+          <button type="button" class="mg-ghost" data-au="key">${st.keyOpen ? 'Close' : key ? 'Key' : 'Set up'}</button></span></div>${form}`;
+    }
+
+    function contextOnlyView() {
+      return `<p class="mg-note">ChatGPT can answer questions about ${esc(name)} and help you plan from its current state. It doesn’t send changes for this app.</p>
+        <div class="mg-actions mg-split"><span class="mg-note">Paste this into the ChatGPT chat.</span>
+          <button type="button" class="mg-go" data-au="copy">${st.copied ? 'Copied ✓' : 'Copy for ChatGPT'}</button></div>
+        ${shareView()}`;
+    }
+
     function pasteView() {
       return `${o.context ? `<div class="mg-actions mg-split"><span class="mg-note">Starting a conversation? Give ChatGPT ${esc(name)}’s current state first.</span>
           <button type="button" class="mg-ghost" data-au="copy">${st.copied ? 'Copied ✓' : 'Copy for ChatGPT'}</button></div>` : ''}
         <label class="mg-stack" for="au-reply">Paste ChatGPT’s whole reply<textarea id="au-reply" rows="6" placeholder="The reply with the AI Updates block…">${esc(st.reply)}</textarea></label>
         <div class="mg-actions mg-split"><span class="mg-note">Nothing changes until you tick and apply.</span>
-          <button type="button" class="mg-go" data-au="check">Check it</button></div>`;
+          <button type="button" class="mg-go" data-au="check">Check it</button></div>
+        ${shareView()}`;
     }
 
     function rowHtml(r, i) {
@@ -108,7 +150,7 @@ export function openUpdates(o) {
 
     function render() {
       const y = wrap.querySelector('.mg-sheet').scrollTop;
-      body.innerHTML = st.result ? resultView() : `${pasteView()}${st.error ? `<p class="mg-error" role="alert">${esc(st.error)}</p>` : ''}`;
+      body.innerHTML = st.result ? resultView() : `${o.schema.contextOnly ? contextOnlyView() : pasteView()}${st.error ? `<p class="mg-error" role="alert">${esc(st.error)}</p>` : ''}`;
       wrap.querySelector('.mg-sheet').scrollTop = y;
     }
 
@@ -149,6 +191,7 @@ export function openUpdates(o) {
       if (failed) st.error = `${failed} didn’t apply. The rest did.`;
       render();
       try { o.done?.(results.filter(Boolean)); } catch { /* the app's redraw shouldn't break the sheet */ }
+      if (results.some(x => x?.ok)) share(true);
     }
 
     wrap.addEventListener('click', async e => {
@@ -162,8 +205,17 @@ export function openUpdates(o) {
         catch (err) { st.error = err?.message ?? String(err); return render(); }
         try { await navigator.clipboard.writeText(text); st.copied = true; st.error = ''; }
         catch { st.error = 'Couldn’t copy. Your browser blocked it; try again.'; }
-        return render();
+        render();
+        return share(false);
       }
+      if (a === 'share') return share(true);
+      if (a === 'key') { st.keyOpen = !st.keyOpen; render(); if (st.keyOpen) body.querySelector('#au-key')?.focus({ preventScroll: true }); return; }
+      if (a === 'key-save') {
+        const k = body.querySelector('#au-key')?.value ?? '';
+        if (!/^[A-Za-z0-9_-]{16,128}$/.test(k.trim())) { st.error = 'That doesn’t look like the App Hub key. Copy it again from the App Hub.'; return render(); }
+        setHubKey(k); st.keyOpen = false; st.error = ''; return share(true);
+      }
+      if (a === 'key-forget') { setHubKey(''); st.keyOpen = false; st.sharing = ''; return render(); }
       if (a === 'check') { st.reply = body.querySelector('#au-reply')?.value ?? ''; return check(); }
       if (a === 'back') { st.result = null; st.rows = []; st.error = ''; return render(); }
       if (a === 'apply') return apply();
@@ -183,6 +235,7 @@ export function openUpdates(o) {
     wrap.addEventListener('input', e => { if (e.target.id === 'au-reply') st.reply = e.target.value; });
 
     render();
+    if (o.schema.contextOnly) return;
     if (st.reply.trim()) check();
     else body.querySelector('#au-reply')?.focus({ preventScroll: true });
   });

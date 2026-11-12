@@ -5702,12 +5702,15 @@ async function checkInbox() {
 // Cloudflare has no Supabase-style realtime channel, so we poll instead: an
 // interval plus the existing foreground/focus/online re-pulls keep devices fresh.
 const SYNC_POLL_MS = 20000;
+// Settles once the first cloud pull has merged (or failed): AI Updates shares the board with
+// the App Hub after it (ai/updates.js).
+let firstSync = Promise.resolve();
 
 (function initSync() {
     // The first pull enables sync; if the site is locked it throws and the
     // password gate is shown — auth (unlockSite) re-runs this.
     syncEnabled = true;
-    pullFromCloud().then(() => {
+    firstSync = pullFromCloud().then(() => {
         checkInbox();
         setInterval(() => { if (!document.hidden) { pullFromCloud(); checkInbox(); } }, SYNC_POLL_MS);
     }).catch(() => {});
@@ -5749,6 +5752,7 @@ window.lifeListApp = {
     saveState: () => saveState(),
     render: () => render(),
     closeSettings: () => closeSheet('settings-modal'),
+    firstSync: () => firstSync,
 };
 
 init();

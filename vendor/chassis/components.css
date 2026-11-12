@@ -109,7 +109,7 @@
 .ui-btn[aria-pressed='true']:not(.primary) { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong)); }
 .ui-btn.quiet[aria-pressed='true']:not(.primary) { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: transparent; }
 .ui-btn.icon[aria-pressed='true']:not(.primary) { color: var(--accent); }
-.ui-btn.round[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
+.ui-btn.round[aria-pressed='true']:not(.primary) { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
 
 /* A count on an icon button or a tab bar item: <span class="ui-count">3</span> inside it.
    Leave it empty for a plain dot. */
@@ -306,7 +306,7 @@ details.ui-more > summary:hover { color: var(--text); }
      <li><details class="ui-more row"><summary class="ui-row"><span class="main"><span>Title</span><span class="sub">…</span></span></summary><div>…detail…</div></details></li>
    The summary keeps the row's look, with a chevron that turns over. Put buttons for the row (delete)
    in the detail, not the summary. */
-details.ui-more.row > summary.ui-row { display: flex; color: inherit; font-size: inherit; font-weight: inherit; }
+details.ui-more.row > summary.ui-row { display: flex; min-height: 52px; gap: var(--sp-3); color: inherit; font-size: inherit; font-weight: inherit; }
 details.ui-more.row > summary.ui-row:hover { background: var(--surface-2); }
 details.ui-more.row > summary.ui-row::after { flex: none; margin-inline-start: 2px; border-color: var(--text-3); }
 details.ui-more.row > :not(summary) { padding: 0 var(--sp-4) var(--sp-3); }

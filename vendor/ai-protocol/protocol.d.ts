@@ -14,6 +14,8 @@ export interface AppSchema {
   defs?: Record<string, unknown>;
   actions: Record<string, ActionDef>;
   upgrade?: (fromV: number, actions: any[]) => any[];
+  /** Gives ChatGPT its state only; takes no actions (actions is {}). */
+  contextOnly?: boolean;
 }
 export type ItemStatus = 'ready' | 'duplicate' | 'invalid' | 'unknown';
 export interface Item {
@@ -48,3 +50,11 @@ export function appliedLog(app: string, store?: KVStore, now?: () => number): Ap
 export function checkAppSchema(s: AppSchema): AppSchema;
 export function processReply(text: string, schema: AppSchema, opts?: { log?: Pick<AppliedLog, 'has'> }): Processed;
 export function contextBlock(o: { app: string; name: string; v: number; data: unknown; now?: Date; note?: string }): string;
+
+export const HUB_URL: string;
+export function hubKey(store?: KVStore): string;
+export function setHubKey(key: string, store?: KVStore): boolean;
+export function captureHubKey(loc?: Location, hist?: History, store?: KVStore): boolean;
+export function lastShared(app: string, store?: KVStore): { at: number; ok: boolean; sig: string; status: number } | null;
+export function shareContext(schema: AppSchema, context: () => { data: unknown; note?: string },
+  opts?: { store?: KVStore; fetch?: typeof fetch; now?: () => number; force?: boolean }): Promise<{ shared: boolean; reason?: string }>;

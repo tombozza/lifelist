@@ -2,7 +2,7 @@
 // context. Run from the app folder:  node --test tests/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { processReply, checkAppSchema } from '../vendor/ai-protocol/protocol.js';
+import { processReply, checkAppSchema, shareContext } from '../vendor/ai-protocol/protocol.js';
 import schema, { examples } from '../ai/schema.js';
 import { ACTION_TYPES, buildContext, makeHandlers, planAction, resolveItem, matchName, whereOf } from '../ai/logic.js';
 
@@ -311,4 +311,21 @@ test('whereOf matches the app’s tiers', () => {
   assert.equal(whereOf(task({ offKanban: true }), TODAY), 'off_board');
   assert.equal(whereOf(task({ kanbanColumn: 'ongoing' }), TODAY), 'ongoing');
   assert.equal(whereOf(task({ snoozedUntil: '2026-11-01' }), TODAY), 'list', 'an expired snooze is back');
+});
+
+test('the daily copy: the context shares straight after load with the app’s schema', async () => {
+  const state = fixture();
+  const mem = new Map([['ai-updates-hub-key', 'k'.repeat(24)]]);
+  const store = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)), removeItem: k => mem.delete(k) };
+  const calls = [];
+  const fetch = async (url, init) => { calls.push({ url, init }); return { ok: true, status: 200 }; };
+  const context = () => buildContext(state, { today: TODAY });   // as ai/updates.js builds it
+  assert.deepEqual(await shareContext(schema, context, { store, fetch }), { shared: true });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, new RegExp(`/api/ai-context/${schema.app}$`));
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.v, schema.v);
+  assert.deepEqual(body.data, context().data);
+  assert.deepEqual(await shareContext(schema, context, { store, fetch }), { shared: false, reason: 'unchanged' });
+  assert.equal(calls.length, 1);
 });
