@@ -94,6 +94,7 @@ the sync code can read and write the blob.
 
 Newest first. Most have a longer explanation in `CLAUDE.md`.
 
+- 2026-11-11: Sync blob fix (deployed 11 Nov, v79; not committed). The synced blob was 1.28 MB, the archive 2,676 copies of 240 tasks, growing ~100 KB a week toward D1's ~2 MB row limit: archiving removed a task locally with no tombstone, so the next pull put it back and the next week re-archived it. Now archiving writes an archive tombstone into `deletedIds` (`{id, ts, archived:true}`, which older cached code already obeys; new code lets a later edit beat it), `compactArchive()` keeps one entry per task (earliest week, newest copy) on load and every merge, and `autoArchive()` runs after every merge and on the minute tick, archiving whatever was completed before this week under its completion week (was: Mondays only, everything into the current week). Tombstones kept 2 years (was 60 days). Top-bar sync dot (green / amber / red; words on wider screens; tap to sync now) and a size warning over 1.5 MB; Settings › Archive shows the data size and a Compact archive button. Simulated on the downloaded live blob: 1,248 KB → 188 KB, no task or archived id lost, converges with old-code devices. Service worker v79. Code comment: the ARCHIVE block in `app.js`.
 - 2026-11-11: shared `ui-badge` good/warn/bad text now mixes 30% of `--text` into the status colour (the green and amber were about 2.7:1 in Light; now 4.5:1 or better in both themes). Synced copy of `components.css`, deployed 11 Nov.
 - 2026-11-11: shared `--success` and `--warning` are deeper in Light (`#15803d`, `#b45309`, 5:1 on white; the old bright ones were about 3.2:1 as words) and stay bright in Dark. Synced copy of `tokens.css`.
 - 2026-11-11: Theme, sub-theme and tags became one always-open block in the task window: every row one sideways-scrolling line, sub-themes as chips, one tag per category (a tap replaces that category's other tag). Tom: tags under chevrons meant expanding five menus. Applies to the current window and all four test layouts.
@@ -169,6 +170,7 @@ Newest first. Most have a longer explanation in `CLAUDE.md`.
   (`tombozza.github.io/lifelist`) auto-deploys on push. Tom unpublished it on 15 Jul 2026 and the
   repo is now private, so this is out of date (unconfirmed whether the Pages setting is fully off).
 - **Testing (11 Nov 2026):** task window defaults to Sections (E); A, B and the old window still in Settings. Waiting for Tom to confirm E, then delete the rest.
+- **Sync blob fix (11 Nov 2026, uncommitted, not deployed):** see Decisions. Needs deploying before late December, when the old growth would have hit the D1 row limit. After deploy, open the app on each device once so all three run the new code.
 - Waiting on Tom to live in Today for a while and say what's missing.
 
 ## Parked ideas

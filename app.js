@@ -282,6 +282,9 @@ function loadState() {
             if (!Array.isArray(p.smartNotes)) p.smartNotes = [];
             if (!p.smartNotesUpdatedAt) p.smartNotesUpdatedAt = 0;
             migrateColumns(p.tasks);
+            // One entry per archived task (see compactArchive). In memory only:
+            // the next save persists it, the next merge pushes it.
+            p.archive = compactArchive(p.archive);
             // Persist straight away: saveState() can't run yet (it writes the
             // `state` this function is still returning), and an unsaved
             // migration would re-run on every load. The bumped tagsUpdatedAt
@@ -2216,8 +2219,13 @@ function createBoardCard(task) {
 function getWeekStats() {
     const thisWeek = getWeekStart(todayStr());
     const lastWeek = getWeekStart(addDays(thisWeek, -1));
-    const thisCompleted = state.tasks.filter(t => t.status === 'complete' && getWeekStart(t.completedDate||'') === thisWeek);
-    const lastCompleted = state.tasks.filter(t => t.status === 'complete' && getWeekStart(t.completedDate||'') === lastWeek);
+    // Last week's work is in the archive now (autoArchive), so count both, once per task
+    const done = new Map();
+    state.tasks.forEach(t => { if (t.status === 'complete') done.set(t.id, t); });
+    state.archive.forEach(w => w.tasks.forEach(t => { if (t.status === 'complete' && !done.has(t.id)) done.set(t.id, t); }));
+    const inWeek = wk => [...done.values()].filter(t => t.completedDate && getWeekStart(t.completedDate) === wk);
+    const thisCompleted = inWeek(thisWeek);
+    const lastCompleted = inWeek(lastWeek);
     const countDelta = lastCompleted.length ? Math.round((thisCompleted.length - lastCompleted.length) / lastCompleted.length * 100) : null;
     return { count: thisCompleted.length, lastCount: lastCompleted.length, delta: countDelta };
 }
@@ -3116,6 +3124,33 @@ function renderAdminArchive(container) {
     hdr.appendChild(archiveBtn);
     container.appendChild(hdr);
 
+    // Size of the synced data, and Compact archive (11 Nov 2026). The whole
+    // state is one D1 row, which tops out around 2 MB; the archive was ~90% of it.
+    const sizeNote = document.createElement('div');
+    const bytes = payloadBytes(syncPayload());
+    const ids = new Set(); state.archive.forEach(w => w.tasks.forEach(t => ids.add(t.id)));
+    const entries = archiveEntryCount(state.archive);
+    const cloud = syncStatus.cloudBytes;
+    sizeNote.className = 'ui-note' + (Math.max(bytes, cloud) > ARCHIVE_WARN_BYTES ? ' warn' : '');
+    sizeNote.innerHTML = `<p>Synced data is <b>${formatBytes(bytes)}</b> on this device` +
+        (cloud && Math.abs(cloud - bytes) > 1024 ? ` and <b>${formatBytes(cloud)}</b> in the cloud` : '') +
+        ` (limit about 2 MB). The archive holds ${entries} ${entries === 1 ? 'entry' : 'entries'} for ${ids.size} tasks.</p>`;
+    const compactBtn = document.createElement('button');
+    compactBtn.className = 'ui-btn small';
+    compactBtn.textContent = 'Compact archive';
+    compactBtn.addEventListener('click', async () => {
+        const before = Math.max(payloadBytes(syncPayload()), syncStatus.cloudBytes || 0);
+        state.archive = compactArchive(state.archive);
+        archiveDone(state, todayStr(), Date.now());
+        _baseSave();
+        const pushed = await pushToCloud();
+        const after = payloadBytes(syncPayload());
+        renderAdmin();
+        showToast(`Archive compacted: ${formatBytes(before)} → ${formatBytes(after)}` + (pushed ? '' : ' (not synced yet)'));
+    });
+    sizeNote.appendChild(compactBtn);
+    container.appendChild(sizeNote);
+
     if (!state.archive.length) {
         container.appendChild(emptyState('No archived tasks yet', 'Tasks in the Complete column are archived at week end.'));
         return;
@@ -3386,29 +3421,135 @@ function markReviewed(id) {
     updateTask(id, { reviewed: true });
 }
 
+// ---- ARCHIVE (11 Nov 2026) ----
+// The archive is the history of finished work: one copy of each completed task,
+// filed under the week it was done. Archiving takes a task out of state.tasks,
+// and that removal has to *stick* across devices. Before this fix it didn't:
+// nothing told the merge the task had been archived, so the next pull put it
+// straight back from the cloud and the next week archived it again. By Nov 2026
+// the blob held 2,676 archive copies of 240 tasks (1.1 MB of a ~2 MB D1 row).
+//
+// Three things now make it stick, and the first is what older cached code obeys:
+//  1. Archiving tombstones the task in deletedIds ({id, ts, archived:true}). Old
+//     code drops tombstoned ids on merge, so it converges without an update.
+//     Unlike a delete, an archive tombstone loses to an edit made after it
+//     (applyTombstones), so re-opening a task on another device can't be lost.
+//  2. archiveDone() runs after every merge and takes *any* task completed before
+//     this week off the board, archived copy or not, so a task an old device
+//     brings back is re-filed and de-duplicated. That self-heals even once a
+//     tombstone has been pruned.
+//  3. compactArchive(): one entry per task id, in the earliest week it was filed,
+//     using its most recent copy. Runs on load and on every merge.
+// Pure functions of a state object between the markers, so
+// scripts can run them against a downloaded blob.
+// >>> archive-core
+const ARCHIVE_WARN_BYTES = 1.5 * 1024 * 1024;
+// Tombstones are ~40 bytes each; two years keeps a long-unopened device from
+// resurrecting a delete without the list ever getting big.
+const TOMBSTONE_KEEP_MS = 730 * 24 * 3600 * 1000;
+
+function archiveEntryCount(archive) {
+    return (archive || []).reduce((n, w) => n + ((w && w.tasks) || []).length, 0);
+}
+
+function compactArchive(archive) {
+    const weeks = [...(archive || [])].filter(w => w && w.weekStart).sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+    const best = new Map();          // id -> { week, copy, order }
+    const loose = [];                // id-less entries stay where they were
+    let order = 0;
+    weeks.forEach(w => (w.tasks || []).forEach(t => {
+        if (!t) return;
+        if (!t.id) { loose.push({ week: w.weekStart, copy: t, order: order++ }); return; }
+        const b = best.get(t.id);
+        if (!b) { best.set(t.id, { week: w.weekStart, copy: t, order: order++ }); return; }
+        // weeks are sorted, so b.week is already the earliest; keep the newest copy
+        if ((t.updatedAt || 0) >= (b.copy.updatedAt || 0)) b.copy = t;
+    }));
+    const out = new Map();
+    [...best.values(), ...loose].sort((a, b) => a.order - b.order).forEach(e => {
+        if (!out.has(e.week)) out.set(e.week, { weekStart: e.week, tasks: [] });
+        out.get(e.week).tasks.push(e.copy);
+    });
+    // a week without a date can't be placed; keep it as it was rather than lose it
+    const odd = (archive || []).filter(w => w && !w.weekStart);
+    return [...[...out.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart)), ...odd];
+}
+
+function addArchiveTombstone(s, id, now) {
+    if (!s.deletedIds) s.deletedIds = [];
+    if (s.deletedIds.some(x => x.id === id)) return;
+    s.deletedIds.push({ id, ts: now, archived: true });
+}
+
+// Move completed tasks into the archive, each under the week it was completed.
+// opts.all archives everything completed (the button); otherwise only what was
+// completed before this week, so this week's Done and tally stay on the board.
+function archiveDone(s, today, now, opts) {
+    const all = !!(opts && opts.all);
+    const thisWeek = getWeekStart(today);
+    const validDay = d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+    const go = (s.tasks || []).filter(t => t.status === 'complete' &&
+        (all || !validDay(t.completedDate) || t.completedDate < thisWeek));
+    if (!go.length) return 0;
+    const fallbackWeek = all ? thisWeek : getWeekStart(addDays(thisWeek, -1));
+    if (!s.archive) s.archive = [];
+    go.forEach(t => {
+        const week = validDay(t.completedDate) ? getWeekStart(t.completedDate) : fallbackWeek;
+        let w = s.archive.find(a => a.weekStart === week);
+        if (!w) { w = { weekStart: week, tasks: [] }; s.archive.push(w); }
+        w.tasks.push({ ...t });
+        addArchiveTombstone(s, t.id, now);
+    });
+    const ids = new Set(go.map(t => t.id));
+    s.tasks = s.tasks.filter(t => !ids.has(t.id));
+    s.archive = compactArchive(s.archive);
+    return go.length;
+}
+
+// Union two tombstone lists (newest ts per id), pruned after TOMBSTONE_KEEP_MS.
+function mergeTombstones(a, b, now) {
+    const m = new Map();
+    [...(a || []), ...(b || [])].forEach(x => {
+        if (!x || !x.id) return;
+        const prev = m.get(x.id);
+        if (!prev || (x.ts || 0) > (prev.ts || 0)) m.set(x.id, x);
+    });
+    return [...m.values()].filter(x => (x.ts || 0) > now - TOMBSTONE_KEEP_MS);
+}
+
+// Drop tombstoned tasks. A delete always wins; an archive tombstone loses to an
+// edit made after it (the task was re-opened somewhere), and is lifted.
+function applyTombstones(tasks, deletedIds) {
+    const del = new Map((deletedIds || []).map(x => [x.id, x]));
+    const lifted = new Set();
+    const kept = (tasks || []).filter(t => {
+        const x = del.get(t.id);
+        if (!x) return true;
+        if (x.archived && (t.updatedAt || 0) > (x.ts || 0)) { lifted.add(t.id); return true; }
+        return false;
+    });
+    return { tasks: kept, deletedIds: (deletedIds || []).filter(x => !lifted.has(x.id)) };
+}
+
+// <<< archive-core
+
 function archiveCompleted() {
-    const completed = state.tasks.filter(t => t.kanbanColumn === 'complete' || (t.status === 'complete' && !t.kanbanColumn));
-    if (!completed.length) return;
-    const weekStart = getWeekStart(todayStr());
-    const existing = state.archive.find(a => a.weekStart === weekStart);
-    if (existing) {
-        existing.tasks.push(...completed.map(t => ({...t})));
-    } else {
-        state.archive.push({ weekStart, tasks: completed.map(t => ({...t})) });
-    }
-    state.tasks = state.tasks.filter(t => t.kanbanColumn !== 'complete' || t.status !== 'complete');
-    state.tasks = state.tasks.filter(t => !(t.status === 'complete' && !t.kanbanColumn));
+    if (!archiveDone(state, todayStr(), Date.now(), { all: true })) return;
     saveState();
     render();
 }
 
+// Weekly archive: no longer Monday-only. Runs after every sync merge (and the
+// minute tick), archiving anything completed before the current week.
 function autoArchive() {
-    const today = new Date();
-    if (today.getDay() !== 1) return; // Only on Monday
-    const lastArchive = state.archive.length ? state.archive[state.archive.length-1] : null;
-    const thisWeek = getWeekStart(todayStr());
-    if (lastArchive && lastArchive.weekStart === thisWeek) return;
-    archiveCompleted();
+    return archiveDone(state, todayStr(), Date.now()) > 0;
+}
+
+function payloadBytes(obj) {
+    try { return new TextEncoder().encode(JSON.stringify(obj)).length; } catch (_) { return 0; }
+}
+function formatBytes(n) {
+    return n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(2) + ' MB' : Math.round(n / 1024) + ' KB';
 }
 
 // Activate any dormant recurrence whose date has arrived: it flips to an
@@ -4629,10 +4770,14 @@ function showView(view) {
 
 function init() {
     applyTheme();
-    autoArchive();
+    // autoArchive() runs after each sync merge and on the minute tick, not here:
+    // before the first pull, local state may be stale.
     checkRecurring();
     checkAutoKanban();
     handleAddParam();
+
+    document.getElementById('sync-status').addEventListener('click', syncNow);
+    renderSyncStatus();
 
     // View tabs
     document.querySelectorAll('.tab').forEach(tab => {
@@ -4953,7 +5098,9 @@ function init() {
     // has arrived while the app was left open / backgrounded
     const periodicChecks = () => {
         checkRecurring(); checkAutoKanban(); renderListReminder();
-        if (rollOverPlan()) { saveState(); render(); }
+        const archived = autoArchive();
+        if (rollOverPlan() || archived) { saveState(); render(); }
+        renderSyncStatus();
     };
     setInterval(periodicChecks, 60000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { periodicChecks(); render(); } });
@@ -5299,29 +5446,91 @@ saveState = function() {
     }
 };
 
+function syncPayload() {
+    return { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt, tagCategories: state.tagCategories, tagsUpdatedAt: state.tagsUpdatedAt, smartNotes: state.smartNotes, smartNotesUpdatedAt: state.smartNotesUpdatedAt };
+}
+
 async function pushToCloud() {
-    if (!syncEnabled || syncPaused) return;
+    if (!syncEnabled || syncPaused) return false;
     try {
-        const payload = { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt, tagCategories: state.tagCategories, tagsUpdatedAt: state.tagsUpdatedAt, smartNotes: state.smartNotes, smartNotesUpdatedAt: state.smartNotesUpdatedAt };
+        const payload = syncPayload();
+        syncStatus.bytes = payloadBytes(payload);
         await apiPut(SYNC_CODE, payload);
-    } catch(e) { if (String(e).indexOf('locked') === -1) console.error('Sync push failed:', e); }
+        syncStatus.pushError = '';
+        syncStatus.cloudBytes = syncStatus.bytes;
+        syncStatus.lastOkAt = Date.now();
+        return true;
+    } catch(e) {
+        if (String(e).indexOf('locked') === -1) { console.error('Sync push failed:', e); syncStatus.pushError = String(e.message || e); }
+        return false;
+    } finally { renderSyncStatus(); }
+}
+
+// ---- Sync status (11 Nov 2026) ----
+// Sync failures used to go only to console.error, so a device could stop
+// syncing silently. A badge in the top bar shows it: a green dot while all is
+// well, "Not synced since HH:MM" when the last good sync is stale, "Sync failed"
+// on an error, and the data size once the blob nears D1's ~2 MB row limit.
+// Tapping it syncs now (pull, then push only if the pull worked).
+const SYNC_STALE_MS = 3 * 60 * 1000;
+const syncStatus = { lastOkAt: 0, pullError: '', pushError: '', bytes: 0, cloudBytes: 0, busy: false, visibleSince: Date.now() };
+// Polling stops while the app is in the background, so "stale" only counts time spent on screen
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncStatus.visibleSince = Date.now(); });
+
+function hhmm(ts) { return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
+
+function syncState() {
+    const big = Math.max(syncStatus.bytes, syncStatus.cloudBytes) > ARCHIVE_WARN_BYTES;
+    const since = syncStatus.lastOkAt ? 'Not synced since ' + hhmm(syncStatus.lastOkAt) : 'Not synced yet';
+    if (syncStatus.pushError || syncStatus.pullError) {
+        const offline = navigator.onLine === false;
+        return { kind: 'bad', text: offline ? 'Offline' : 'Sync failed', tip: since + (offline ? ' · offline' : ' · sync error') + '. Tap to retry.', detail: syncStatus.pushError || syncStatus.pullError };
+    }
+    if (!syncStatus.lastOkAt) return { kind: '', text: 'Syncing…', tip: 'Connecting to sync' };
+    if (Date.now() - Math.max(syncStatus.lastOkAt, syncStatus.visibleSince) > SYNC_STALE_MS) return { kind: 'warn', text: since, tip: since + '. Tap to sync now.' };
+    if (big) return { kind: 'warn', text: formatBytes(Math.max(syncStatus.bytes, syncStatus.cloudBytes)), tip: 'Synced data is close to the 2 MB limit. Settings › Archive › Compact archive.' };
+    return { kind: 'good', text: '', tip: 'Synced at ' + hhmm(syncStatus.lastOkAt) + (syncStatus.bytes || syncStatus.cloudBytes ? ' · ' + formatBytes(syncStatus.bytes || syncStatus.cloudBytes) : '') };
+}
+
+// Updates the badge in place; never redraws the page.
+function renderSyncStatus() {
+    const btn = document.getElementById('sync-status');
+    if (!btn) return;
+    const st = syncState();
+    const badge = btn.querySelector('.ui-badge');
+    // All well (or still connecting): just a dot. On a phone the bar has no room
+    // for words, so it's always a dot there, coloured by state; tap for the detail.
+    const narrow = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+    const dotOnly = st.kind === 'good' || st.kind === '' || narrow;
+    badge.className = 'ui-badge' + (st.kind ? ' ' + st.kind : '');
+    badge.textContent = dotOnly ? '●' : st.text;
+    btn.title = st.tip + (st.detail ? ' (' + st.detail + ')' : '');
+    btn.setAttribute('aria-label', (st.kind === 'good' ? 'Synced' : st.text) + '. ' + st.tip);
+}
+
+async function syncNow() {
+    if (syncStatus.busy) return;
+    syncStatus.busy = true;
+    try {
+        const pulled = await pullFromCloud();
+        if (pulled) await pushToCloud();
+    } finally { syncStatus.busy = false; }
+    const st = syncState();
+    showToast(st.tip);
 }
 
 async function pullFromCloud() {
-    if (!syncEnabled) return;
+    if (!syncEnabled) return false;
     try {
         const d = await apiGet(SYNC_CODE);
-        if (!d) return;
+        syncStatus.pullError = '';
+        if (!d) { syncStatus.lastOkAt = Date.now(); renderSyncStatus(); return true; }
+        syncStatus.cloudBytes = payloadBytes(d);
         syncPaused = true;
 
-        // --- Merge deletions (union, pruned after 60 days) ---
-        const delMap = new Map();
-        [...(state.deletedIds||[]), ...(d.deletedIds||[])].forEach(x => {
-            const prev = delMap.get(x.id);
-            if (!prev || x.ts > prev.ts) delMap.set(x.id, x);
-        });
-        const cutoff = Date.now() - 60*24*3600*1000;
-        state.deletedIds = [...delMap.values()].filter(x => x.ts > cutoff);
+        // --- Merge deletions (union, pruned after two years: TOMBSTONE_KEEP_MS) ---
+        // Archive tombstones ({archived:true}) are in here too; see "ARCHIVE".
+        state.deletedIds = mergeTombstones(state.deletedIds, d.deletedIds, Date.now());
         const delSet = new Set(state.deletedIds.map(x => x.id));
 
         // --- Detect whether local has anything the cloud lacks (decides if we push back) ---
@@ -5346,7 +5555,9 @@ async function pullFromCloud() {
             const lt = merged.get(rt.id);
             if (!lt || (rt.updatedAt||0) > (lt.updatedAt||0)) merged.set(rt.id, rt);
         });
-        state.tasks = [...merged.values()].filter(t => !delSet.has(t.id));
+        const applied = applyTombstones([...merged.values()], state.deletedIds);
+        state.tasks = applied.tasks;
+        state.deletedIds = applied.deletedIds;
         migrateColumns(state.tasks);
 
         // --- Themes: newest wholesale ---
@@ -5372,16 +5583,13 @@ async function pullFromCloud() {
             state.tagsUpdatedAt = d.tagsUpdatedAt || 0;
         }
 
-        // --- Archive: merge weeks, union tasks within each week ---
-        const weeks = new Map();
-        (state.archive||[]).forEach(w => weeks.set(w.weekStart, w));
-        (d.archive||[]).forEach(rw => {
-            const lw = weeks.get(rw.weekStart);
-            if (!lw) { weeks.set(rw.weekStart, rw); return; }
-            const ids = new Set(lw.tasks.map(t => t.id));
-            rw.tasks.forEach(t => { if (!ids.has(t.id)) lw.tasks.push(t); });
-        });
-        state.archive = [...weeks.values()].sort((a,b) => a.weekStart.localeCompare(b.weekStart));
+        // --- Archive: union both copies, then one entry per task (compactArchive),
+        // then take anything completed before this week off the board. Push back
+        // if the cloud's archive isn't already exactly this (e.g. an older device
+        // pushed its bloated copy), so the cloud row shrinks too. ---
+        state.archive = compactArchive([...(state.archive||[]), ...(d.archive||[])]);
+        if (autoArchive()) localContrib = true;
+        if (archiveEntryCount(state.archive) !== archiveEntryCount(d.archive)) localContrib = true;
 
         if (d.completionLog) state.completionLog = Object.assign({}, d.completionLog, state.completionLog);
 
@@ -5395,10 +5603,20 @@ async function pullFromCloud() {
         syncPaused = false;
 
         // Push merged state back only if local contributed something the cloud didn't have
+        // A push that failed earlier is retried on every pull until it lands
+        if (syncStatus.pushError) localContrib = true;
+        syncStatus.lastOkAt = Date.now();
         if (localContrib) pushToCloud();
 
         checkAutoKanban();
-    } catch(e) { console.error('Sync pull:', e); syncPaused = false; }
+        renderSyncStatus();
+        return true;
+    } catch(e) {
+        syncPaused = false;
+        if (String(e).indexOf('locked') === -1) { console.error('Sync pull:', e); syncStatus.pullError = String(e.message || e); }
+        renderSyncStatus();
+        return false;
+    }
 }
 
 // Inbox: external tools (e.g. an iOS Shortcuts automation bridging Apple
