@@ -42,7 +42,7 @@
 
     <!-- Quick capture: one field, straight onto the review pile -->
     <div class="quick-add" id="quick-add">
-        <input type="text" id="quick-add-input" class="ui-input" placeholder="Quick add &mdash; lands in Review&hellip;">
+        <input type="text" id="quick-add-input" class="ui-input" placeholder="Quick add">
         <button class="ui-btn primary" id="quick-add-btn">Add</button>
         <span class="ui-hint quick-add-flash" id="quick-add-flash"></span>
     </div>
@@ -57,7 +57,6 @@
     <section id="view-notes" class="view">
         <div class="notes-head">
             <h2 class="ui-h2">Notes</h2>
-            <p class="ui-sub notes-sub">Parked, not prioritised &mdash; things to buy, someday-maybes. Off the main list but never hidden.</p>
         </div>
         <div class="ui-chips scroll notes-bar" id="notes-bar"></div>
         <div class="tag-filter" id="notes-tag-filter"></div>
@@ -138,7 +137,7 @@
         <div class="board-stats" id="board-stats"></div>
         <div id="review-banner" class="ui-note page-note" style="display:none;"></div>
         <div id="list-reminder" class="ui-note page-note" style="display:none;">
-            <span class="ui-spacer"><strong>Time to review your Lists</strong> — you haven't checked them today.</span>
+            <span class="ui-spacer">Lists not checked today</span>
             <div class="ui-actions">
                 <button class="ui-btn small primary" id="reminder-open">Review list</button>
                 <button class="ui-btn small" id="reminder-snooze">1 hr</button>
@@ -180,8 +179,8 @@
     <div class="body">
 
         <div class="ui-stack">
-            <input type="text" id="task-title" class="ui-input task-title-input" placeholder="What needs doing?" aria-label="Title">
-            <textarea id="task-title-multi" class="ui-input" rows="4" placeholder="One task per line…" aria-label="Titles, one per line" style="display:none;"></textarea>
+            <input type="text" id="task-title" class="ui-input task-title-input" placeholder="Task" aria-label="Title">
+            <textarea id="task-title-multi" class="ui-input" rows="4" aria-label="Titles, one per line" style="display:none;"></textarea>
             <label class="check" id="multi-add-row">
                 <input type="checkbox" id="task-multi-toggle">
                 Add several at once (one per line)
@@ -254,7 +253,6 @@
                     <input type="checkbox" id="task-countdown">
                     Show countdown on card
                 </label>
-                <p class="ui-hint">“Do on” puts it on Today for that day</p>
             </div>
         </div>
 
@@ -334,7 +332,7 @@
             <div class="ui-stack recur-today">
                 <label class="check"><input type="checkbox" id="recur-on-today"> Put it on Today on the day</label>
                 <div class="ui-stack" id="recur-missed-row">
-                    <span class="ui-hint">If it's not done that day</span>
+                    <span class="ui-hint">If missed</span>
                     <label class="check"><input type="radio" name="recur-missed" value="carry" checked> Move it to the next day</label>
                     <label class="check"><input type="radio" name="recur-missed" value="skip"> Only that day</label>
                 </div>
@@ -357,7 +355,7 @@
         <div class="field field-link" data-section="link">
             <span class="field-label">Link</span>
             <div class="field-control task-url-row">
-                <input type="url" id="task-url" class="ui-input" placeholder="Paste a web address…" aria-label="Link" inputmode="url" autocomplete="off" spellcheck="false">
+                <input type="url" id="task-url" class="ui-input" aria-label="Link" inputmode="url" autocomplete="off" spellcheck="false">
                 <a id="task-url-open" class="ui-btn" target="_blank" rel="noopener noreferrer" style="display:none;">Open</a>
             </div>
         </div>
@@ -366,7 +364,7 @@
             <span class="field-label">Notes</span>
             <div class="field-control">
                 <button type="button" class="ui-btn small" id="task-notes-add">+ Add notes</button>
-                <textarea id="task-notes" class="ui-input" rows="3" placeholder="Optional notes…" aria-label="Notes" style="display:none;"></textarea>
+                <textarea id="task-notes" class="ui-input" rows="3" aria-label="Notes" style="display:none;"></textarea>
             </div>
         </div>
 
@@ -409,19 +407,16 @@
                 <button type="button" class="group-btn" aria-pressed="true" data-value="home">Home</button>
                 <button type="button" class="group-btn" aria-pressed="false" data-value="work">Work</button>
             </div>
-            <small>Used by the Board's All / Work / Home focus switcher</small>
         </div>
         <label class="ui-field">
-            <span>Sub-themes (one per line)</span>
-            <textarea id="theme-edit-subthemes" class="ui-input" rows="4" placeholder="e.g.&#10;Meetings&#10;Reports&#10;Calls"></textarea>
+            <span>Sub-themes</span>
+            <textarea id="theme-edit-subthemes" class="ui-input" rows="4"></textarea>
         </label>
         <div class="ui-stack setting">
             <label class="check"><input type="checkbox" role="switch" id="theme-edit-hidden"> Hidden</label>
-            <p class="ui-hint">Hidden themes and their tasks don't appear in Lists or on the Board</p>
         </div>
         <div class="ui-stack setting">
             <label class="check"><input type="checkbox" role="switch" id="theme-edit-hide-weekend"> Hide on weekends</label>
-            <p class="ui-hint">This theme's cards are hidden from the Board on Saturdays and Sundays</p>
         </div>
     </div>
     <footer class="ui-actions">
@@ -441,7 +436,7 @@
     <div class="body">
         <label class="ui-field">
             <span>Name</span>
-            <input type="text" id="tagcat-name" class="ui-input" placeholder="e.g. People, When, Italy trip">
+            <input type="text" id="tagcat-name" class="ui-input">
         </label>
         <div class="ui-field">
             <span>Colour</span>
@@ -451,8 +446,7 @@
         </div>
         <label class="ui-field">
             <span>Tags (one per line)</span>
-            <textarea id="tagcat-tags" class="ui-input" rows="5" placeholder="e.g.&#10;Barney&#10;Harry&#10;Jim"></textarea>
-            <small>Renaming a line renames the tag everywhere. Deleting one takes it off any task using it.</small>
+            <textarea id="tagcat-tags" class="ui-input" rows="5"></textarea>
         </label>
     </div>
     <footer class="ui-actions">
@@ -504,11 +498,10 @@
             </div>
         </div>
         <div class="ui-stack setting">
-            <span class="ui-label">ChatGPT</span>
+            <span class="ui-label">AI</span>
             <div class="settings-admin">
-                <button type="button" class="ui-btn small" id="settings-ai-updates"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg> AI Updates</button>
+                <button type="button" class="ui-btn small" id="settings-ai-updates"><magic-mark></magic-mark> AI Updates</button>
             </div>
-            <p class="ui-hint">Copy Life List for ChatGPT, then paste its reply back to add, move, finish or snooze tasks. Nothing changes until you tick and apply.</p>
         </div>
         <div class="ui-stack setting">
             <span class="ui-label">Appearance</span>
@@ -524,15 +517,12 @@
                     <option value="b">B · Composer bar</option>
                 </select>
             </label>
-            <p class="ui-hint">Trying out new layouts for the new and edit task window. This device only, and every one saves the same way.</p>
         </div>
         <div class="ui-stack setting">
             <label class="check"><input type="checkbox" role="switch" id="settings-show-hidden"> Show hidden themes</label>
-            <p class="ui-hint">Temporarily reveal themes marked as hidden in Lists and on the Board</p>
         </div>
         <div class="ui-stack setting">
             <label class="check"><input type="checkbox" role="switch" id="settings-reminder"> Daily list review reminder</label>
-            <p class="ui-hint">Nudges you on the Board if you haven't checked Lists yet that day. This device only.</p>
         </div>
         <label class="ui-field" id="reminder-time-row" style="display:none;">
             <span>Remind from</span>
@@ -540,9 +530,8 @@
         </label>
         <div class="ui-stack setting">
             <label class="check"><input type="checkbox" role="switch" id="settings-password"> Require a password</label>
-            <p class="ui-hint">Locks this site behind a single shared password on every device. Off by default.</p>
             <div id="password-set-row" class="ui-stack" style="display:none;">
-                <input type="password" id="settings-password-input" class="ui-input" placeholder="Choose a password (min 4 characters)" aria-label="New password" autocomplete="new-password">
+                <input type="password" id="settings-password-input" class="ui-input" placeholder="Password" aria-label="New password" autocomplete="new-password">
                 <div class="ui-actions end">
                     <button class="ui-btn primary" id="settings-password-save">Enable lock</button>
                 </div>
@@ -551,10 +540,6 @@
             <div id="password-logout-row" style="display:none;">
                 <button class="ui-btn" id="settings-password-logout">Log out this device</button>
             </div>
-        </div>
-        <div class="ui-note good">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            <span>Syncing across devices</span>
         </div>
     </div>
 </dialog>
@@ -566,8 +551,7 @@
     </header>
     <div class="body">
         <label class="ui-field" id="gate-field">
-            <span>This board is locked</span>
-            <input type="password" id="gate-password" class="ui-input" placeholder="Password" autocomplete="current-password">
+            <input type="password" id="gate-password" class="ui-input" placeholder="Password" aria-label="Password" autocomplete="current-password">
             <small id="gate-error" style="display:none;"></small>
         </label>
     </div>
@@ -597,11 +581,10 @@
         <button class="ui-btn quiet icon small" id="review-close" aria-label="Close">&times;</button>
     </header>
     <div class="body">
-        <p class="ui-hint">Triage items you've captured but not yet placed on the board.</p>
         <div id="review-list"></div>
     </div>
     <footer class="ui-actions end">
-        <button class="ui-btn primary" id="review-done">Keep remaining</button>
+        <button class="ui-btn primary" id="review-done">Done</button>
     </footer>
 </dialog>
 

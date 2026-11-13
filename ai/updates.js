@@ -3,6 +3,7 @@
 // A module loaded after app.js; app.js exposes its own functions as window.lifeListApp,
 // and ai/logic.js turns each action into calls to them. Nothing is written until Apply.
 
+import '../vendor/magic/magic.js';   // <magic-mark> on Settings › AI Updates
 import { openUpdates, mountAiButton } from '../vendor/ai-protocol/updates-sheet.js';
 import { captureHubKey, shareContext } from '../vendor/ai-protocol/protocol.js';
 import schema from './schema.js';

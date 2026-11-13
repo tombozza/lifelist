@@ -27,7 +27,7 @@
 // remembered on this device, so a second paste shows it as already applied (unticked).
 
 import { processReply, appliedLog, contextBlock, APP_NAMES, shareContext, hubKey, setHubKey, lastShared,
-  fetchPack, fetchInbox, clearInbox, forwardParts, inboxReply, downloadText, referenceSeen, markReferenceSeen, CONTEXT_ONLY } from './protocol.js';
+  fetchPack, fetchInbox, clearInbox, forwardParts, inboxReply, downloadText, referenceSeen, markReferenceSeen } from './protocol.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const svg = d => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -82,7 +82,7 @@ export function aiHome(o) {
 
   const card = (icon, title, text, action, extra = '', cls = '') => `<section class="au-card ${cls}">
       <span class="au-card-ic">${icon}</span>
-      <div class="au-card-main"><h3>${title}</h3><p>${text}</p>${extra}</div>
+      <div class="au-card-main"><h3>${title}</h3>${text ? `<p>${text}</p>` : ''}${extra}</div>
       ${action ? `<div class="au-card-act">${action}</div>` : ''}</section>`;
 
   const waitingView = () => st.waiting.map(w => card(IC.inbox, `Waiting for ${esc(name)}`,
@@ -90,39 +90,35 @@ export function aiHome(o) {
     `<button type="button" class="mg-go" data-au="review" data-id="${esc(w.id)}">Review</button>`, '', 'au-wait')).join('');
 
   function referenceView() {
-    if (!st.linked) return card(IC.book, '1 · Reference document', 'How every app works, for the ChatGPT project. Link this device to the App Hub to get it here.', '');
+    if (!st.linked) return card(IC.book, '1 · Reference document', 'Not linked', '');
     const m = st.meta;
     const seen = referenceSeen();
     const fresh = m && seen && seen !== m.version;
     const meta = st.loading && !m ? 'Checking…' : m ? `Version ${esc(m.version)} · updated ${esc(day(m.since))}${fresh ? ' · <b>new since you last downloaded it</b>' : seen === m.version ? ' · the one you have' : ''}` : '';
-    return card(IC.book, '1 · Reference document',
-      `How every app works${m?.apps?.length ? `, plus ${esc(andList(m.apps))}’s reference data` : ''}. Upload it to the ChatGPT project when it changes.`,
+    return card(IC.book, '1 · Reference document', '',
       `<button type="button" class="mg-ghost" data-au="download" ${m ? '' : 'disabled'}>${IC.down}<span>${st.downloaded ? 'Downloaded ✓' : 'Download'}</span></button>`,
       meta ? `<p class="au-meta ${fresh ? 'au-new' : ''}">${meta}</p>` : '');
   }
 
   function dailyView() {
     if (!st.linked) {
-      return card(IC.day, '2 · Daily update', `Every app at once once this device is linked. For now, copy ${esc(name)} on its own.`,
+      return card(IC.day, '2 · Daily update', '',
         o.context ? `<button type="button" class="mg-go" data-au="copy-app">${IC.copy}<span>${st.copied === 'app' ? 'Copied ✓' : 'Copy'}</span></button>` : '');
     }
-    return card(IC.day, '2 · Daily update', 'All your apps: where things stand, and what changed since yesterday. Paste it to start a chat.',
+    return card(IC.day, '2 · Daily update', '',
       `<button type="button" class="mg-go" data-au="copy-daily" ${st.daily ? '' : 'disabled'}>${IC.copy}<span>${st.copied === 'daily' ? 'Copied ✓' : st.loading ? 'Getting…' : 'Copy'}</span></button>`);
   }
 
   /** The paste card's frame, for a caller that keeps its own textarea and button inside it. */
-  const pasteCard = inner => card(IC.paste, '3 · Paste ChatGPT’s reply',
-    takes ? `Any reply. ${esc(name)}’s part is checked here; other apps’ parts wait in those apps.` : `Any reply. ${esc(name)} takes no changes itself; other apps’ parts wait in those apps.`,
-    '', inner, 'au-paste');
+  const pasteCard = inner => card(IC.paste, '3 · Paste reply', '', '', inner, 'au-paste');
 
   function footView() {
     const last = canShare ? lastShared(app) : null;
-    const line = !st.linked ? 'This device isn’t linked to the App Hub.'
+    const line = !st.linked ? 'Not linked'
       : st.packError ? st.packError
-      : last && !last.ok ? 'Linked to the App Hub, but the last share didn’t arrive. It tries again next time.'
+      : last && !last.ok ? 'Last share failed, will retry'
       : 'Linked to the App Hub ✓';
     const form = st.keyOpen ? `<div class="au-key">
-        <p class="mg-note">Easiest: on the App Hub, open AI Updates and tap <b>Set up</b> next to ${esc(name)}. Or paste the key from there:</p>
         <label class="mg-stack" for="au-key">App Hub key<input id="au-key" type="password" autocomplete="off" spellcheck="false" value=""></label>
         <div class="mg-actions">${st.linked ? '<button type="button" class="mg-ghost" data-au="key-forget">Unlink</button>' : ''}<button type="button" class="mg-go" data-au="key-save">Save key</button></div></div>` : '';
     return `<div class="au-foot"><span>${esc(line)}</span><span class="au-foot-btns">
@@ -245,12 +241,11 @@ export function openUpdates(o) {
       const f = st.forwarded;
       if (!f) return '';
       const out = [];
-      if (f.sent.length) out.push(`Sent on: ${esc(andList(names(f.sent)))} will have ${f.sent.length === 1 ? 'its part' : 'their parts'} waiting next time you open ${f.sent.length === 1 ? 'it' : 'them'}.`);
+      if (f.sent.length) out.push(`Sent to ${esc(andList(names(f.sent)))}`);
       if (f.failed.length) out.push(f.reason === 'no-key'
-        ? `Also for ${esc(andList(names(f.failed)))}: link this device to the App Hub to send it on, or paste the same reply there.`
+        ? `Also for ${esc(andList(names(f.failed)))}: paste it there`
         : `Couldn’t send on to ${esc(andList(names(f.failed)))}. Paste the same reply there.`);
-      if (f.skipped.length) out.push(`${esc(andList(names(f.skipped)))} ${f.skipped.length === 1 ? 'takes' : 'take'} no changes, so nothing was sent there.`);
-      return out.length ? `<p class="mg-note au-sent">${out.join(' ')}</p>` : '';
+      return out.length ? `<p class="mg-note au-sent">${out.join('<br>')}</p>` : '';
     }
 
     function resultView() {
@@ -259,7 +254,6 @@ export function openUpdates(o) {
       const applied = !!st.results;
       return `${r.summary ? `<p class="au-summary">${esc(r.summary)}</p>` : ''}
         ${st.fromInbox ? `<p class="mg-note">Pasted in ${esc(APP_NAMES[st.fromInbox.from] ?? 'another app')} ${esc(day(st.fromInbox.received_at))}.</p>` : ''}
-        ${r.legacy ? '<p class="mg-note">This is an older-style block (v6). It still works.</p>' : ''}
         ${r.stillOpen.length ? `<div class="au-open"><b>Still open</b><ul>${r.stillOpen.map(s => `<li>${esc(s)}</li>`).join('')}</ul></div>` : ''}
         ${r.note ? `<p class="mg-note au-note">${esc(r.note)}</p>` : ''}
         ${st.rows.length ? `<ul class="au-list">${st.rows.map(rowHtml).join('')}</ul>` : ''}
@@ -275,7 +269,7 @@ export function openUpdates(o) {
     function render() {
       const sheet = wrap.querySelector('.mg-sheet');
       const y = sheet.scrollTop;
-      body.innerHTML = st.result ? resultView() : home.html(home.pasteCard(`<textarea id="au-reply" rows="5" aria-label="ChatGPT’s reply" placeholder="Paste the whole reply">${esc(st.reply)}</textarea>
+      body.innerHTML = st.result ? resultView() : home.html(home.pasteCard(`<textarea id="au-reply" rows="5" aria-label="Reply" placeholder="Paste reply">${esc(st.reply)}</textarea>
           <div class="mg-actions"><button type="button" class="mg-go" data-au="check">Check it</button></div>`));
       sheet.scrollTop = y;
     }
@@ -291,8 +285,7 @@ export function openUpdates(o) {
       st.rows = takes ? r.items.map(item => ({ item, resolved: null, choice: undefined, ticked: false, selectable: false })) : [];
       render();
       if (!fromInbox && !r.legacy) {
-        const skipped = r.others.filter(a => !APP_NAMES[a] || CONTEXT_ONLY.has(a));
-        forwardParts(r.envelope, app).then(f => { st.forwarded = { ...f, skipped }; if (!closed) render(); });
+        forwardParts(r.envelope, app).then(f => { st.forwarded = f; if (!closed) render(); });
       }
       for (const row of st.rows) {
         if (row.item.status === 'invalid' || row.item.status === 'unknown') continue;

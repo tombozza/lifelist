@@ -248,7 +248,6 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 
 /* ---- Notes ---- */
 .notes-head { margin-bottom: var(--sp-3); display:grid; gap: var(--sp-1); }
-.notes-sub { font-size: var(--text-sm); }
 .notes-bar { margin-bottom: var(--sp-3); }
 .note-head { align-items:flex-start; margin-bottom: var(--sp-3); }
 .note-add, .note-save { margin-bottom: var(--sp-3); }

@@ -771,13 +771,8 @@ function renderRecoveryNotice(container, kind) {
     const note = document.createElement('div');
     note.className = 'ui-note warn tag-recovery-note';
     note.innerHTML = kind === 'tags'
-        ? `<span><strong>${n} tag${n === 1 ? '' : 's'} recovered.</strong> They were still on your cards but their
-           category had been overwritten by a sync, so they'd stopped showing. The names couldn't be recovered \u2014
-           rename each <em>Recovered&nbsp;N</em> below and the tasks keep it. Delete one instead and it comes off
-           those tasks properly.</span>`
-        : `<span><strong>${n} theme${n === 1 ? '' : 's'} rebuilt.</strong> ${n === 1 ? 'A task was' : 'Tasks were'} still
-           filed under ${n === 1 ? 'a theme' : 'themes'} that had gone missing, so ${n === 1 ? 'it has' : 'they have'}
-           been put back from the name in the id. Rename or recolour as you like \u2014 the tasks stay attached.</span>`;
+        ? `<span><strong>${n} tag${n === 1 ? '' : 's'} recovered.</strong> Rename or delete ${n === 1 ? 'it' : 'them'}.</span>`
+        : `<span><strong>${n} theme${n === 1 ? '' : 's'} rebuilt.</strong> Rename or recolour ${n === 1 ? 'it' : 'them'}.</span>`;
     const dismiss = document.createElement('button');
     dismiss.className = 'ui-btn small';
     dismiss.textContent = 'Dismiss';
@@ -1023,7 +1018,7 @@ function syncQuickAddVisibility() {
     document.getElementById('quick-add').classList.toggle('quick-add-narrow', currentView === 'today');
     const target = quickAddPlanTarget();
     document.getElementById('quick-add-input').placeholder = target === undefined
-        ? 'Quick add \u2014 lands in Review\u2026'
+        ? 'Quick add'
         : 'Add to ' + (target === todayStr() ? 'today' : longDay(target)) + '\u2026';
 }
 
@@ -1167,7 +1162,7 @@ function renderReviewBanner() {
     banner.innerHTML = '';
     const txt = document.createElement('span');
     txt.className = 'ui-spacer';
-    txt.innerHTML = `<strong>${queue.length}</strong> new item${queue.length>1?'s':''} to review — decide what goes on the board.`;
+    txt.innerHTML = `<strong>${queue.length}</strong> to review`;
     banner.appendChild(txt);
     const actions = document.createElement('div');
     actions.className = 'ui-actions';
@@ -1223,7 +1218,7 @@ function renderStaleBanner() {
     banner.innerHTML = '';
     const txt = document.createElement('span');
     txt.className = 'ui-spacer';
-    txt.innerHTML = `<strong>${stale.length}</strong> task${stale.length>1?'s have':' has'} been sitting over ${STALE_DAYS} days. Snooze the ones you won't pick up soon.`;
+    txt.innerHTML = `<strong>${stale.length}</strong> task${stale.length>1?'s':''} over ${STALE_DAYS} days old`;
     banner.appendChild(txt);
     const actions = document.createElement('div');
     actions.className = 'ui-actions';
@@ -1430,8 +1425,6 @@ function renderNotes() {
     const y = window.scrollY;
     renderNoteBar();
     const parked = noteSel === 'parked' || (noteSel !== 'new' && !getSmartNote(noteSel) && !noteDraft);
-    const sub = document.querySelector('#view-notes .notes-sub');
-    if (sub) sub.style.display = parked && !noteDraft ? '' : 'none';
     const tf = document.getElementById('notes-tag-filter');
     tf.style.display = parked && !noteDraft ? '' : 'none';
     if (noteDraft) renderNoteBuilder();
@@ -1473,7 +1466,7 @@ function renderParkedNotes() {
     container.innerHTML = '';
     const all = notesTasks();
     if (!all.length) {
-        container.appendChild(emptyState('Nothing parked here yet', 'Use a card\u2019s \u22ef menu &rsaquo; <strong>Move to Notes</strong> to park it.'));
+        container.appendChild(emptyState('Nothing parked here yet'));
         return;
     }
     const grouped = {};
@@ -1570,7 +1563,7 @@ function renderNoteBar() {
     add.className = 'ui-chip';
     add.setAttribute('aria-pressed', noteDraft && !noteDraft.id ? 'true' : 'false');
     add.textContent = '+ Filter';
-    add.title = 'Filter by theme, sub-theme or tag — then save it as a note';
+    add.title = 'New note';
     add.addEventListener('click', () => {
         noteDraft = { id: null, name: '', inc: emptyRules(), exc: emptyRules() };
         renderNotes();
@@ -1667,11 +1660,6 @@ function renderNoteBuilder() {
     const box = document.createElement('div');
     box.className = 'ui-card flat note-builder';
 
-    const hint = document.createElement('p');
-    hint.className = 'ui-hint';
-    hint.textContent = 'Tap once to show, twice to leave out, again to clear. Pick a theme to see its sub-themes.';
-    box.appendChild(hint);
-
     const stateOf = (g, v) => d.inc[g].includes(v) ? 'inc' : d.exc[g].includes(v) ? 'exc' : '';
     const cycle = (g, v) => {
         const st = stateOf(g, v);
@@ -1725,7 +1713,7 @@ function renderNoteBuilder() {
     const name = document.createElement('input');
     name.type = 'text';
     name.className = 'ui-input';
-    name.placeholder = 'Name this note, e.g. Black Friday';
+    name.placeholder = 'Name';
     name.value = d.name;
     name.addEventListener('input', () => { d.name = name.value; });
     const ok = document.createElement('button');
@@ -1771,13 +1759,9 @@ function renderNoteBuilder() {
     }
     container.appendChild(save);
 
+    if (!hasRules(d.inc)) return;
     const label = document.createElement('div');
     label.className = 'ui-label list-group-label';
-    if (!hasRules(d.inc)) {
-        label.textContent = 'Pick something to show';
-        container.appendChild(label);
-        return;
-    }
     const tasks = noteTasks(d);
     label.textContent = describeRules(d) + ' · ' + tasks.length;
     container.appendChild(label);
@@ -2726,10 +2710,9 @@ function renderToday() {
     tasks.forEach(t => list.appendChild(todoRow(t, 'day', tasks)));
     if (day >= today) makeTodoDropList(list, day);
     if (!tasks.length) {
-        const past = day < today;
-        list.appendChild(todoEmpty(past ? 'Anything unfinished from this day rolled forward to today.'
+        list.appendChild(todoEmpty(day < today ? 'Nothing planned'
             : hiddenN ? 'Nothing ' + todayFocus() + ' planned.'
-            : doneOn(day).length ? 'All done.' : 'Nothing planned' + (day === today ? ' for today yet.' : '.')));
+            : doneOn(day).length ? 'All done.' : 'Nothing planned'));
     }
 
     todoSection(host, 'Done', doneOn(day).filter(todayFocusPass), todayDoneOpen, () => { todayDoneOpen = !todayDoneOpen; render(); }, 'done');
@@ -2764,7 +2747,7 @@ function renderReadySheet() {
     const ready = readyTasks().filter(todayFocusPass);   // follows Today's Work / Home switch
     const list = todoList(host);
     ready.forEach(t => list.appendChild(todoRow(t, 'ready', ready)));
-    if (!ready.length) list.appendChild(todoEmpty('Nothing in Ready. Move cards into Live on the board, or pick from the backlog below.'));
+    if (!ready.length) list.appendChild(todoEmpty('Nothing in Ready'));
     todoSection(host, 'From the board backlog', boardBacklogTasks().filter(todayFocusPass), todayBacklogOpen,
         () => { todayBacklogOpen = !todayBacklogOpen; renderReadySheet(); }, 'backlog');
     host.scrollTop = y;
@@ -2845,11 +2828,6 @@ function renderAdminTags(container) {
 
     renderRecoveryNotice(container, 'tags');
 
-    const intro = document.createElement('p');
-    intro.className = 'ui-hint admin-intro';
-    intro.innerHTML = 'Tags cut across themes, so one task can be Work <em>and</em> Barney <em>and</em> Weekend. A category groups related tags &mdash; people, when something fits, a trip you\u2019re planning.';
-    container.appendChild(intro);
-
     const cats = allTagCategories();
     if (!cats.length) {
         container.appendChild(emptyState('No tag categories yet.'));
@@ -2908,7 +2886,7 @@ function renderAdminTags(container) {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'ui-input';
-        input.placeholder = 'Add a tag to ' + cat.name + '\u2026';
+        input.placeholder = 'Add tag';
         input.dataset.tagAddFor = cat.id;
         // Adding redraws the whole page, so the box typed into is gone: put the
         // cursor in its replacement and hold the scroll, so Enter, name, Enter…
@@ -2986,7 +2964,7 @@ function recoveredTagFixer(cat, tags) {
     wrap.className = 'tag-fix';
     const head = document.createElement('div');
     head.className = 'ui-label';
-    head.textContent = tags.length + ' to sort out \u2014 named from the tasks still carrying them';
+    head.textContent = tags.length + ' to sort out';
     wrap.appendChild(head);
 
     const targets = (cat.tags || []).filter(t => !t.recovered);
@@ -3181,7 +3159,7 @@ function renderAdminArchive(container) {
     hdr.innerHTML = '<h3 class="ui-h2">Archive</h3>';
     const archiveBtn = document.createElement('button');
     archiveBtn.className = 'ui-btn small';
-    archiveBtn.textContent = 'Archive completed now';
+    archiveBtn.textContent = 'Archive now';
     archiveBtn.addEventListener('click', () => { archiveCompleted(); renderAdmin(); });
     hdr.appendChild(archiveBtn);
     container.appendChild(hdr);
@@ -3190,13 +3168,9 @@ function renderAdminArchive(container) {
     // state is one D1 row, which tops out around 2 MB; the archive was ~90% of it.
     const sizeNote = document.createElement('div');
     const bytes = payloadBytes(syncPayload());
-    const ids = new Set(); state.archive.forEach(w => w.tasks.forEach(t => ids.add(t.id)));
-    const entries = archiveEntryCount(state.archive);
     const cloud = syncStatus.cloudBytes;
     sizeNote.className = 'ui-note' + (Math.max(bytes, cloud) > ARCHIVE_WARN_BYTES ? ' warn' : '');
-    sizeNote.innerHTML = `<p>Synced data is <b>${formatBytes(bytes)}</b> on this device` +
-        (cloud && Math.abs(cloud - bytes) > 1024 ? ` and <b>${formatBytes(cloud)}</b> in the cloud` : '') +
-        ` (limit about 2 MB). The archive holds ${entries} ${entries === 1 ? 'entry' : 'entries'} for ${ids.size} tasks.</p>`;
+    sizeNote.innerHTML = `<p><b>${formatBytes(bytes)}</b> of 2 MB</p>`;
     const compactBtn = document.createElement('button');
     compactBtn.className = 'ui-btn small';
     compactBtn.textContent = 'Compact archive';
@@ -3214,7 +3188,7 @@ function renderAdminArchive(container) {
     container.appendChild(sizeNote);
 
     if (!state.archive.length) {
-        container.appendChild(emptyState('No archived tasks yet', 'Tasks in the Complete column are archived at week end.'));
+        container.appendChild(emptyState('No archived tasks yet'));
         return;
     }
     [...state.archive].reverse().forEach(week => {
@@ -3252,12 +3226,12 @@ function renderAdminData(container) {
 
     const exportBtn = document.createElement('button');
     exportBtn.className = 'ui-btn block';
-    exportBtn.textContent = 'Download JSON backup';
+    exportBtn.textContent = 'Download backup';
     exportBtn.addEventListener('click', exportData);
 
     const importLabel = document.createElement('label');
     importLabel.className = 'ui-btn block';
-    importLabel.textContent = 'Import JSON backup';
+    importLabel.textContent = 'Import backup';
     const importInput = document.createElement('input');
     importInput.type = 'file'; importInput.accept = '.json'; importInput.style.display = 'none';
     importInput.addEventListener('change', e => { if (e.target.files[0]) importData(e.target.files[0]); });
@@ -3739,8 +3713,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
         }
         setRecurTodayFields(t.recurring);
         const inList = document.getElementById('task-in-list');
-        const days = daysSince(t.createdDate);
-        inList.textContent = `Added ${formatDateShort(t.createdDate)} · ${days === 0 ? 'in list since today' : days + ' day' + (days === 1 ? '' : 's') + ' in list'}`;
+        inList.textContent = `Added ${formatDateShort(t.createdDate)}`;
         inList.style.display = '';
     } else {
         document.getElementById('task-in-list').style.display = 'none';
@@ -4119,7 +4092,7 @@ function renderTagPicker() {
     container.innerHTML = '';
     const cats = allTagCategories().filter(c => (c.tags || []).length);
     if (!cats.length) {
-        container.innerHTML = '<p class="ui-hint">No tag categories yet &mdash; add one in Admin &rsaquo; Tags.</p>';
+        container.innerHTML = '<p class="ui-hint">No tags yet</p>';
         return;
     }
     // Tom (11 Nov 2026): no folded menus — every category is one line that
@@ -4203,7 +4176,7 @@ function renderSubtaskEditor() {
                 out.title = 'On the board' + (col ? ' · ' + col.name : '');
                 out.disabled = true;
             } else {
-                out.title = 'Make this step a card on the board';
+                out.title = 'To board';
                 out.addEventListener('click', () => {
                     const t = modalSubtasks[idx];
                     if (!t.title.trim()) { input.focus(); return; }
@@ -4224,8 +4197,8 @@ function renderSubtaskEditor() {
         del.type = 'button';
         del.className = 'ui-btn quiet icon small subtask-del';
         del.innerHTML = '&times;';
-        del.title = 'Remove this step';
-        del.setAttribute('aria-label', 'Remove this step');
+        del.title = 'Remove';
+        del.setAttribute('aria-label', 'Remove');
         del.addEventListener('click', () => { modalSubtasks.splice(idx, 1); renderSubtaskEditor(); });
         row.appendChild(del);
 
@@ -4272,7 +4245,7 @@ function renderThemePicker() {
     add.type = 'button';
     add.className = 'ui-chip';
     add.textContent = '+ New theme';
-    add.title = 'Create a theme without leaving this task';
+    add.title = 'New theme';
     add.addEventListener('click', () => openThemeModal(null, { fromTask: true }));
     container.appendChild(add);
     // One line, chosen first then the ones used most, so the usual theme is
@@ -5492,7 +5465,7 @@ function refreshPasswordUI(enabled) {
     document.getElementById('password-set-row').style.display = 'none';
     const status = document.getElementById('password-status');
     if (status) {
-        status.textContent = enabled ? 'This site is locked. A password is required on each device.' : '';
+        status.textContent = enabled ? 'Locked' : '';
         status.style.display = enabled ? '' : 'none';
     }
     document.getElementById('password-logout-row').style.display = enabled ? '' : 'none';
@@ -5548,7 +5521,7 @@ function syncState() {
     }
     if (!syncStatus.lastOkAt) return { kind: '', text: 'Syncing…', tip: 'Connecting to sync' };
     if (Date.now() - Math.max(syncStatus.lastOkAt, syncStatus.visibleSince) > SYNC_STALE_MS) return { kind: 'warn', text: since, tip: since + '. Tap to sync now.' };
-    if (big) return { kind: 'warn', text: formatBytes(Math.max(syncStatus.bytes, syncStatus.cloudBytes)), tip: 'Synced data is close to the 2 MB limit. Settings › Archive › Compact archive.' };
+    if (big) return { kind: 'warn', text: formatBytes(Math.max(syncStatus.bytes, syncStatus.cloudBytes)), tip: 'Nearly full' };
     return { kind: 'good', text: '', tip: 'Synced at ' + hhmm(syncStatus.lastOkAt) + (syncStatus.bytes || syncStatus.cloudBytes ? ' · ' + formatBytes(syncStatus.bytes || syncStatus.cloudBytes) : '') };
 }
 

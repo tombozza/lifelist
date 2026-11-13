@@ -23,6 +23,8 @@ if (typeof customElements !== 'undefined' && !customElements.get('magic-mark')) 
 }
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/** Run it's cost note, short: no model name, "about" as "~" ("Claude · about 0.3¢" → "~0.3¢"). */
+const costNote = s => String(s).replace(/^\s*(Claude|Haiku|Sonnet|Opus)\s*·\s*/i, '').replace(/\babout\s+/gi, '~');
 const ROUTE_KEY = 'magic-route';
 const getRoute = () => { try { return localStorage.getItem(ROUTE_KEY); } catch { return null; } };
 const setRoute = v => { try { localStorage.setItem(ROUTE_KEY, v); } catch { /* private mode */ } };
@@ -41,7 +43,7 @@ const setRoute = v => { try { localStorage.setItem(ROUTE_KEY, v); } catch { /* p
  *                                    what prompt()/run() use; while a returned promise is pending, Copy and Run wait.
  * @param {boolean|(() => Promise<boolean>)} [o.canRun]  Is the paid route available (the site has a key)?
  * @param {(status:(s:string)=>void) => Promise<string>} [o.run]  Paid route: returns the reply text.
- * @param {string} [o.runNote]        e.g. "Claude · about 1p".
+ * @param {string} [o.runNote]        e.g. "~1p" (a model name or "about" is shortened away).
  * @param {string} [o.runOff]         The paid route is switched off for this job on purpose (it costs too much):
  *                                    Run it shows greyed out with this note, e.g. "Switched off: too costly". Leave
  *                                    out `run`. Without it a job with no `run` says one-tap isn't set up.
@@ -123,9 +125,7 @@ export function openMagic(o) {
     function keyForm() {
       const has = !!o.key.has();
       return `<div class="mg-stack">
-        <p class="mg-note">${has ? 'Change the API key this device uses.' : 'Run it needs an Anthropic API key — a one-off setup.'}
-          Make one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com ↗</a>
-          and add a little credit. It’s saved on this device only.</p>
+        <p class="mg-note">API key · <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com ↗</a></p>
         <label class="mg-stack" for="mg-key">Your API key<input id="mg-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…"></label>
         <div class="mg-actions">${has ? `<button type="button" class="mg-ghost" data-mg="key-clear">Remove key</button><button type="button" class="mg-ghost" data-mg="key-cancel">Cancel</button>` : ''}
           <button type="button" class="mg-go" data-mg="key-save">Save key</button></div></div>`;
@@ -134,12 +134,12 @@ export function openMagic(o) {
     function routes() {
       if (o.runOff) return `<div class="mg-seg" role="group" aria-label="How to do it">
         <button type="button" disabled aria-pressed="false">Run it<small>${esc(o.runOff)}</small></button>
-        <button type="button" data-mg="route" data-r="free" aria-pressed="true">Free<small>In ChatGPT or claude.ai</small></button></div>`;
-      if (!st.offer) return `<p class="mg-note">Free route: copy the prompt into ChatGPT or claude.ai. (One-tap isn’t set up on this site.)</p>`;
+        <button type="button" data-mg="route" data-r="free" aria-pressed="true">Free</button></div>`;
+      if (!st.offer) return '';
       const on = r => st.route === r ? 'true' : 'false';
       return `<div class="mg-seg" role="group" aria-label="How to do it">
-        <button type="button" data-mg="route" data-r="run" aria-pressed="${on('run')}">Run it<small>${paid() ? esc(o.runNote ?? 'Claude · about 1p') : 'Needs an API key'}</small></button>
-        <button type="button" data-mg="route" data-r="free" aria-pressed="${on('free')}">Free<small>In ChatGPT or claude.ai</small></button></div>`;
+        <button type="button" data-mg="route" data-r="run" aria-pressed="${on('run')}">Run it<small>${paid() ? esc(costNote(o.runNote ?? '~1p')) : 'Needs an API key'}</small></button>
+        <button type="button" data-mg="route" data-r="free" aria-pressed="${on('free')}">Free</button></div>`;
     }
 
     function freeSteps() {
@@ -151,10 +151,10 @@ export function openMagic(o) {
           ? `<div class="mg-stack">${esc(o.prepare.note ?? '')}<div><button type="button" class="mg-ghost" data-mg="prepare" ${st.preparing ? 'disabled' : ''}>${esc(o.prepare.label)}</button></div></div>`
           : o.prepare.check === false
             ? `<div class="mg-stack">${esc(st.prepared)}<div><button type="button" class="mg-ghost" data-mg="prepare" ${st.preparing ? 'disabled' : ''}>${esc(o.prepare.again ?? o.prepare.label)}</button></div></div>`
-            : `<label class="mg-stack" for="mg-prep">Check the text, fix anything wrong<textarea id="mg-prep" rows="5">${esc(st.prepared)}</textarea></label>`, st.prepared != null) : ''}
+            : `<label class="mg-stack" for="mg-prep">Check<textarea id="mg-prep" rows="5">${esc(st.prepared)}</textarea></label>`, st.prepared != null) : ''}
         ${step(`<div class="mg-stack">Copy the prompt<div><button type="button" class="${needPrep ? 'mg-ghost' : 'mg-go'}" data-mg="copy" ${needPrep || st.updating ? 'disabled' : ''}>${st.copied ? 'Copied ✓' : 'Copy prompt'}</button></div></div>`, st.copied)}
-        ${step(`Paste it into <a href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT ↗</a> or <a href="https://claude.ai/new" target="_blank" rel="noopener">claude.ai ↗</a> and send it.`)}
-        ${step(`<label class="mg-stack" for="mg-reply">Paste the whole reply here<textarea id="mg-reply" rows="5" placeholder="The reply goes here…">${esc(st.reply)}</textarea></label>`)}
+        ${step(`Send it: <a href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT ↗</a> · <a href="https://claude.ai/new" target="_blank" rel="noopener">claude.ai ↗</a>`)}
+        ${step(`<label class="mg-stack" for="mg-reply">Reply<textarea id="mg-reply" rows="5">${esc(st.reply)}</textarea></label>`)}
       </ol>
       ${o.freeNote ? `<p class="mg-note">${esc(o.freeNote)}</p>` : ''}
       <div class="mg-actions"><button type="button" class="mg-go" data-mg="read">Use this reply</button></div>`;
@@ -172,8 +172,8 @@ export function openMagic(o) {
       body.innerHTML = `${routes()}
         ${st.route === 'run'
           ? (o.key && (st.editingKey || !paid())) ? keyForm()
-          : `<div class="mg-actions mg-split"><span class="mg-note">Nothing is saved until you check it.</span><button type="button" class="mg-go" data-mg="run" ${working ? 'disabled' : ''}>Run it</button></div>
-             ${o.key && !st.canRun ? `<p class="mg-note">Using your API key on this device · <button type="button" class="mg-link" data-mg="key-edit">Change key</button></p>` : ''}`
+          : `<div class="mg-actions"><button type="button" class="mg-go" data-mg="run" ${working ? 'disabled' : ''}>Run it</button></div>
+             ${o.key && !st.canRun ? `<p class="mg-note"><button type="button" class="mg-link" data-mg="key-edit">Change key</button></p>` : ''}`
           : freeSteps()}
         ${working ? `<p class="mg-status" role="status"><i></i><span class="mg-status-text">${esc(st.updating ? 'Updating…' : st.status || 'Working…')}</span></p>` : ''}
         ${st.error ? `<p class="mg-error" role="alert">${esc(st.error)}</p>` : ''}`;
