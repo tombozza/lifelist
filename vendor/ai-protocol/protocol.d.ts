@@ -54,7 +54,24 @@ export function contextBlock(o: { app: string; name: string; v: number; data: un
 export const HUB_URL: string;
 export function hubKey(store?: KVStore): string;
 export function setHubKey(key: string, store?: KVStore): boolean;
+/** A short message at the bottom of the page for a few seconds. */
+export function showHubMessage(text: string, doc?: Document): void;
 export function captureHubKey(loc?: Location, hist?: History, store?: KVStore): boolean;
 export function lastShared(app: string, store?: KVStore): { at: number; ok: boolean; sig: string; status: number } | null;
 export function shareContext(schema: AppSchema, context: () => { data: unknown; note?: string },
-  opts?: { store?: KVStore; fetch?: typeof fetch; now?: () => number; force?: boolean }): Promise<{ shared: boolean; reason?: string }>;
+  opts?: { store?: KVStore; fetch?: typeof fetch; now?: () => number; force?: boolean; notify?: (text: string) => void }): Promise<{ shared: boolean; reason?: string }>;
+
+// The shared page (ARCHITECTURE §8c)
+export const CONTEXT_ONLY: Set<string>;
+export interface InboxItem { id: string; summary: string; from: string; section: { v: number; actions: unknown[] }; received_at: string }
+type HubOpts = { store?: KVStore; fetch?: typeof fetch };
+export function hubCall(path: string, o?: HubOpts & { method?: string; body?: unknown }): Promise<any>;
+export function fetchPack(part?: 'meta' | 'reference' | 'daily', o?: HubOpts): Promise<{ version: string; since?: string; apps?: string[]; text?: string }>;
+export function fetchInbox(app: string, o?: HubOpts): Promise<InboxItem[]>;
+export function clearInbox(app: string, id: string, o?: HubOpts): Promise<unknown>;
+export function shareReference(app: string, ref: { title: string; text: string }, o?: HubOpts & { force?: boolean }): Promise<{ shared: boolean; reason?: string }>;
+export function forwardParts(envelope: unknown, fromApp: string, o?: HubOpts): Promise<{ sent: string[]; failed: string[]; reason?: string }>;
+export function inboxReply(app: string, item: InboxItem): string;
+export function downloadText(name: string, text: string, doc?: Document): void;
+export function referenceSeen(store?: KVStore): string;
+export function markReferenceSeen(version: string, store?: KVStore): void;

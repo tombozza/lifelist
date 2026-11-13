@@ -1,8 +1,9 @@
-// Settings › AI Updates: paste ChatGPT's block, preview, tick, Apply (sites/ai-updates).
+// AI Updates (sites/ai-updates): the ✨ AI button in the top bar, and Settings › AI Updates, open the
+// shared AI page: paste ChatGPT's block, preview, tick, Apply.
 // A module loaded after app.js; app.js exposes its own functions as window.lifeListApp,
 // and ai/logic.js turns each action into calls to them. Nothing is written until Apply.
 
-import { openUpdates } from '../vendor/ai-protocol/updates-sheet.js';
+import { openUpdates, mountAiButton } from '../vendor/ai-protocol/updates-sheet.js';
 import { captureHubKey, shareContext } from '../vendor/ai-protocol/protocol.js';
 import schema from './schema.js';
 import { buildContext, resolveItem, makeHandlers } from './logic.js';
@@ -36,7 +37,7 @@ function keepScroll(fn) {
 
 function open() {
   app.closeSettings();   // the sheet isn't a <dialog>, so an open Settings sheet would sit on top of it
-  openUpdates({
+  return openUpdates({
     schema,
     context,
     resolve: async item => resolveItem(item, app.state, app.env()),
@@ -49,4 +50,10 @@ function open() {
   });
 }
 
-document.getElementById('settings-ai-updates')?.addEventListener('click', open);
+// The ✨ AI button, the same in every app, before the sync dot. It counts parts of a reply pasted in
+// another app that are waiting here, and recounts when the page closes.
+const header = document.getElementById('app-header');
+const ai = header ? mountAiButton(header, { app: schema.app, open }) : null;
+if (ai) document.getElementById('sync-status')?.before(ai.button);
+
+document.getElementById('settings-ai-updates')?.addEventListener('click', () => open().then(() => ai?.refresh()));

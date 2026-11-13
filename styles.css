@@ -324,10 +324,12 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
         user-select:none;
     }
 }
-/* Four view tabs and Settings fill a phone's bar; the name gives way */
+/* Four view tabs, ✨ AI, the sync dot and Settings fill a phone's bar; the name gives way */
 @media (max-width: 440px) {
     .ui-bar > .logo { display:none; }
-    .ui-bar > .view-tabs { flex:1; }
+    .ui-bar > .view-tabs { flex:1; min-width:0; }
+    .ui-bar > .view-tabs > .tab { padding-inline:6px; min-width:0; }
+    .ui-bar { gap:6px; }
     .today-focus .focus-seg { inline-size:auto; flex:1; }
 }
 

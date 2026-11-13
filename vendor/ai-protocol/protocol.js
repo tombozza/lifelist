@@ -29,6 +29,9 @@ export const APP_NAMES = {
   diary: 'Diary', golf_tracker: 'Golf Tracker', filofax: 'Filofax', swipefy: 'Swipefy', holiday_tracker: 'Holiday Tracker',
 };
 
+/** Apps ChatGPT only reads (they take no changes), so nothing is passed to them. */
+export const CONTEXT_ONLY = new Set(['diary', 'filofax', 'swipefy', 'golf_tracker', 'holiday_tracker']);
+
 /** The envelope's own schema (the apps' sections are checked separately, by each app). */
 export const ENVELOPE_SCHEMA = {
   type: 'object',
@@ -307,6 +310,23 @@ export const HUB_URL = 'https://app-hub-865.pages.dev';
 const HUB_KEY = 'ai-updates-hub-key';
 const SHARED = app => `ai-updates-shared:${app}`;
 const RESHARE_MS = 6 * 3600 * 1000;
+const JUST_LINKED = 'ai-updates-hub-linked';
+
+/** A short message at the bottom of the page, gone after a few seconds. Never moves the page. */
+export function showHubMessage(text, doc = globalThis.document) {
+  try {
+    if (!doc?.body) return;
+    const el = doc.createElement('div');
+    el.setAttribute('role', 'status');
+    el.textContent = text;
+    el.style.cssText = 'position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);'
+      + 'z-index:2147483647;max-width:calc(100vw - 32px);box-sizing:border-box;padding:10px 16px;border-radius:12px;'
+      + 'background:#1f2328;color:#fff;font:500 15px/1.35 system-ui,-apple-system,sans-serif;text-align:center;'
+      + 'box-shadow:0 4px 18px rgba(0,0,0,.25);pointer-events:none;';
+    doc.body.appendChild(el);
+    setTimeout(() => el.remove(), 4500);
+  } catch { /* no page */ }
+}
 
 /** The App Hub key kept on this device ('' when sharing isn't set up). */
 export function hubKey(store = defaultStore()) { try { return store.getItem(HUB_KEY) || ''; } catch { return ''; } }
@@ -327,6 +347,7 @@ export function captureHubKey(loc = globalThis.location, hist = globalThis.histo
     const m = /(?:^#|&)ai-hub-key=([A-Za-z0-9_-]{16,128})(?=&|$)/.exec(loc?.hash || '');
     if (!m) return false;
     setHubKey(m[1], store);
+    try { store.setItem(JUST_LINKED, '1'); } catch { /* blocked */ }
     const rest = loc.hash.replace(/(^#|&)ai-hub-key=[^&]*/, '$1').replace(/^#&/, '#').replace(/&$/, '');
     hist?.replaceState?.(hist.state, '', `${loc.pathname}${loc.search}${rest === '#' ? '' : rest}`);
     return true;
@@ -343,10 +364,13 @@ export function lastShared(app, store = defaultStore()) {
  * Skipped when this device has no key, or when the same data went in the last 6 hours (unless force).
  * @returns {Promise<{shared:boolean, reason?:string}>}
  */
-export async function shareContext(schema, context, { store = defaultStore(), fetch: f = globalThis.fetch, now = () => Date.now(), force = false } = {}) {
+export async function shareContext(schema, context, { store = defaultStore(), fetch: f = globalThis.fetch, now = () => Date.now(), force = false, notify = showHubMessage } = {}) {
   try {
     captureHubKey(undefined, undefined, store);
     const key = hubKey(store);
+    let linked = false;
+    try { linked = store.getItem(JUST_LINKED) === '1'; } catch { /* blocked */ }
+    if (linked) force = true;
     if (!key) return { shared: false, reason: 'no-key' };
     if (typeof f !== 'function') return { shared: false, reason: 'no-fetch' };
     const c = context();
@@ -360,9 +384,102 @@ export async function shareContext(schema, context, { store = defaultStore(), fe
     });
     const ok = !!res?.ok;
     try { store.setItem(SHARED(schema.app), JSON.stringify({ at: now(), ok, sig, status: res?.status ?? 0 })); } catch { /* blocked */ }
+    const bad = res?.status === 401 || res?.status === 403;
+    if (linked && (ok || bad)) {
+      try { store.removeItem(JUST_LINKED); } catch { /* blocked */ }
+      notify(ok ? 'Linked to the App Hub ✓ This app is now in the daily copy.'
+        : 'The App Hub didn’t accept that key. Tap Set up on the App Hub’s AI tab again.');
+    }
     if (ok) return { shared: true };
-    return { shared: false, reason: res?.status === 401 || res?.status === 403 ? 'bad-key' : `http-${res?.status}` };
+    return { shared: false, reason: bad ? 'bad-key' : `http-${res?.status}` };
   } catch (err) {
     return { shared: false, reason: err?.message ?? 'failed' };
   }
 }
+
+// ---------------------------------------------------------------------------------------
+// One page in every app (ARCHITECTURE §8c): the reference document, the daily update, any paste,
+// and the inbox of parts pasted into another app. All through the App Hub, with the hub key.
+
+/** Call the App Hub with this device's key. Resolves to the parsed JSON; throws a plain message. */
+export async function hubCall(path, { method = 'GET', body, store = defaultStore(), fetch: f = globalThis.fetch } = {}) {
+  const key = hubKey(store);
+  if (!key) throw new Error('This device isn’t linked to the App Hub yet.');
+  const res = await f(`${HUB_URL}${path}`, {
+    method, cache: 'no-store',
+    headers: { 'x-hub-key': key, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401 || res.status === 403) throw new Error('The App Hub didn’t accept this device’s key. Set it up again.');
+  if (!res.ok) throw new Error(data.error || `The App Hub answered ${res.status}.`);
+  return data;
+}
+
+/** The reference document's {version, since, apps} (part 'meta'), or with its text ('reference'), or the daily update ('daily'). */
+export const fetchPack = (part = 'meta', o) => hubCall(`/api/ai-pack?part=${part}`, o);
+
+/** Parts of this app's AI Updates pasted elsewhere, waiting here: [{id, summary, from, section, received_at}]. */
+export const fetchInbox = async (app, o) => (await hubCall(`/api/ai-inbox/${app}`, o)).items ?? [];
+
+/** Forget a waiting part once it's been applied or dismissed. */
+export const clearInbox = (app, id, o) => hubCall(`/api/ai-inbox/${app}?id=${encodeURIComponent(id)}`, { ...o, method: 'DELETE' });
+
+/** A short hash of a text, to tell whether it changed without keeping it. */
+function textHash(t) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return `${t.length}:${(h >>> 0).toString(36)}`;
+}
+
+/**
+ * Send an app's stable reference data (Markdown) for the reference document. Never throws.
+ * Sent only when it changed since this device last sent it (a recipe book is ~600 KB), unless `force`.
+ */
+export async function shareReference(app, { title, text }, o = {}) {
+  const store = o.store ?? defaultStore();
+  const key = `ai-updates-reference-sent:${app}`;
+  const sig = textHash(`${title}\n${text}`);
+  let last = ''; try { last = store.getItem(key) || ''; } catch { /* blocked */ }
+  if (!o.force && last === sig) return { shared: false, reason: 'unchanged' };
+  try {
+    await hubCall(`/api/ai-reference/${app}`, { ...o, method: 'PUT', body: { title, text } });
+    try { store.setItem(key, sig); } catch { /* blocked: sent again next time */ }
+    return { shared: true };
+  } catch (err) { return { shared: false, reason: err?.message ?? 'failed' }; }
+}
+
+/**
+ * Pass every other app's part of a pasted reply to that app's inbox, so it's waiting there.
+ * Apps that take no changes, or that this library doesn't know, are left out.
+ * @returns {Promise<{sent:string[], failed:string[], reason?:string}>}  app ids
+ */
+export async function forwardParts(envelope, fromApp, o = {}) {
+  const sent = [], failed = [];
+  const parts = Object.entries(envelope?.apps ?? {}).filter(([app, s]) => app !== fromApp && APP_NAMES[app] && !CONTEXT_ONLY.has(app) && Array.isArray(s?.actions) && s.actions.length);
+  if (!parts.length) return { sent, failed };
+  if (!hubKey(o.store ?? defaultStore())) return { sent, failed: parts.map(([a]) => a), reason: 'no-key' };
+  const id = String(envelope.id || `pasted-${fingerprint('any', '', envelope)}`);
+  await Promise.all(parts.map(async ([app, section]) => {
+    try { await hubCall(`/api/ai-inbox/${app}`, { ...o, method: 'POST', body: { id, summary: envelope.summary ?? '', from: fromApp, section } }); sent.push(app); }
+    catch { failed.push(app); }
+  }));
+  return { sent, failed };
+}
+
+/** A waiting part as a one-app reply, so the usual check and preview read it. */
+export const inboxReply = (app, item) => JSON.stringify({ protocol: PROTOCOL, v: ENVELOPE_VERSION, id: item.id, summary: item.summary || undefined, apps: { [app]: item.section } });
+
+/** Save text as a file on this device (the reference document). Call inside the tap. */
+export function downloadText(name, text, doc = globalThis.document) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+  const a = doc.createElement('a');
+  a.href = url; a.download = name; a.rel = 'noopener';
+  doc.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+const REF_SEEN = 'ai-updates-reference-downloaded';
+/** The reference version this device last downloaded ('' if never). */
+export const referenceSeen = (store = defaultStore()) => { try { return store.getItem(REF_SEEN) || ''; } catch { return ''; } };
+export const markReferenceSeen = (version, store = defaultStore()) => { try { store.setItem(REF_SEEN, version); } catch { /* blocked */ } };

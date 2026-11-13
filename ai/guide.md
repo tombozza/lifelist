@@ -12,7 +12,7 @@ sub-theme, and tags from tag categories (People, When…).
 
 ## Context
 
-Tom taps **Settings › AI Updates › Copy for ChatGPT** and pastes the block. `data` holds:
+Its block in the daily update (or ✨ AI › **Copy just Life List**) is the context. `data` holds:
 - `today`: the date on Tom's device. Work out "tomorrow", "Friday" and so on from it.
 - `themes`: `id`, `name`, `sub_themes` (names). `hidden: true` themes still exist and can be used.
 - `tag_categories`: `id`, `name`, `tags` (`id`, `name`).

@@ -1,4 +1,16 @@
 /* COPY of sites/_shared/ai-protocol/updates-sheet.css — edit the source there and run node _shared/sync.mjs */
+/* The cards on an app's own page (aiHome), outside the sheet: the magic sheet's variables, so its buttons look the same. */
+.au-home {
+  --mg-accent: var(--magic, var(--accent, #3d4fd8));
+  --mg-on-accent: var(--text-on-accent, #fff);
+  --mg-surface: var(--surface, var(--card, #fff));
+  --mg-surface-2: var(--surface-2, var(--card2, #f2f2f5));
+  --mg-text: var(--text, #1c1d21);
+  --mg-text-2: var(--text-2, var(--muted, #5c5f6a));
+  --mg-border: var(--border-strong, var(--border, #d9d8d3));
+  --mg-r: var(--r-lg, var(--radius, 16px));
+  --mg-r-sm: var(--r-md, var(--radius-sm, 12px));
+}
 /* The AI Updates sheet. Source: sites/_shared/ai-protocol/ — edit there, then sync.
    Builds on magic.css (load that first); only the list rows are new. */
 
@@ -21,3 +33,41 @@
 .au-key { display: grid; gap: 8px; }
 .au-key input { min-height: 44px; font: inherit; font-size: 16px; padding: 0 10px; border-radius: 10px;
   border: 1px solid var(--mg-border); background: var(--mg-surface); color: var(--mg-text); width: 100%; box-sizing: border-box; }
+
+/* The shared page (ARCHITECTURE §8c): the same cards in every app. */
+.au-app { font-weight: 500; color: var(--mg-text-2); }
+.au-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start;
+  padding: 14px; border: 1px solid var(--mg-border); border-radius: var(--mg-r-sm, 12px); background: var(--mg-surface); }
+.au-card-ic { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--mg-surface-2); color: var(--mg-text-2); }
+.au-card-main { min-width: 0; display: grid; gap: 4px; }
+.au-card-main h3 { margin: 0; font-size: 1rem; font-weight: 650; }
+.au-card-main p { margin: 0; font-size: .88rem; line-height: 1.4; color: var(--mg-text-2); }
+.au-card-act { align-self: center; }
+.au-card-act button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.au-card-act svg { width: 18px; height: 18px; }
+.au-meta { font-size: .8rem !important; }
+.au-meta.au-new { color: var(--warning-text, #8a5a00) !important; }
+.au-paste { grid-template-columns: auto minmax(0, 1fr); }
+.au-paste textarea { margin-top: 6px; width: 100%; box-sizing: border-box; }
+.au-paste .mg-actions { justify-content: flex-end; }
+.au-wait { border-color: color-mix(in srgb, var(--mg-accent, #5b5bd6) 45%, var(--mg-border)); background: color-mix(in srgb, var(--mg-accent, #5b5bd6) 8%, var(--mg-surface)); }
+.au-wait .au-card-ic { color: var(--mg-accent, #5b5bd6); background: color-mix(in srgb, var(--mg-accent, #5b5bd6) 14%, transparent); }
+.au-foot { display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: space-between; align-items: center; font-size: .82rem; color: var(--mg-text-2); border-top: 1px solid var(--mg-border); padding-top: 10px; }
+.au-foot-btns { display: inline-flex; gap: 12px; flex-wrap: wrap; }
+.au-sent { padding: 10px 12px; border-radius: var(--mg-r-sm, 12px); background: var(--mg-surface-2); }
+@media (max-width: 480px) {
+  .au-card { grid-template-columns: auto minmax(0, 1fr); }
+  .au-card-act { grid-column: 1 / -1; justify-self: end; }
+}
+
+/* The ✨ AI button in every app's top bar. */
+.au-btn { --mg-accent: var(--magic, var(--accent, #3d4fd8)); --mg-border: var(--border-strong, var(--border, #d9d8d3));
+  position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px;
+  border-radius: 999px; border: 1px solid var(--mg-border); background: transparent;
+  color: inherit; font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer; }
+.au-btn svg { width: 18px; height: 18px; color: var(--mg-accent); }
+.au-dot { min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; display: inline-grid; place-items: center;
+  background: var(--mg-accent); color: #fff; font-size: .72rem; font-weight: 700; }
+.au-dot[hidden] { display: none; }
+/* phones: the ✨ alone (and the count), so it fits beside an app's tabs */
+@media (max-width: 640px) { .au-btn { padding: 0 9px; gap: 4px; } .au-btn > span { display: none; } }
