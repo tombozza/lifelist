@@ -68,6 +68,10 @@
 .ui-btn.small { min-height: 36px; padding: 0 var(--sp-3); font-size: var(--text-sm); border-radius: var(--r-sm); }
 .ui-btn.icon { inline-size: var(--tap); padding: 0; position: relative; font-size: 18px; line-height: 1; }
 .ui-btn.icon.small { inline-size: 36px; font-size: 16px; }
+/* .tiny: a corner button inside a dense card (a card's ⋯), small enough never to take a title's
+   room. Pair it with .quiet. Only for a second way in: the card itself stays the main target
+   (16 Nov 2026, for Life Kanban's board cards). */
+.ui-btn.icon.tiny { inline-size: 24px; min-height: 24px; font-size: 15px; border-radius: var(--r-sm); }
 .ui-btn.icon > svg { inline-size: 1em; block-size: 1em; }
 .ui-btn.round { border-radius: var(--r-full); }
 .ui-btn.block { display: flex; inline-size: 100%; }
@@ -228,6 +232,14 @@ label.ui-card.check { display: flex; }
   border: solid var(--text-3); border-width: 2px 2px 0 0; transform: rotate(45deg);
 }
 .ui-row.no-chevron::after { content: none; }
+/* .compact: a dense list inside a card (a pantry, a packing list), one line each. No rule between
+   rows, and the hover fill reaches a little past the text so the words line up with the card's
+   heading (16 Nov 2026, for Food Planner's Kitchen). */
+.ui-row.compact {
+  min-height: 32px; padding: var(--sp-1) var(--sp-2); gap: var(--sp-2); border-top: 0;
+  margin-inline: calc(var(--sp-2) * -1); inline-size: calc(100% + var(--sp-2) * 2);
+  border-radius: var(--r-sm); font-size: var(--text-sm);
+}
 /* A settings row: <label class="ui-row"><span class="main">…</span><input type="checkbox" role="switch"></label>.
    The chosen row in a list: aria-selected="true", aria-current, or .selected. */
 label.ui-row { cursor: pointer; }

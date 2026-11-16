@@ -2217,7 +2217,7 @@ function createBoardCard(task) {
     // The corner is the ⋯ menu's alone (on hover with a mouse, always on touch)
     const menuBtn = document.createElement('button');
     menuBtn.type = 'button';
-    menuBtn.className = 'board-card-menu';
+    menuBtn.className = 'ui-btn quiet icon tiny board-card-menu';
     menuBtn.innerHTML = '⋯';
     menuBtn.setAttribute('aria-label', 'Card options');
     menuButtonFor(menuBtn, task.id);
