@@ -11,7 +11,8 @@
    ============================================= */
 
 :root {
-    --accent: #007aff;                 /* the app's identity colour (icon, App Hub tile) */
+    --accent: #0062cc;                 /* the app's identity blue, one step deeper than the icon's #007aff so white
+                                          button text reads at 5.9:1, not 4.0 (16 Nov 2026) */
     /* Priority levels, the left edge of a card or row */
     --p-urgent: #b5179e;
     --p-high: var(--danger);
