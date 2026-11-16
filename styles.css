@@ -307,6 +307,18 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
     .board-col { min-width:85vw; max-width:85vw; scroll-snap-align:start; flex-shrink:0; }
     .list-item-date { display:none; }
     .list-item-title { max-width:none; flex-shrink:1; min-width:0; }   /* a long title ellipsises instead of widening the page */
+    /* The status badge goes under the title and tags, so they get the width the badge took
+       (at 375px they had 125px and wrapped onto three or four lines; 16 Nov 2026 UI sweep) */
+    .list-item { display:grid; grid-template-columns: auto minmax(0, 1fr) auto auto; column-gap: var(--sp-2); row-gap:0; align-items:center; }
+    .list-item > .list-check, .list-item > .list-select-cb { grid-row: 1 / 3; }
+    .list-item > .list-item-body { grid-column: 2; grid-row: 1; }
+    .list-item-right { display:contents; }
+    .list-item-right > .ui-badge { grid-column: 2; grid-row: 2; justify-self:start; margin-top: var(--sp-1); }
+    .list-item-right > .ui-btn { grid-row: 1 / 3; }
+    /* Select mode adds a tick before the done tick: the text moves one column along */
+    .list-item:has(> .list-select-cb) { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+    .list-item:has(> .list-select-cb) > .list-item-body, .list-item:has(> .list-select-cb) .list-item-right > .ui-badge { grid-column: 3; }
+
     .board-card-menu { opacity:1; }
     /* Stack the label above its control — a 92px gutter is too much on phones */
     .field { flex-direction:column; align-items:stretch; gap: var(--sp-2); }
