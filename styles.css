@@ -20,11 +20,12 @@
     --p-min: var(--text-3);
     --spot: #ffb800;                   /* spotlight gold */
 }
-/* Apple's dark-mode blue, under the same selectors tokens.css uses */
+/* Apple's dark-mode blue, under the same selectors tokens.css uses. White on it is 3.6:1, so
+   buttons and ticks on the accent take a dark ink in dark mode (4.8:1). */
 @media (prefers-color-scheme: dark) {
-    :root:not([data-theme='light']) { --accent: #0a84ff; }
+    :root:not([data-theme='light']) { --accent: #0a84ff; --text-on-accent: #001a33; }
 }
-:root[data-theme='dark'] { --accent: #0a84ff; }
+:root[data-theme='dark'] { --accent: #0a84ff; --text-on-accent: #001a33; }
 
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
@@ -217,7 +218,7 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 /* iOS draws date boxes at their own width and centres the text; make them fit the column */
 .date-grid input[type="date"] { min-width:0; width:100%; -webkit-appearance:none; appearance:none; text-align:left; }
 .date-grid input[type="date"]::-webkit-date-and-time-value { text-align:left; }
-.prio-urgent  { --accent: var(--p-urgent); }
+.prio-urgent  { --accent: var(--p-urgent); --text-on-accent: #fff; }
 .prio-high    { --accent: var(--p-high); }
 .prio-medium  { --accent: var(--p-med); }
 .prio-low     { --accent: var(--p-low); }
