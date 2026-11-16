@@ -933,13 +933,15 @@ function weekendHiddenThemeIds() {
 
 function themeColor(id) { const t = getTheme(id); return t ? t.color : '#8e8e93'; }
 
-// Pick black or white text for legibility on a given background colour
+// Pick black or white text for legibility on a given background colour: whichever has the
+// higher WCAG contrast. (16 Nov 2026: the old "perceived brightness > 0.6" rule put white on
+// Garden green and House blue, 2.2:1 and 2.5:1.)
 function contrastText(hex) {
     if (!hex || hex[0] !== '#' || hex.length < 7) return '#fff';
-    const r = parseInt(hex.substr(1,2),16), g = parseInt(hex.substr(3,2),16), b = parseInt(hex.substr(5,2),16);
-    // Perceived luminance (0–1); light backgrounds get dark text
-    const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
-    return lum > 0.6 ? '#1d1d1f' : '#fff';
+    const lin = i => { const v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const L = 0.2126 * lin(1) + 0.7152 * lin(3) + 0.0722 * lin(5);
+    const onWhite = 1.05 / (L + 0.05), onDark = (L + 0.05) / (0.0137 + 0.05);   // #1d1d1f is L ≈ 0.0137
+    return onDark > onWhite ? '#1d1d1f' : '#fff';
 }
 
 function calcNextRecurring(recurring, fromDate) {

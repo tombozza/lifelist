@@ -64,7 +64,7 @@
 .ui-btn.quiet { background: transparent; border-color: transparent; color: var(--text-2); }
 .ui-btn.quiet:hover { background: var(--surface-2); color: var(--text); }
 .ui-btn.danger { color: var(--danger); }
-.ui-btn.danger.primary { background: var(--danger); border-color: var(--danger); color: #fff; }
+.ui-btn.danger.primary { background: var(--danger-fill); border-color: var(--danger-fill); color: #fff; }
 .ui-btn.small { min-height: 36px; padding: 0 var(--sp-3); font-size: var(--text-sm); border-radius: var(--r-sm); }
 .ui-btn.icon { inline-size: var(--tap); padding: 0; position: relative; font-size: 18px; line-height: 1; }
 .ui-btn.icon.small { inline-size: 36px; font-size: 16px; }
@@ -482,7 +482,7 @@ body:has(> .ui-fab:not([hidden])) .ui-toast { bottom: calc(88px + env(safe-area-
 body:has(.ui-tabbar):has(> .ui-fab:not([hidden])) .ui-toast { bottom: calc(152px + env(safe-area-inset-bottom)); }
 @keyframes ui-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 /* .bad: a red toast for something that failed. */
-.ui-toast.bad { background: var(--danger); color: #fff; }
+.ui-toast.bad { background: var(--danger-fill); color: #fff; }
 /* A toast while a sheet is open: a sheet sits in the browser's top layer, above everything else,
    so a plain toast hides under it. Give the toast popover="manual", add it INSIDE the open
    sheet (outside it, the page can't be tapped, so Undo wouldn't work), then call

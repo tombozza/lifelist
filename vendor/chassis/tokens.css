@@ -27,16 +27,19 @@
 
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1); --dur: 200ms;
 
-  /* Light green and amber are the deeper shades (11 Nov 2026): the bright ones were about 3:1 on
+  /* --text-3 deepened in Light and lifted in Dark, and --danger given a dark value (16 Nov 2026 sweep):
+     hints and labels were about 3.2:1, red button text 3.8:1 in Dark; now 4.5:1 or better.
+     Light green and amber are the deeper shades (11 Nov 2026): the bright ones were about 3:1 on
      white, too faint for words; these are 5:1. Dark keeps the bright ones (below). */
   --success: #15803d; --warning: #b45309; --danger: #dc2626;
+  --danger-fill: #dc2626;     /* red behind white text: the same in both themes (white on the dark --danger is too faint) */
   --accent: #3b82f6;          /* every app overrides this with its identity colour */
   --magic: var(--accent);     /* the magic mark's colour */
 
   color-scheme: light;
   --bg: #f5f5f7; --surface: #ffffff; --surface-2: #f2f2f5;
   --border: rgb(16 18 32 / 0.08); --border-strong: rgb(16 18 32 / 0.15);
-  --text: #101220; --text-2: #4b4f62; --text-3: #868a9c; --text-on-accent: #ffffff;
+  --text: #101220; --text-2: #4b4f62; --text-3: #676b7c; --text-on-accent: #ffffff;
   --overlay: rgb(16 18 32 / 0.36);
   --shadow-md: 0 1px 2px rgb(16 18 32 / 0.04), 0 6px 20px -6px rgb(16 18 32 / 0.12);
   --shadow-lg: 0 2px 6px rgb(16 18 32 / 0.06), 0 24px 60px -12px rgb(16 18 32 / 0.25);
@@ -46,9 +49,9 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
     --bg: #0a0b0f; --surface: #131419; --surface-2: #1a1c23;
-    --success: #16a34a; --warning: #d97706;
+    --success: #16a34a; --warning: #d97706; --danger: #f87171;
     --border: rgb(255 255 255 / 0.07); --border-strong: rgb(255 255 255 / 0.14);
-    --text: #f3f4f8; --text-2: #a8acbc; --text-3: #6c7084;
+    --text: #f3f4f8; --text-2: #a8acbc; --text-3: #8a8ea2;
     --overlay: rgb(0 0 0 / 0.6);
     --shadow-md: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -8px rgb(0 0 0 / 0.6);
     --shadow-lg: 0 2px 6px rgb(0 0 0 / 0.4), 0 30px 70px -10px rgb(0 0 0 / 0.75);
@@ -57,9 +60,9 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
   --bg: #0a0b0f; --surface: #131419; --surface-2: #1a1c23;
-  --success: #16a34a; --warning: #d97706;
+  --success: #16a34a; --warning: #d97706; --danger: #f87171;
   --border: rgb(255 255 255 / 0.07); --border-strong: rgb(255 255 255 / 0.14);
-  --text: #f3f4f8; --text-2: #a8acbc; --text-3: #6c7084;
+  --text: #f3f4f8; --text-2: #a8acbc; --text-3: #8a8ea2;
   --overlay: rgb(0 0 0 / 0.6);
   --shadow-md: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -8px rgb(0 0 0 / 0.6);
   --shadow-lg: 0 2px 6px rgb(0 0 0 / 0.4), 0 30px 70px -10px rgb(0 0 0 / 0.75);

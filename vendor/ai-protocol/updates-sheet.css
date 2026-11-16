@@ -1,6 +1,7 @@
 /* COPY of sites/_shared/ai-protocol/updates-sheet.css — edit the source there and run node _shared/sync.mjs */
 /* The cards on an app's own page (aiHome), outside the sheet: the magic sheet's variables, so its buttons look the same. */
 .au-home {
+  display: grid; gap: 12px; /* the step cards touched (16 Nov 2026 sweep) */
   --mg-accent: var(--magic, var(--accent, #3d4fd8));
   --mg-on-accent: var(--text-on-accent, #fff);
   --mg-surface: var(--surface, var(--card, #fff));

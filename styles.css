@@ -219,7 +219,7 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .date-grid input[type="date"] { min-width:0; width:100%; -webkit-appearance:none; appearance:none; text-align:left; }
 .date-grid input[type="date"]::-webkit-date-and-time-value { text-align:left; }
 .prio-urgent  { --accent: var(--p-urgent); --text-on-accent: #fff; }
-.prio-high    { --accent: var(--p-high); }
+.prio-high    { --accent: var(--p-high); --text-on-accent: #fff; }   /* the dark theme's navy ink was 3.6:1 on red; white is 4.8:1 in both */
 .prio-medium  { --accent: var(--p-med); }
 .prio-low     { --accent: var(--p-low); }
 .prio-minimal { --accent: var(--p-min); }
