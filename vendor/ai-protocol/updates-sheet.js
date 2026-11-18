@@ -360,10 +360,12 @@ export function openUpdates(o) {
  * pasted elsewhere are waiting for this app. Same look in every app (updates-sheet.css).
  * @returns {{button: HTMLButtonElement, refresh: () => Promise<number>}}
  */
-export function mountAiButton(container, { app, open, label = 'AI' }) {
+export function mountAiButton(container, { app, open, label = 'AI', className = '' }) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'au-btn';
+  // className: the app's own button classes (e.g. 'ui-btn', 'ui-btn small') so the ✨ AI button is the same size and
+  // shape as the buttons beside it (18 Nov 2026, Finance Centre's header). Without it, the old pill below.
+  button.className = ('au-btn ' + className).trim();
   button.setAttribute('aria-label', 'AI Updates');
   button.innerHTML = `${SPARK}<span>${esc(label)}</span><b class="au-dot" hidden></b>`;
   const dot = button.querySelector('.au-dot');

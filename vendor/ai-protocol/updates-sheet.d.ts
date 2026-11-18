@@ -20,7 +20,7 @@ export function openUpdates(o: {
 }): Promise<(ApplyResult | null)[] | null>;
 export function copyContext(schema: AppSchema, context: () => { data: unknown; note?: string }): Promise<void>;
 /** The ✨ AI button for the top bar, with a count of parts waiting for this app. */
-export function mountAiButton(container: Element, o: { app: string; open: () => unknown; label?: string }): { button: HTMLButtonElement; refresh: () => Promise<number> };
+export function mountAiButton(container: Element, o: { app: string; open: () => unknown; label?: string; className?: string }): { button: HTMLButtonElement; refresh: () => Promise<number> };
 export interface WaitingItem { id: string; summary?: string; from: string; received_at: string; section: { v: number; actions: unknown[] } }
 /** The top of the AI Updates page (Waiting, Reference, Daily, your paste card, App Hub line), for an app with its own page. */
 export function aiHome(o: {
