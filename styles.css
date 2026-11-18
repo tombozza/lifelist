@@ -279,7 +279,7 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .todo-meta { display:flex; flex-wrap:wrap; gap: var(--sp-1); margin-top: var(--sp-1); }
 .todo-side { display:flex; gap: var(--sp-1); flex-shrink:0; }
 .todo-panel { display:grid; gap: var(--sp-1); padding: 0 var(--sp-3) var(--sp-2) 46px; }
-.todo-panel-head { display:flex; justify-content:space-between; align-items:baseline; gap: var(--sp-2); padding-inline: var(--sp-1); }
+.todo-panel-head { margin:0; padding-inline: var(--sp-1); }
 @media (max-width: 560px) { .todo-panel { padding-left: var(--sp-1); padding-right: var(--sp-1); } }
 /* A native date or colour input laid invisibly over its button, so a tap opens the
    browser's own picker (Today's "Pick a day", the Custom colour swatch) */

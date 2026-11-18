@@ -2567,17 +2567,13 @@ function todoRow(task, where, list) {
         const panel = document.createElement('div');
         panel.className = 'todo-panel';
         // Tom: the actions "need to be split": everything but Edit moves the
-        // task somewhere, so those sit under "Move to", and Edit stands apart.
-        const head = document.createElement('div');
-        head.className = 'todo-panel-head';
-        head.innerHTML = '<span class="ui-label">Move to</span>';
+        // task somewhere, so a divider sets Edit apart (no label: "just the line").
         if (task.carriedFrom && !done) {
-            const since = document.createElement('span');
-            since.className = 'ui-hint';
+            const since = document.createElement('p');
+            since.className = 'ui-hint todo-panel-head';
             since.textContent = 'On your list since ' + longDay(task.carriedFrom);
-            head.appendChild(since);
+            panel.appendChild(since);
         }
-        panel.appendChild(head);
         const strip = document.createElement('div');
         strip.className = 'ui-actions tiles todo-actions';
         const tile = (icon, label, fn, cls) => {
