@@ -15,12 +15,21 @@
   --font-display: var(--font-sans);
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  /* type — 15px body */
-  --text-xs: 12px; --text-sm: 13px; --text-md: 15px; --text-lg: 17px; --text-xl: 22px; --text-2xl: 28px;
+  /* type: the only sizes an app uses (rules: _shared/README.md, "The rules").
+     2xs tab-bar labels and count bubbles · xs labels, badges, captions · sm hints and meta lines ·
+     md body, buttons, list rows · lg card and section titles · xl big numbers · 2xl page titles.
+     Text boxes are 16px (iOS zooms into anything smaller): --text-input. */
+  --text-2xs: 11px; --text-xs: 12px; --text-sm: 13px; --text-md: 15px; --text-lg: 17px; --text-xl: 22px; --text-2xl: 28px;
+  --text-input: 16px;
+
+  /* icons and emoji used as icons: sm small buttons, chip ×, icons inside text · md buttons and
+     list-row leads · lg tab bar and the floating button · xl empty pages */
+  --icon-sm: 16px; --icon-md: 18px; --icon-lg: 24px; --icon-xl: 36px;
 
   /* spacing — 4px grid */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
-  --tap: 44px;
+  /* heights: --tap for buttons, fields, rows · --tap-sm for small buttons, chips, tabs · --tap-xs for small chips */
+  --tap: 44px; --tap-sm: 36px; --tap-xs: 28px;
 
   /* radii: inputs 8 · buttons 12 · cards 16 · chips full */
   --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px; --r-full: 999px;
