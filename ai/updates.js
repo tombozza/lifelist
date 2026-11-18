@@ -54,7 +54,7 @@ function open() {
 // The ✨ AI button, the same in every app, before the sync dot. It counts parts of a reply pasted in
 // another app that are waiting here, and recounts when the page closes.
 const header = document.getElementById('app-header');
-const ai = header ? mountAiButton(header, { app: schema.app, open }) : null;
+const ai = header ? mountAiButton(header, { app: schema.app, open, className: 'ui-btn quiet small' }) : null;
 if (ai) document.getElementById('sync-status')?.before(ai.button);
 
 document.getElementById('settings-ai-updates')?.addEventListener('click', () => open().then(() => ai?.refresh()));

@@ -75,3 +75,9 @@
 .au-dot[hidden] { display: none; }
 /* phones: the ✨ alone (and the count), so it fits beside an app's tabs */
 @media (max-width: 640px) { .au-btn:not(.ui-btn) { padding: 0 9px; gap: 4px; } .au-btn > span { display: none; } }
+/* with the app's ui-btn classes the ✨ alone is a square, the size of the icon buttons beside it */
+@media (max-width: 640px) {
+  .au-btn.ui-btn { padding: 0; min-inline-size: var(--tap, 44px); justify-content: center; }
+  .au-btn.ui-btn.small { min-inline-size: var(--tap-sm, 36px); }
+  .au-btn.ui-btn:has(.au-dot:not([hidden])) { padding: 0 var(--sp-2, 8px); }
+}
