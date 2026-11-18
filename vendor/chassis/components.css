@@ -34,6 +34,20 @@
 .ui-stack { display: grid; gap: var(--sp-3); }
 .ui-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
 .ui-actions.end { justify-content: flex-end; }
+/* <div class="ui-actions tiles"><button class="ui-btn">${uiIcon('calendar')}<span>Pick a day</span></button>…</div>
+   The actions under an opened list row: equal quiet tiles, icon over a short label, on one
+   line (18 Nov 2026, Life Kanban's Today rows). Up to six fit a phone; keep labels to two words. */
+.ui-actions.tiles { flex-wrap: nowrap; gap: 2px; }
+.ui-actions.tiles > * { flex: 0 1 96px; min-width: 0; }
+.ui-actions.tiles > .ui-btn {
+  flex-direction: column; gap: 2px; min-height: var(--tap); padding: var(--sp-1) 2px;
+  background: transparent; border-color: transparent; color: var(--text-2);
+  font-size: var(--text-2xs); font-weight: 600; position: relative;
+}
+.ui-actions.tiles > .ui-btn:hover { background: var(--surface); color: var(--text); }
+.ui-actions.tiles > .ui-btn > .ui-icon { inline-size: var(--icon-md); block-size: var(--icon-md); }
+.ui-actions.tiles > .ui-btn.danger { color: var(--text-2); }
+.ui-actions.tiles > .ui-btn.danger > .ui-icon { color: var(--danger); }
 .ui-spacer { flex: 1; }
 
 /* A section: a heading with an optional action on the right, then its content. */

@@ -241,8 +241,8 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
 - `task.planOrder` is the to-do list's own order (▲▼ in reorder mode, drag on
   desktop). Priority is deliberately not shown on Today.
 - **Rollover:** `rollOverPlan()` moves any unfinished Live task from a past day onto
-  today, at the top, and sets `carriedFrom` to the day it was first planned for (the
-  "↻ since" chip). It's deterministic so devices agree, and runs on render, every
+  today, at the top, and sets `carriedFrom` to the day it was first planned for (shown
+  only in the opened row's panel). It's deterministic so devices agree, and runs on render, every
   minute, and after each sync merge.
 - A day only means something while the task is Live: `updateTask()` and
   `migrateColumns()` clear `planDay` the moment a task leaves Live. Completing keeps
@@ -255,8 +255,13 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
 - **Ready is hidden on purpose**: it lives in a sheet (`#ready-modal`,
   `renderReadySheet`) behind the quiet "Add from Ready · N" button, along with the
   board backlog. Keep it off the main screen.
-- Tapping a row opens its action strip (Tomorrow, Not today, Pick a day, Blocked,
-  Backlog, Edit), so it's all taps on a phone.
+- Tapping a row opens its action panel (`.todo-panel`): one line of icon tiles from the
+  shared `ui-actions tiles` (Tomorrow, Ready, Pick day, Blocked, Backlog, Edit; icons from
+  the shared set, `uiIcon`), so it's all taps on a phone. Tom (18 Nov 2026): "we can do
+  better than this" about the old row of bordered buttons. Labels stay one or two short
+  words so six fit at 375px.
+- **No "since" chip on carried-over rows** (Tom: "repetitive and distracting"). `carriedFrom`
+  is still kept; the opened row's panel says "On your list since …".
 - **Desktop drag** (only where `canDragTodo()` sees a mouse): drag a row to reorder
   (`makeTodoDropList` → `dropIntoPlan`), or drop it on ‹ › to move it a day
   (never into the past). Phones never get `draggable`, so scrolling stays clean.

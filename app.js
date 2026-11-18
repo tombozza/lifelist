@@ -2529,7 +2529,8 @@ function todoRow(task, where, list) {
     if (prog) meta.appendChild(prog);
     const link = linkChipEl(task);
     if (link) meta.appendChild(link);
-    if (task.carriedFrom && !done) meta.appendChild(todoChip('↻ since ' + shortDay(task.carriedFrom), 'warn'));
+    // Carried over: no chip on the row (Tom, 18 Nov 2026: "repetitive and
+    // distracting"); the opened row says since when, in its action panel.
     if (meta.childNodes.length) body.appendChild(meta);
     if (!done) body.addEventListener('click', () => { todayOpenId = open ? null : task.id; render(); });
     main.appendChild(body);
@@ -2561,18 +2562,35 @@ function todoRow(task, where, list) {
     }
 
     if (open) {
-        const strip = document.createElement('div');
-        strip.className = 'ui-actions todo-actions';
-        const add = (label, fn, cls) => strip.appendChild(todoBtn(label, 'ui-btn small' + (cls ? ' ' + cls : ''), fn));
-        if (where === 'day') add(todayDay === today ? 'Tomorrow →' : 'Next day →', () => planFor(task.id, addDays(todayDay, 1)));
-        else {
-            if (todayDay !== today) add('+ Today', () => planFor(task.id, today));
-            if (todayDay !== addDays(today, 1)) add('+ Tomorrow', () => planFor(task.id, addDays(today, 1)));
+        // Tom (18 Nov 2026): "we can do better than this". One panel joined to
+        // the row: equal icon tiles on one line (ui-actions tiles), Edit last.
+        const panel = document.createElement('div');
+        panel.className = 'todo-panel';
+        if (task.carriedFrom && !done) {
+            const since = document.createElement('p');
+            since.className = 'ui-hint todo-since';
+            since.textContent = 'On your list since ' + longDay(task.carriedFrom);
+            panel.appendChild(since);
         }
-        if (where !== 'ready') add(where === 'day' ? (todayDay === today ? 'Not today' : 'To Ready') : '+ Ready', () => planFor(task.id, null));
+        const strip = document.createElement('div');
+        strip.className = 'ui-actions tiles todo-actions';
+        const tile = (icon, label, fn, cls) => {
+            const b = todoBtn('', 'ui-btn' + (cls ? ' ' + cls : ''), fn);
+            b.innerHTML = uiIcon(icon) + '<span></span>';
+            b.lastChild.textContent = label;
+            strip.appendChild(b);
+            return b;
+        };
+        const add = (label, fn, cls, icon) => tile(icon, label, fn, cls);
+        if (where === 'day') add(todayDay === today ? 'Tomorrow' : 'Next day', () => planFor(task.id, addDays(todayDay, 1)), '', 'arrow-right');
+        else {
+            if (todayDay !== today) add('Today', () => planFor(task.id, today), '', 'sun');
+            if (todayDay !== addDays(today, 1)) add('Tomorrow', () => planFor(task.id, addDays(today, 1)), '', 'arrow-right');
+        }
+        if (where !== 'ready') add('Ready', () => planFor(task.id, null), '', 'inbox').title = 'Off this day, into Ready';
         const pick = document.createElement('label');
-        pick.className = 'ui-btn small todo-pick';
-        pick.textContent = 'Pick a day…';
+        pick.className = 'ui-btn todo-pick';
+        pick.innerHTML = uiIcon('calendar') + '<span>Pick day</span>';
         // Invisible over the pill: a tap lands on the input itself (which is
         // what opens the picker on iOS); elsewhere showPicker() does it.
         const date = document.createElement('input');
@@ -2584,11 +2602,12 @@ function todoRow(task, where, list) {
         pick.appendChild(date);
         strip.appendChild(pick);
         if (where !== 'backlog') {
-            add('Blocked', () => markBlocked(task.id), 'danger');
-            add('Backlog', () => sendToBacklog(task.id));
+            add('Blocked', () => markBlocked(task.id), 'danger', 'ban');
+            add('Backlog', () => sendToBacklog(task.id), '', 'layout-columns');
         }
-        add('Edit', () => { todayOpenId = null; openTaskModal(task.id); });
-        row.appendChild(strip);
+        add('Edit', () => { todayOpenId = null; openTaskModal(task.id); }, '', 'pencil');
+        panel.appendChild(strip);
+        row.appendChild(panel);
     }
     return row;
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'life-kanban-v90';
+const CACHE_NAME = 'life-kanban-v91';
 const ASSETS = [
     './',
     './index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
     './vendor/chassis/tokens.css',
     './vendor/chassis/controls.css',
     './vendor/chassis/components.css',
+    './vendor/chassis/icons.js',
     './vendor/chassis/theme.js',
     './vendor/magic/magic.css',
     './vendor/magic/magic.js',
