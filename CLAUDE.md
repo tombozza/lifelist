@@ -259,7 +259,8 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
   shared `ui-actions tiles` (Tomorrow, Ready, Pick day, Blocked, Backlog, Edit; icons from
   the shared set, `uiIcon`), so it's all taps on a phone. Tom (18 Nov 2026): "we can do
   better than this" about the old row of bordered buttons. Labels stay one or two short
-  words so six fit at 375px.
+  words so six fit at 375px. Grouped (Tom: they "need to be split"): the five that move the
+  task sit under a "Move to" label, then a divider (`<hr>`) and Edit at the far end (`.end`).
 - **No "since" chip on carried-over rows** (Tom: "repetitive and distracting"). `carriedFrom`
   is still kept; the opened row's panel says "On your list since …".
 - **Desktop drag** (only where `canDragTodo()` sees a mouse): drag a row to reorder

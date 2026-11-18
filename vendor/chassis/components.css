@@ -48,6 +48,10 @@
 .ui-actions.tiles > .ui-btn > .ui-icon { inline-size: var(--icon-md); block-size: var(--icon-md); }
 .ui-actions.tiles > .ui-btn.danger { color: var(--text-2); }
 .ui-actions.tiles > .ui-btn.danger > .ui-icon { color: var(--danger); }
+/* Groups: an <hr> between tiles is a thin upright divider, and .end pushes a tile (Edit) to the
+   far end, so "move it somewhere" and "change it" read as two different kinds of action. */
+.ui-actions.tiles > hr { flex: none; align-self: stretch; inline-size: 1px; margin: var(--sp-1) var(--sp-1); border: 0; background: var(--border); }
+.ui-actions.tiles > .end { margin-inline-start: auto; }
 .ui-spacer { flex: 1; }
 
 /* A section: a heading with an optional action on the right, then its content. */

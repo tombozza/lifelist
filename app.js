@@ -2566,12 +2566,18 @@ function todoRow(task, where, list) {
         // the row: equal icon tiles on one line (ui-actions tiles), Edit last.
         const panel = document.createElement('div');
         panel.className = 'todo-panel';
+        // Tom: the actions "need to be split": everything but Edit moves the
+        // task somewhere, so those sit under "Move to", and Edit stands apart.
+        const head = document.createElement('div');
+        head.className = 'todo-panel-head';
+        head.innerHTML = '<span class="ui-label">Move to</span>';
         if (task.carriedFrom && !done) {
-            const since = document.createElement('p');
-            since.className = 'ui-hint todo-since';
+            const since = document.createElement('span');
+            since.className = 'ui-hint';
             since.textContent = 'On your list since ' + longDay(task.carriedFrom);
-            panel.appendChild(since);
+            head.appendChild(since);
         }
+        panel.appendChild(head);
         const strip = document.createElement('div');
         strip.className = 'ui-actions tiles todo-actions';
         const tile = (icon, label, fn, cls) => {
@@ -2605,7 +2611,8 @@ function todoRow(task, where, list) {
             add('Blocked', () => markBlocked(task.id), 'danger', 'ban');
             add('Backlog', () => sendToBacklog(task.id), '', 'layout-columns');
         }
-        add('Edit', () => { todayOpenId = null; openTaskModal(task.id); }, '', 'pencil');
+        strip.appendChild(document.createElement('hr'));
+        add('Edit', () => { todayOpenId = null; openTaskModal(task.id); }, 'end', 'pencil');
         panel.appendChild(strip);
         row.appendChild(panel);
     }
