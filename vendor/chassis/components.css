@@ -47,6 +47,26 @@
 /* A section label in ordinary sentence case, for a question or a long label. */
 .ui-label.plain { text-transform: none; letter-spacing: 0; font-size: var(--text-sm); color: var(--text-2); }
 
+/* ── Icons ───────────────────────────────────────────────────────────────────── */
+/* Icons, not emoji (18 Nov 2026, Tom: "I hate using emojis. I'd rather just custom icons"). One
+   outline set for every app: Tabler, in vendor/chassis/icons.svg, drawn with uiIcon('bed') from
+   icons.js or by hand: <svg class="ui-icon"><use href="vendor/chassis/icons.svg#bed"/></svg>.
+   The line takes the text colour (currentColor), so it works in Light and Dark and goes accent on a
+   pressed chip or the current tab. Sizes are the --icon-* scale: md 18 by default, .sm 16, .lg 24,
+   .xl 36; in a tab bar, an icon button and an empty page the container picks the size. */
+.ui-icon {
+  inline-size: var(--icon-md, 18px); block-size: var(--icon-md, 18px); flex: none; display: inline-block;
+  vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.ui-icon.sm, :is(.ui-chip, .ui-badge, .ui-label, .ui-hint, .ui-btn.small) .ui-icon { inline-size: var(--icon-sm, 16px); block-size: var(--icon-sm, 16px); }
+.ui-icon.lg { inline-size: var(--icon-lg, 24px); block-size: var(--icon-lg, 24px); }
+.ui-icon.xl, .ui-empty > .icon > .ui-icon { inline-size: var(--icon-xl, 36px); block-size: var(--icon-xl, 36px); stroke-width: 1.5; }
+ui-icon { display: inline-flex; vertical-align: middle; }
+/* An icon beside words: buttons and chips have their own gap; in a heading, label or plain line of
+   text the icon leads with a small gap (no space character needed). */
+:is(.ui-h2, .ui-label, .ui-hint, .ui-sub, .ui-row .main > span, .ui-note) > .ui-icon:first-child { margin-inline-end: var(--sp-1, 4px); }
+.ui-empty > .icon { color: var(--text-3); }
+
 /* ── Buttons ─────────────────────────────────────────────────────────────────── */
 /* .ui-btn is the everyday button. One .primary per screen. .quiet for low-key actions in a row,
    .danger for delete, .small inside cards and rows, .icon for a square icon-only button (give it

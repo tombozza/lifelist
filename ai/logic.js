@@ -77,6 +77,11 @@ export function matchName(query, items, { max = 8 } = {}) {
 // Reading the app's state (the same rules as app.js)
 
 const isOpen = t => t && t.status === 'active';
+const focusOf = th => (th && th.focus === 'work' ? 'work' : 'home');
+// The app's taskArea(): the task's own Work/Home, else its themes, else home
+const areaOf = (state, t) => (t.area === 'work' || t.area === 'home' ? t.area
+  : (Array.isArray(t.themeIds) && t.themeIds.length ? t.themeIds : t.themeId ? [t.themeId] : [])
+    .some(id => focusOf((state.themes || []).find(x => x.id === id)) === 'work') ? 'work' : 'home');
 const themeIdsOf = t => (Array.isArray(t.themeIds) && t.themeIds.length ? t.themeIds : t.themeId ? [t.themeId] : []);
 const isSnoozed = (t, today) => !!(t.snoozedUntil && t.snoozedUntil > today);
 
@@ -129,11 +134,12 @@ export function buildContext(state, { today, limit = CONTEXT_LIMIT } = {}) {
     const names = themeIdsOf(t).map(id => themeName.get(id)).filter(Boolean);
     if (names.length) o.themes = names;
     if (t.recurring) o.repeats = true;
+    o.area = areaOf(state, t);
     return o;
   });
   const data = {
     today,
-    themes: themes.map(t => ({ id: t.id, name: t.name, sub_themes: [...(t.subThemes || [])], ...(t.hidden ? { hidden: true } : {}) })),
+    themes: themes.map(t => ({ id: t.id, name: t.name, area: focusOf(t), sub_themes: [...(t.subThemes || [])], ...(t.hidden ? { hidden: true } : {}) })),
     tag_categories: (state.tagCategories || []).map(c => ({ id: c.id, name: c.name, tags: (c.tags || []).map(t => ({ id: t.id, name: t.name })) })),
     open_tasks: open.length,
     tasks,
@@ -315,6 +321,10 @@ function planAdd(action, state, env, choices) {
   }
   const tags = resolveTags(state, action.tags, 'tags', choices, problems);
   oneTagPerCategory(tags, problems);
+  // Work or home: given, else the theme's side, else left to the app (home)
+  const area = action.area || (themes.length ? focusOf(themes[0]) : '');
+  if (action.area && themes.some(t => focusOf(t) !== action.area))
+    problems.push({ key: 'area', reason: `${themes.filter(t => focusOf(t) !== action.area).map(t => t.name).join(', ')} is a ${action.area === 'work' ? 'home' : 'work'} theme, but the task is marked ${action.area}.` });
   const where = checkPlace(action, problems);
   let rec = null;
   if (action.repeat) {
@@ -327,13 +337,14 @@ function planAdd(action, state, env, choices) {
   const themeIds = [...new Set(themes.map(t => t.id))];
   const data = {
     title: action.title.trim(), themeIds, themeId: themeIds[0] || '', subTheme,
+    ...(area ? { area } : {}),
     tags: tags.map(t => t.id),
     priority: PRIORITY[action.priority ?? 'none'], size: action.size ?? 'xs',
     dueDate: action.due ?? '', notes: (action.notes ?? '').trim(), url: env.normaliseUrl(action.url ?? ''),
     subtasks: (action.subtasks || []).map(title => ({ id: env.genId(), title: title.trim(), done: false })),
     spotlight: !!action.spotlight,
   };
-  const bits = [themes.length ? themes.map(t => t.name).join(' + ') + (subTheme ? ` › ${subTheme}` : '') : 'no theme', tagText(tags)];
+  const bits = [area ? (area === 'work' ? 'Work' : 'Home') : '', themes.length ? themes.map(t => t.name).join(' + ') + (subTheme ? ` › ${subTheme}` : '') : 'no theme', tagText(tags)];
   if (data.priority) bits.push(`${data.priority} priority`);
   if (data.dueDate) bits.push(`due ${data.dueDate}`);
   if (data.subtasks.length) bits.push(`${data.subtasks.length} step${data.subtasks.length > 1 ? 's' : ''}`);
@@ -386,6 +397,29 @@ function planUpdate(action, state, env, choices) {
     if (sub !== undefined && sub !== (task.subTheme || '')) { patch.subTheme = sub; said.push(sub ? `sub-theme ${sub}` : 'no sub-theme'); }
   } else if (action.theme && task.subTheme && !finalThemes.some(t => (t.subThemes || []).includes(task.subTheme))) {
     patch.subTheme = ''; said.push(`sub-theme ${task.subTheme} cleared (not in the new theme)`);
+  }
+  // Work or home, as the task window does it: a new theme sets the side; a new
+  // side takes the other side's themes (and their sub-theme) off
+  const nowArea = areaOf(state, task);
+  if (action.area) {
+    if (action.theme && finalThemes.some(t => focusOf(t) !== action.area))
+      problems.push({ key: 'area', reason: `${finalThemes.filter(t => focusOf(t) !== action.area).map(t => t.name).join(', ')} is a ${action.area === 'work' ? 'home' : 'work'} theme, but the task is marked ${action.area}.` });
+    else if (action.area !== nowArea || task.area !== action.area) {
+      patch.area = action.area;
+      if (action.area !== nowArea) said.push(action.area === 'work' ? 'Work' : 'Home');
+      const keep = finalThemes.filter(t => focusOf(t) === action.area);
+      if (keep.length !== finalThemes.length) {
+        const ids = keep.map(t => t.id);
+        patch.themeIds = ids; patch.themeId = ids[0] || '';
+        said.push(`theme ${finalThemes.filter(t => focusOf(t) !== action.area).map(t => t.name).join(', ')} off`);
+        const sub = patch.subTheme ?? task.subTheme;
+        if (sub && !keep.some(t => (t.subThemes || []).includes(sub))) patch.subTheme = '';
+        finalThemes = keep;
+      }
+    }
+  } else if (patch.themeIds && finalThemes.length && focusOf(finalThemes[0]) !== nowArea) {
+    patch.area = focusOf(finalThemes[0]);
+    said.push(patch.area === 'work' ? 'Work' : 'Home');
   }
   if (tags.length || remove.length) {
     const newCats = new Set(tags.map(t => t.catId));

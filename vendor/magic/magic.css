@@ -8,6 +8,9 @@
 .mg-scrim, .mg-mark {
   --mg-accent: var(--magic, var(--accent, #3d4fd8));
   --mg-on-accent: var(--text-on-accent, #fff);
+  /* Links in the sheet. An app whose accent is too dark to read as text in dark mode sets
+     --magic-ink to its text shade (Finance Centre: --accent-ink; 16 Nov 2026). */
+  --mg-ink: var(--magic-ink, var(--mg-accent));
 }
 .mg-scrim {
   --mg-surface: var(--surface, var(--card, #fff));
@@ -67,11 +70,11 @@ magic-mark { display: inline-flex; }
 .mg-steps li > span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: .78rem;
   background: var(--mg-surface-2); color: var(--mg-text-2); }
 .mg-steps li.mg-done > span { background: var(--mg-accent); color: var(--mg-on-accent); }
-.mg-steps a { color: var(--mg-accent); font-weight: 600; }
+.mg-steps a { color: var(--mg-ink); font-weight: 600; }
 .mg-stack { display: grid; gap: 8px; }
 .mg-sheet input[type="password"] { width: 100%; min-height: 44px; font: inherit; font-size: 16px; padding: 0 10px;
   border-radius: 10px; border: 1px solid var(--mg-border); background: var(--mg-surface); color: var(--mg-text); }
-.mg-link { border: 0; background: none; padding: 0; font: inherit; color: var(--mg-accent); font-weight: 600; text-decoration: underline; cursor: pointer; }
+.mg-link { border: 0; background: none; padding: 0; font: inherit; color: var(--mg-ink); font-weight: 600; text-decoration: underline; cursor: pointer; }
 .mg-sheet textarea { width: 100%; min-height: 96px; resize: vertical; font: inherit; font-size: .85rem; line-height: 1.4; padding: 10px;
   border-radius: 10px; border: 1px solid var(--mg-border); background: var(--mg-surface); color: var(--mg-text); }
 

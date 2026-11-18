@@ -242,7 +242,7 @@ test('update_task: only what was given changes', async () => {
   assert.deepEqual(fns(app), ['updateTask', 'checkAutoKanban']);
   // a new theme without that sub-theme clears it; Garden has Maintenance too, so it stays
   const p = a => planAction({ type: 'update_task', task: 'Boiler service', ...a }, app.state, app.env());
-  assert.deepEqual(p({ theme: 'Work' }).calls[0].args[1], { themeIds: ['work'], themeId: 'work', subTheme: '' });
+  assert.deepEqual(p({ theme: 'Work' }).calls[0].args[1], { themeIds: ['work'], themeId: 'work', subTheme: '', area: 'work' });
   assert.deepEqual(p({ theme: 'Garden' }).calls[0].args[1], { themeIds: ['garden'], themeId: 'garden' });
   assert.deepEqual(p({ due: null, url: null, sub_theme: null, remove_tags: ['People › Jim'] }).calls[0].args[1], { dueDate: '', autoKanbaned: false, subTheme: '', tags: [] });
   assert.deepEqual(p({ add_subtasks: ['Ring them'] }).calls[0].args[1].subtasks.map(s => s.title), ['Ring them']);
@@ -284,7 +284,8 @@ test('context: today, themes, tags, open tasks with where; small and capped', ()
   const state = fixture();
   const { data, note } = buildContext(state, { today: TODAY });
   assert.equal(data.today, TODAY);
-  assert.deepEqual(data.themes[0], { id: 'house', name: 'House', sub_themes: ['Cleaning', 'Maintenance'] });
+  assert.deepEqual(data.themes[0], { id: 'house', name: 'House', area: 'home', sub_themes: ['Cleaning', 'Maintenance'] });
+  assert.equal(data.themes[1].area, 'work');
   assert.equal(data.themes[3].hidden, true);
   assert.deepEqual(data.tag_categories[2], { id: 'when', name: 'When', tags: [{ id: 'when-day', name: 'Day' }, { id: 'when-weekend', name: 'Weekend' }] });
   assert.equal(data.open_tasks, 8);
@@ -293,11 +294,11 @@ test('context: today, themes, tags, open tasks with where; small and capped', ()
   assert.ok(!ids.includes('done1') && !ids.includes('sched1'), 'open tasks only');
   assert.deepEqual(ids.slice(0, 2).sort(), ['mhu1a2b3c4d5e', 'ring1'], 'Today and Ready first');
   const by = Object.fromEntries(data.tasks.map(t => [t.id, t]));
-  assert.deepEqual(by.mhu1a2b3c4d5e, { id: 'mhu1a2b3c4d5e', title: 'Tax return', where: 'today', day: TODAY, themes: ['Admin'] });
+  assert.deepEqual(by.mhu1a2b3c4d5e, { id: 'mhu1a2b3c4d5e', title: 'Tax return', where: 'today', day: TODAY, themes: ['Admin'], area: 'home' });
   assert.equal(by.ring1.where, 'ready'); assert.equal(by.ring2.where, 'review'); assert.equal(by.xmas1.where, 'notes');
-  assert.deepEqual(by.snz1, { id: 'snz1', title: 'Clear the loft', where: 'snoozed', until: '2026-12-01' });
+  assert.deepEqual(by.snz1, { id: 'snz1', title: 'Clear the loft', where: 'snoozed', until: '2026-12-01', area: 'home' });
   assert.equal(by.mhv9z0b7c3d1e.notes, undefined, 'no notes text');
-  for (const t of data.tasks) for (const k of Object.keys(t)) assert.ok(['id', 'title', 'where', 'day', 'until', 'due', 'priority', 'themes', 'repeats'].includes(k), k);
+  for (const t of data.tasks) for (const k of Object.keys(t)) assert.ok(['id', 'title', 'where', 'day', 'until', 'due', 'priority', 'themes', 'repeats', 'area'].includes(k), k);
   for (let i = 0; i < 400; i++) state.tasks.push(task({ id: `bulk${i}`, title: `Bulk ${i}`, createdDate: '2026-10-01' }));
   const big = buildContext(state, { today: TODAY });
   assert.equal(big.data.tasks.length, 300); assert.equal(big.data.open_tasks, 408);
@@ -328,4 +329,23 @@ test('the daily copy: the context shares straight after load with the app’s sc
   assert.deepEqual(body.data, context().data);
   assert.deepEqual(await shareContext(schema, context, { store, fetch }), { shared: false, reason: 'unchanged' });
   assert.equal(calls.length, 1);
+});
+
+test('work or home: given, from the theme, never against the theme; flipping takes the other side’s themes off', async () => {
+  const state = fixture();
+  state.tasks.push(task({ id: 'wk1', title: 'Weekly report', themeIds: ['work'], themeId: 'work', subTheme: 'Reports' }));
+  const env = fakeApp(state).env();
+  const add = a => planAction({ type: 'add_task', title: 'X', ...a }, state, env, {});
+  assert.equal(add({ area: 'work' }).calls[0].args[0].area, 'work');
+  assert.equal(add({ theme: 'Work' }).calls[0].args[0].area, 'work');
+  assert.equal(add({ theme: 'House' }).calls[0].args[0].area, 'home');
+  assert.equal(add({}).calls[0].args[0].area, undefined, 'no side, no theme: the app counts it as home');
+  const clash = add({ area: 'work', theme: 'House' });
+  assert.equal(clash.ok, false);
+  const up = a => planAction({ type: 'update_task', task: 'Weekly report', task_id: 'wk1', ...a }, state, env, {});
+  const flip = up({ area: 'home' });
+  assert.deepEqual(flip.calls[0].args[1], { area: 'home', themeIds: [], themeId: '', subTheme: '' });
+  assert.equal(up({ theme: 'House' }).calls[0].args[1].area, 'home', 'a new theme brings its side');
+  const ctx = buildContext(state, { today: TODAY }).data.tasks.find(t => t.id === 'wk1');
+  assert.equal(ctx.area, 'work');
 });

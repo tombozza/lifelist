@@ -262,11 +262,10 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
   (never into the past). Phones never get `draggable`, so scrolling stays clean.
 - **Work / Home switch** on Today (`state.settings.todayFocus`, `todayFocusPass`):
   its own setting, deliberately *not* the board's theme-chip mutes, so muting a chip
-  on the board never hides a task here. No theme counts as home. It filters the day,
-  Done and the Ready sheet. Reordering while filtered renumbers the whole day first
-  (`nudgePlanOrder`, `dropIntoPlan`) so hidden tasks keep their places, and adding
-  while on Work stamps the first work theme (`todayFocusThemeIds`) so the new task
-  doesn't vanish.
+  on the board never hides a task here. It goes by the task's own Work/Home (below). It
+  filters the day, Done and the Ready sheet. Reordering while filtered renumbers the whole
+  day first (`nudgePlanOrder`, `dropIntoPlan`) so hidden tasks keep their places, and adding
+  while on Work makes the task Work (`todayFocusArea`) so it doesn't vanish.
 - **"Do on" is the plan day** (11 Nov 2026, Tom: a task set to do on tomorrow wasn't on
   tomorrow's list). Saving a Do on date makes the task Live with `planDay` = that date (a past
   date means today); the modal shows a Live task's `planDay` in the box; only a *changed* date
@@ -275,6 +274,31 @@ Board → **Today**, with Notes off to the side. Today is the default view on op
   (`checkAutoKanban`), not in the backlog. "Do by" still only nudges to the backlog 3 days out.
 - On Today, quick add and the + button plan straight onto today
   (`quickAddPlanTarget`, `modalPlanDay`) instead of going to Review.
+
+## Work or Home on a task
+
+Tom (18 Nov 2026): he wasn't adding themes to quick home tasks "because I can't think of
+what theme it is at the time". So every task is Work or Home itself, and the theme is
+optional underneath. `task.area` is `'work' | 'home'`, or `''` on anything older.
+
+- **Read it through `taskArea(t)` / `areaPass(t, f)`, never off the task.** With no
+  `area`, the themes decide (any work theme = work) and no theme = home, which is exactly
+  how things sorted before, so old tasks didn't move. `areaPass` keeps the old rule that a
+  task with themes on both sides shows under both.
+- **The task window** has a Work | Home switch under the title (`#area-picker`, `modalArea`,
+  `setModalArea`). The theme row shows only that side's themes (plus any already chosen).
+  Picking a theme sets the side, and flipping the side drops the other side's themes and
+  their sub-theme, so area and theme never disagree. "+ New theme" from the window makes a
+  theme on the task's side.
+- **A new task starts on the side you're looking at** (`defaultArea`): Today's switch, else
+  the board's focus, else the side picked last (`localStorage lk-last-area`), else home.
+- **The board's focus control** still works by muting theme chips; on top of that, a task
+  with an explicit `area` follows Work / Home there (`boardFocusNow`). Unthemed tasks with no
+  `area` still show under both, as before.
+- Repeats copy `area` onto each occurrence. It syncs with the task (per-task merge), so
+  there is no wholesale field to guard.
+- AI Updates: `add_task` / `update_task` take `area`; the context lists each theme's and
+  each task's `area` (`ai/logic.js` mirrors `taskArea`).
 
 ## Repeats on Today
 

@@ -19,6 +19,8 @@ const TAGS = { type: 'array', minItems: 1, maxItems: 10, items: name('Tag'), des
 const PLACES = ['today', 'day', 'ready', 'backlog', 'waiting', 'blocked', 'ongoing', 'list', 'off_board', 'notes'];
 const placeHelp = 'today = on Today’s list; day = on the Today list of the date in "day"; ready = Live but no day yet (the Ready sheet); backlog, waiting, blocked, ongoing = that board column; list = its theme’s list, off the board; off_board = the list’s “Off board” tier; notes = parked in Notes';
 
+const AREA = { enum: ['work', 'home'], description: 'Work or home. Every task is one or the other; the theme is optional underneath. Leave out when a theme is given (the theme decides), unless the theme is unclear.' };
+
 const WEEKDAY = { enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] };
 
 export default {
@@ -38,6 +40,7 @@ export default {
         properties: {
           type: { const: 'add_task' },
           title: { type: 'string', minLength: 1, maxLength: 200, description: 'Short task title, in Tom’s words.' },
+          area: AREA,
           theme: name('Theme', ' (e.g. "House")'),
           also_themes: { type: 'array', minItems: 1, maxItems: 4, items: name('Theme'), description: 'Extra themes when a task belongs to more than one (Work + Jim). Rarely needed.' },
           sub_theme: name('Sub-theme', ', belonging to the task’s theme'),
@@ -79,6 +82,7 @@ export default {
           type: { const: 'update_task' },
           ...taskRef,
           title: { type: 'string', minLength: 1, maxLength: 200, description: 'A new title (rename).' },
+          area: { ...AREA, description: 'Move it to work or home. Themes from the other side come off it.' },
           theme: name('Theme', '. Replaces the task’s themes'),
           also_themes: { type: 'array', minItems: 1, maxItems: 4, items: name('Theme'), description: 'Extra themes, with theme.' },
           sub_theme: { type: ['string', 'null'], minLength: 1, maxLength: 80, description: 'Sub-theme name (must belong to one of the task’s themes), or null to clear it.' },
@@ -148,6 +152,14 @@ export const examples = [
     actions: [
       { type: 'add_task', title: 'Book MOT', theme: 'House', sub_theme: 'Maintenance', due: '2026-11-30', priority: 'high' },
       { type: 'add_task', title: 'Ring the garage about the tyres', theme: 'House', where: 'day', day: '2026-11-19' },
+    ],
+  },
+  {
+    title: 'Quick work and home captures with no theme',
+    said: 'Work thing: chase the Q3 figures. And for home, sort the loft hatch.',
+    actions: [
+      { type: 'add_task', title: 'Chase the Q3 figures', area: 'work' },
+      { type: 'add_task', title: 'Sort the loft hatch', area: 'home' },
     ],
   },
   {

@@ -123,6 +123,7 @@ let modalPlanDay = null;            // a task added from Today lands on this day
 
 // Modal field state
 let modalThemeIds = [];      // a task can carry several themes
+let modalArea = 'home';      // Work or Home, set before (or instead of) a theme
 let modalSubTheme = '';
 let modalTagIds = [];
 let modalSubtasks = [];
@@ -2123,11 +2124,14 @@ function renderBoard() {
     const hidden = hiddenThemeIds();
     const weekendHidden = weekendHiddenThemeIds();
     const muted = mutedThemeIds();
+    const boardF = boardFocusNow();
 
     boardColumns().forEach(col => {
         const tasks = state.tasks.filter(t =>
             t.kanbanColumn === col.id && t.status !== 'wont-do'
             && themesPass(t, hidden, weekendHidden, muted)
+            // a task marked Work or Home follows the board's Work / Home control too
+            && (boardF === 'all' || !t.area || t.area === boardF)
             && taskMatchesTagFilter(t, activeTagFilter));
         const colEl = document.createElement('div');
         colEl.className = 'board-col';
@@ -2401,19 +2405,43 @@ function dropIntoPlan(id, day, index) {
 // the board's theme chips so muting a chip there never hides a task here.
 // A task with no theme counts as home.
 function todayFocus() { return state.settings.todayFocus || 'all'; }
-// Adding to Today while it shows Work: give the task the first work theme,
-// or it would count as home and vanish the moment it was added.
-function todayFocusThemeIds() {
-    if (currentView !== 'today' || todayFocus() !== 'work') return [];
-    const th = state.themes.find(t => themeFocus(t) === 'work' && !t.hidden);
-    return th ? [th.id] : [];
+
+// ---- Work / Home on a task (18 Nov 2026) ----
+// Tom: "I'm not adding themes to home stuff that I want to add quickly because I
+// can't think of what theme it is". So a task says Work or Home itself
+// (task.area), and the theme is optional underneath. Picking a theme sets the
+// area to the theme's focus. A task without an area (everything before this)
+// still goes by its themes, and no theme still means home.
+function taskArea(t) {
+    if (t.area === 'work' || t.area === 'home') return t.area;
+    return taskThemes(t).some(th => themeFocus(th) === 'work') ? 'work' : 'home';
 }
-function todayFocusPass(t) {
-    const f = todayFocus();
+// Does the task belong under a Work or Home filter? A task's own area decides;
+// an old one with themes on both sides shows under both, as it always did.
+function areaPass(t, f) {
     if (f === 'all') return true;
+    if (t.area === 'work' || t.area === 'home') return t.area === f;
     const themes = taskThemes(t);
     if (!themes.length) return f === 'home';
     return themes.some(th => themeFocus(th) === f);
+}
+function todayFocusPass(t) { return areaPass(t, todayFocus()); }
+// Adding while Today shows Work or Home: the new task is that side, or it
+// would vanish the moment it was added.
+function todayFocusArea() {
+    return currentView === 'today' && todayFocus() !== 'all' ? todayFocus() : '';
+}
+function boardFocusNow() {
+    const weekendHidden = weekendHiddenThemeIds();
+    const visible = state.themes.filter(t => (!t.hidden || state.settings.showHidden) && !weekendHidden.has(t.id));
+    return deriveBoardFocus(visible, mutedThemeIds());
+}
+// A new task starts on the side you're looking at, else the side you picked last
+function defaultArea() {
+    if (todayFocusArea()) return todayFocusArea();
+    if (currentView === 'board') { const f = boardFocusNow(); if (f !== 'all') return f; }
+    try { const v = localStorage.getItem('lk-last-area'); if (v === 'work' || v === 'home') return v; } catch {}
+    return 'home';
 }
 
 // Drag needs a mouse; phones keep the tap-only controls
@@ -3264,6 +3292,7 @@ function createTask(data) {
         doDate: data.doDate || '',
         notes: data.notes || '',
         url: data.url || '',
+        area: data.area === 'work' || data.area === 'home' ? data.area : '',
         createdDate: data.createdDate || todayStr(),
         completedDate: null,
         recurring: data.recurring || null,
@@ -3384,6 +3413,7 @@ function scheduleOccurrence(source, dateStr, runCount) {
         themeId: source.themeId,
         themeIds: taskThemeIds(source),
         tags: [...taskTagIds(source)],
+        area: source.area || '',
         // A fresh occurrence starts with its checklist unticked
         subtasks: (source.subtasks || []).map(({ cardId, ...st }) => ({ ...st, id: genId(), done: false })),
         subTheme: source.subTheme,
@@ -3662,6 +3692,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
     document.getElementById('task-title').style.display = '';
 
     // Reset fields
+    modalArea = defaultArea();
     modalThemeIds = [];
     modalSubTheme = '';
     modalTagIds = [];
@@ -3681,6 +3712,7 @@ function openTaskModal(taskId, defaultKanbanCol) {
         if (!t) return;
         document.getElementById('task-title').value = t.title;
         modalThemeIds = [...taskThemeIds(t)];
+        modalArea = taskArea(t);
         modalSubTheme = t.subTheme || '';
         modalTagIds = [...taskTagIds(t)];
         modalSubtasks = (t.subtasks || []).map(st => ({...st, done: subtaskDone(st)}));
@@ -4231,13 +4263,17 @@ function addSubtaskFromInput() {
 function renderThemePicker() {
     const container = document.getElementById('theme-picker');
     container.innerHTML = '';
-    [...state.themes].sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
+    renderAreaPicker();
+    // Only this side's themes (plus any already chosen), so the row is shorter
+    [...state.themes].filter(th => themeFocus(th) === modalArea || modalThemeIds.includes(th.id))
+        .sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
         const btn = tintChip(chipBtn(theme.name + (theme.hidden ? ' 🕶' : ''), modalThemeIds.includes(theme.id)), theme.color);
         btn.dataset.themeId = theme.id;
         btn.addEventListener('click', () => {
             // Each chip is an independent toggle, so Work + Jim is just two taps
             const i = modalThemeIds.indexOf(theme.id);
-            if (i === -1) modalThemeIds.push(theme.id); else modalThemeIds.splice(i, 1);
+            if (i === -1) { modalThemeIds.push(theme.id); setModalArea(themeFocus(theme), true); }
+            else modalThemeIds.splice(i, 1);
             renderThemePicker();
             updateSubThemeSelect();
         });
@@ -4253,6 +4289,23 @@ function renderThemePicker() {
     // One line, chosen first then the ones used most, so the usual theme is
     // in view without scrolling
     layThemeOrder();
+}
+
+function renderAreaPicker() {
+    document.querySelectorAll('#area-picker [data-area]').forEach(b =>
+        b.setAttribute('aria-pressed', b.dataset.area === modalArea ? 'true' : 'false'));
+}
+// keepThemes: a theme was just picked, so it already matches
+function setModalArea(area, keepThemes) {
+    modalArea = area;
+    try { localStorage.setItem('lk-last-area', area); } catch {}
+    if (!keepThemes) {
+        // Flipping side drops the other side's themes, and their sub-theme
+        const before = modalThemeIds.length;
+        modalThemeIds = modalThemeIds.filter(id => { const th = getTheme(id); return th && themeFocus(th) === area; });
+        if (modalThemeIds.length !== before) { renderThemePicker(); updateSubThemeSelect(); return; }
+    }
+    renderThemePicker();
 }
 
 function renderPriorityPicker() {
@@ -4464,6 +4517,7 @@ function saveTaskModal() {
         doDate: document.getElementById('task-do').value,
         notes: document.getElementById('task-notes').value.trim(),
         url: normaliseUrl(document.getElementById('task-url').value),
+        area: modalArea,
         recurring: getRecurringFromModal(),
     }, modalThemeIds);
 
@@ -4582,7 +4636,8 @@ function openThemeModal(themeId, opts) {
         document.getElementById('theme-edit-subthemes').value = '';
         document.getElementById('theme-edit-hidden').checked = false;
         document.getElementById('theme-edit-hide-weekend').checked = false;
-        modalThemeFocus = 'home';
+        // Made from the task window: the side the task is on
+        modalThemeFocus = themeModalFromTask ? modalArea : 'home';
     }
     renderThemeFocusPicker();
     if (!modal.open) modal.showModal();
@@ -4624,6 +4679,7 @@ function saveThemeModal() {
     closeThemeModal();
     if (backToTask) {
         if (savedId && !modalThemeIds.includes(savedId)) modalThemeIds.push(savedId);
+        if (savedId) { const th = getTheme(savedId); if (th) modalArea = themeFocus(th); }
         renderThemePicker();
         updateSubThemeSelect();
         return;
@@ -4844,9 +4900,11 @@ function init() {
         if (currentView !== 'today') return openTaskModal(null);
         openTaskModal(null, 'live');
         modalPlanDay = quickAddPlanTarget();
-        const ids = todayFocusThemeIds();
-        if (ids.length) { modalThemeIds = ids; renderThemePicker(); updateSubThemeSelect(); }
     });
+
+    // Work / Home switch in the task window
+    document.querySelectorAll('#area-picker [data-area]').forEach(b =>
+        b.addEventListener('click', () => setModalArea(b.dataset.area)));
 
     document.getElementById('ready-close').addEventListener('click', closeReadySheet);
     document.getElementById('ready-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeReadySheet(); });
@@ -4862,7 +4920,7 @@ function init() {
             addTask({ title, reviewed: false, kanbanColumn: null });
             reviewBannerDismissed = false;
         } else {
-            addTask({ title, reviewed: true, kanbanColumn: 'live', planDay: target, themeIds: todayFocusThemeIds(),
+            addTask({ title, reviewed: true, kanbanColumn: 'live', planDay: target, area: todayFocusArea() || undefined,
                 planOrder: nextPlanOrder(target ? planTasks(target) : readyTasks()) });
         }
         input.value = '';

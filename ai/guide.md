@@ -7,19 +7,21 @@ Tom's to-do app, built in tiers so a phone screen never scares him. From the top
 a sheet), the **Board** (columns Backlog, Live, Waiting, Blocked, Ongoing), each theme's
 **List** (with an "Off board" tier), and **Notes** (parked things, such as shopping, that
 shouldn't clutter Today or the board). New captures land in a **review queue** first. Snoozed
-tasks are hidden until their date. Every task has a theme (House, Work, Garden…), maybe a
-sub-theme, and tags from tag categories (People, When…).
+tasks are hidden until their date. Every task is **work or home** (its `area`). Under that it
+can have a theme (House, Work, Garden…), maybe a sub-theme, and tags from tag categories
+(People, When…). Each theme belongs to one side, so the theme decides the area when there is one.
 
 ## Context
 
 Its block in the daily update (or ✨ AI › **Copy just Life List**) is the context. `data` holds:
 - `today`: the date on Tom's device. Work out "tomorrow", "Friday" and so on from it.
-- `themes`: `id`, `name`, `sub_themes` (names). `hidden: true` themes still exist and can be used.
+- `themes`: `id`, `name`, `area` (work or home), `sub_themes` (names). `hidden: true` themes
+  still exist and can be used.
 - `tag_categories`: `id`, `name`, `tags` (`id`, `name`).
 - `tasks`: up to 300 open tasks (everything on Today, a day or Ready first, then the newest), each
   with `id`, `title`, `where` (today, day, ready, backlog, waiting, blocked, ongoing, list,
-  off_board, notes, review or snoozed), and when set: `day`, `until` (snoozed), `due`, `priority`,
-  `themes` (names), `repeats`.
+  off_board, notes, review or snoozed), `area` (work or home), and when set: `day`, `until`
+  (snoozed), `due`, `priority`, `themes` (names), `repeats`.
 - `open_tasks`: how many open tasks there are in all. When it is more than the list, the note says
   so: refer to a task that isn't listed by its title, without a `task_id`.
 
@@ -31,7 +33,8 @@ has been changing things in the app, ask for a fresh copy before referring to ta
 ## When to use each action
 
 - **add_task**: anything new Tom needs to do or remember. Give it a theme whenever one obviously
-  fits, and a sub-theme or tags only when they're clear from the context. Leave `where` out for a
+  fits, and a sub-theme or tags only when they're clear from the context. When no theme is clear,
+  don't guess one: send `area` (`work` or `home`) instead, so it still sorts under the right side. Leave `where` out for a
   plain capture (it goes to the review queue, where Tom triages). Use `where: "today"` or
   `"day"` + `day` when Tom says when he'll do it, `"backlog"` for "on the board, not yet planned",
   `"notes"` for shopping and errand lists. Use `due` for a deadline ("by the 30th"). A list of
@@ -52,6 +55,9 @@ has been changing things in the app, ask for a fresh copy before referring to ta
 - Themes, sub-themes and tags must already exist: use the names exactly as in the context. Life
   List never creates them from here. If Tom wants a new one, tell him to add it in Settings ›
   Themes or Settings › Tags first, then send the block.
+- `area` and a theme must agree: a home theme can't go on a work task. With a theme, leave `area`
+  out. To move a task between work and home, send `update_task` with `area`; any themes from the
+  old side come off it.
 - A sub-theme belongs to a theme: only use one listed under that task's theme, and send the theme
   with it on add_task.
 - One tag per tag category per task. When the same tag name is in two categories (Jim is in People
