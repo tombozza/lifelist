@@ -138,14 +138,14 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .board-columns { display:flex; gap: var(--sp-3); overflow-x:auto; padding-bottom: var(--sp-4); min-height:calc(100vh - 220px); align-items:flex-start; }
 .board-col { flex:1; min-width:0; background: var(--surface-2); border-radius: var(--r-lg); display:flex; flex-direction:column; }
 .board-col-header { display:flex; align-items:center; justify-content:space-between; gap: var(--sp-2); padding: var(--sp-3) var(--sp-3) var(--sp-2); }
-.board-cards { padding: 0 var(--sp-2) var(--sp-2); flex:1; min-height:60px; }
+.board-cards { padding: 0 var(--sp-2) var(--sp-2); flex:1; min-height:60px; display:grid; gap: var(--sp-2); align-content:start; }
 .board-cards.drag-over { background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 0 0 var(--r-lg) var(--r-lg); }
 .board-col-add { margin: 0 var(--sp-2) var(--sp-2); }
 
 /* A card scans as a title: the top row is the title's, the corner is the ⋯ menu's */
 .board-card {
     background: var(--surface); border:1px solid var(--border); border-left:3px solid transparent;
-    border-radius: var(--r-sm); padding: var(--sp-2) 10px; margin-bottom: 6px;
+    border-radius: var(--r-sm); padding: var(--sp-2) 10px;
     cursor:grab; transition: box-shadow 0.1s, border-color 0.1s;
 }
 .board-card:hover { box-shadow: var(--shadow-md); border-color: var(--border-strong); }

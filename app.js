@@ -1176,7 +1176,7 @@ function renderReviewBanner() {
     const dismiss = document.createElement('button');
     dismiss.className = 'ui-btn quiet icon small';
     dismiss.setAttribute('aria-label', 'Dismiss');
-    dismiss.innerHTML = '&times;';
+    dismiss.innerHTML = uiIcon('x');
     dismiss.title = 'Dismiss';
     dismiss.addEventListener('click', () => { reviewBannerDismissed = true; renderReviewBanner(); });
     actions.appendChild(reviewBtn);

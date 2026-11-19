@@ -259,6 +259,12 @@ label.ui-card.check { display: flex; }
 .ui-stat > span { font-size: var(--text-xs); font-weight: 600; color: var(--text-2); }
 
 /* ── Lists ───────────────────────────────────────────────────────────────────── */
+/* <ul class="ui-bullets"><li>…</li></ul>: a plain bulleted list of short notes (what was done, what to
+   check). Its own gap, no browser margins, the bullet hangs in the gutter. */
+.ui-bullets { margin: 0; padding: 0 0 0 var(--sp-5); display: grid; gap: var(--sp-1); color: var(--text-2); }
+.ui-bullets > li { padding-left: var(--sp-1); }
+.ui-bullets > li::marker { color: var(--text-3); }
+
 /* <ul class="ui-list"><li class="ui-row">…</li></ul>. A row holds an optional leading icon or
    control, a .main block (title, then .sub), and trailing bits (a badge, a .small button, a
    chevron). Make the whole row a <button> or <a> when it opens something. */
@@ -640,6 +646,60 @@ body:has(.ui-tabbar):has(> .ui-fab:not([hidden])) .ui-toast { bottom: calc(152px
   .ui-rail > .ui-spacer { flex: 1; }
   .ui-shell:has(> .ui-rail) .ui-tabbar { display: none; }
 }
+
+/* ── App icons and launcher tiles ────────────────────────────────────────────── */
+/* An app or group icon, in the icon language: a gradient tile with one white glyph (19 Nov 2026,
+   for Shoebox's home). <span class="ui-appicon" style="--c1:#8b5cf6;--c2:#6d28d9">${uiIcon('sparkles')}</span>
+   --c1 is its identity colour (--c2, the gradient's foot, defaults to a darker --c1; both default to
+   --accent). Sizes: .small 28 (beside a rail link), 36 by default, .large 44 (a tile), .xl 56 (a page
+   heading). .soft is the quiet one: a tint of the colour and the glyph in it, for long grids. */
+.ui-appicon {
+  display: grid; place-items: center; flex: none; inline-size: var(--tap-sm); block-size: var(--tap-sm);
+  border-radius: var(--r-md); color: #fff;
+  background: linear-gradient(160deg, var(--c1, var(--accent)), var(--c2, color-mix(in srgb, var(--c1, var(--accent)) 70%, black)));
+}
+.ui-appicon > .ui-icon { inline-size: var(--icon-md); block-size: var(--icon-md); }
+.ui-appicon.small { inline-size: var(--tap-xs); block-size: var(--tap-xs); border-radius: var(--r-sm); }
+.ui-appicon.small > .ui-icon { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
+.ui-appicon.large { inline-size: var(--tap); block-size: var(--tap); }
+.ui-appicon.large > .ui-icon { inline-size: var(--icon-lg); block-size: var(--icon-lg); }
+.ui-appicon.xl { inline-size: calc(var(--tap) + var(--sp-3)); block-size: calc(var(--tap) + var(--sp-3)); border-radius: var(--r-lg); }
+.ui-appicon.xl > .ui-icon { inline-size: var(--icon-xl); block-size: var(--icon-xl); stroke-width: 1.75; }
+.ui-appicon.soft { background: color-mix(in srgb, var(--c1, var(--accent)) 16%, transparent); color: var(--c1, var(--accent)); }
+.ui-rail > :is(a, button) > .ui-appicon:first-child { inline-size: var(--tap-xs); color: #fff; }
+/* A grid of things to open (an app's tools, a hub's apps): each tile is its icon, its name and one
+   line of what it does. <div class="ui-launchers"><div class="ui-launcher"><button class="open">
+   <span class="ui-appicon large soft">…</span><span class="main"><b>Name</b><span class="sub">What it does</span></span></button>
+   <button class="pin" aria-pressed="false" aria-label="Add to Favourites">${uiIcon('star')}</button></div>…</div>
+   .large stacks the icon over the words, for a few favourites. The .pin (optional) shows on hover
+   and stays when pressed. A trailing icon after .main (a chevron) is drawn quiet. */
+.ui-launchers { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--sp-3); }
+.ui-launcher { position: relative; min-width: 0; }
+.ui-launcher > .open {
+  display: flex; align-items: center; gap: var(--sp-3); inline-size: 100%; min-block-size: calc(var(--tap) + var(--sp-6));
+  padding: var(--sp-3); margin: 0; border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--surface); color: inherit; font: inherit; text-align: start; cursor: pointer; box-shadow: none;
+}
+.ui-launcher:has(> .pin) > .open { padding-inline-end: calc(var(--tap-xs) + var(--sp-3)); }
+.ui-launcher > .open:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.ui-launcher > .open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ui-launcher .main { flex: 1; min-width: 0; display: grid; gap: calc(var(--sp-1) / 2); }
+.ui-launcher .main > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-launcher .main > :first-child { font-size: var(--text-md); font-weight: 600; }
+.ui-launcher .main > .sub { font-size: var(--text-sm); color: var(--text-2); }
+.ui-launcher > .open > .ui-icon:last-child { color: var(--text-3); }
+.ui-launcher.large > .open { flex-direction: column; align-items: flex-start; justify-content: center; min-block-size: calc(var(--tap) * 2 + var(--sp-3)); }
+.ui-launcher.large .main { inline-size: 100%; }
+.ui-launcher > .pin {
+  position: absolute; inset-block-start: var(--sp-2); inset-inline-end: var(--sp-2); display: grid; place-items: center;
+  inline-size: var(--tap-xs); block-size: var(--tap-xs); min-block-size: 0; padding: 0; margin: 0; border: 0; border-radius: var(--r-sm);
+  background: none; color: var(--text-3); cursor: pointer; opacity: 0; box-shadow: none;
+}
+.ui-launcher > .pin > .ui-icon { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
+.ui-launcher:hover > .pin, .ui-launcher > .pin:focus-visible, .ui-launcher > .pin[aria-pressed='true'] { opacity: 1; }
+.ui-launcher > .pin:hover { background: var(--surface-2); }
+.ui-launcher > .pin[aria-pressed='true'] { color: var(--warning); }
+.ui-launcher > .pin[aria-pressed='true'] > .ui-icon { fill: currentColor; }
 
 /* ── Photos ──────────────────────────────────────────────────────────────────── */
 /* A drop zone that's also the file button:

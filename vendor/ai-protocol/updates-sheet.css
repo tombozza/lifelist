@@ -30,7 +30,7 @@
 .au-ok { color: var(--success, #2f8a4c); font-weight: 600; font-size: var(--text-sm, 13px); }
 .au-row select { min-height: 40px; font: inherit; font-size: 16px; padding: 0 8px; border-radius: 10px;
   border: 1px solid var(--mg-border); background: var(--mg-surface); color: var(--mg-text); width: 100%; max-width: 100%; }
-.au-share { border-top: 1px solid var(--mg-border); padding-top: 10px; }
+.au-share { border-top: 1px solid var(--mg-border); padding-top: var(--sp-3, 12px); }
 .au-share-btns { display: inline-flex; gap: 8px; flex-wrap: wrap; }
 .au-key { display: grid; gap: 8px; }
 .au-key input { min-height: 44px; font: inherit; font-size: 16px; padding: 0 10px; border-radius: 10px;
@@ -55,7 +55,9 @@
 .au-wait { border-color: color-mix(in srgb, var(--mg-accent, #5b5bd6) 45%, var(--mg-border)); background: color-mix(in srgb, var(--mg-accent, #5b5bd6) 8%, var(--mg-surface)); }
 .au-wait .au-card-ic { color: var(--mg-accent, #5b5bd6); background: color-mix(in srgb, var(--mg-accent, #5b5bd6) 14%, transparent); }
 .au-foot { display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: space-between; align-items: center; font-size: var(--text-sm, 13px); color: var(--mg-text-2); border-top: 1px solid var(--mg-border); padding-top: 10px; }
-.au-foot-btns { display: inline-flex; gap: 12px; flex-wrap: wrap; }
+.au-foot-btns { display: inline-flex; gap: var(--sp-3, 12px); flex-wrap: wrap; }
+/* the links are text, but still a thumb's worth tall to hit (the live check's small-target, 18 Nov 2026) */
+.au-foot-btns .mg-link { min-block-size: var(--tap-xs, 28px); display: inline-flex; align-items: center; }
 .au-sent { padding: 10px 12px; border-radius: var(--mg-r-sm, 12px); background: var(--mg-surface-2); }
 @media (max-width: 480px) {
   .au-card { grid-template-columns: auto minmax(0, 1fr); }
