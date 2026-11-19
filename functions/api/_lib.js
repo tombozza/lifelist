@@ -40,3 +40,16 @@ export async function isAuthorized(context) {
   const token = getCookie(request, SESSION_COOKIE);
   return !!token && token === (await sessionToken(env, row.password_hash));
 }
+
+// Recovery code (Round 3, 19 Nov 2026): only its hash is kept, in settings.recovery_hash. The column is
+// added on first use, so there's no migration to run. See vendor/safety/recovery.js.
+export async function getRecoveryHash(db) {
+  try {
+    const row = await db.prepare('SELECT recovery_hash FROM settings WHERE id = 1').first();
+    return (row && row.recovery_hash) || null;
+  } catch { return null; }   // no column yet
+}
+export async function setRecoveryHash(db, hash) {
+  try { await db.prepare('ALTER TABLE settings ADD COLUMN recovery_hash TEXT').run(); } catch { /* already there */ }
+  await db.prepare('UPDATE settings SET recovery_hash = ? WHERE id = 1').bind(hash).run();
+}

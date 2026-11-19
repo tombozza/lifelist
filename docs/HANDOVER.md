@@ -95,6 +95,7 @@ the sync code can read and write the blob.
 
 Newest first. Most have a longer explanation in `CLAUDE.md`.
 
+- 2026-11-19: **Recovery code for the lock** (Round 3, "Never locked out"). Setting a password makes a recovery code; only its hash is kept (`settings.recovery_hash`, a column added on first use, so no migration) and the code is shown once in the shared sheet (`vendor/safety/recovery-sheet.js`). On the lock screen the code works in place of the password (`POST /api/auth` answers `recovered: true`) and the screen says so before going in. Settings shows a Recovery code row while the lock is on: New code (after a confirm; the old one stops working) or Make one for a lock set before today. A new password makes a new code; Off clears it; `PUT /api/settings { new_recovery_code: true }` is refused unless the lock is on and stays behind the middleware. The session token is still tied to the password hash, so a recovery sign-in is the same cookie as a password one. Copied from Golf Tracker. Test in `tests/lock.test.mjs`. Service worker v96.
 - 2026-11-19: **Restore from a backup only adds** (Settings › Data; Round 2, the safety net). The old Import replaced the whole state and the next pull merged the cloud straight back over it (a backup's older stamps always lose), so it never actually restored. Now it uses the shared `openRestore` + `restoreMissing` (`vendor/safety/`): it pulls first, then adds every task, archived task, theme, tag and saved note in the file whose id isn't here, and leaves everything here alone. What it adds is stamped now and pushed at once, so it sticks on every device; a task or archive copy deleted for good here (a plain tombstone always wins) comes back under a new id, with `parentId` and a step's `cardId` remapped; themes, tags and saved notes stamp their `*UpdatedAt` (a restore is a real edit, made after a pull); a repeat still running here comes back a one-off and its dormant occurrences are skipped. Not an Undo step. `restorePlan` / `applyRestore` in the `restore-core` block of `app.js`; `tests/restore.test.mjs` (two-device merges). Tried locally with `wrangler pages dev` and local D1 as two devices (localhost and 127.0.0.1): deleted a task everywhere, restored it on one, reloaded the other and it was there, with a newer edit to another task kept. Archive Reopen and Delete (the other review item) was already done earlier today. Service worker v95. Not deployed. No schema change.
 - 2026-11-19: Board cards sit on a `--sp-2` gap (was 6px margins; the live check's new `stacked` rule wants 8+). Every close and dismiss × is the shared `x` icon instead of a faint × character (the review and stale-list banners, the sheets' close buttons, a subtask's remove). Tag chips keep their × (the shared chip's). Live.
 - 2026-11-19: **Reopen and Delete on archive rows** (Settings › Archive; Round 1, fix it after the fact). Reopen puts the task back in the column it was finished from (Live comes back as Ready, an old or missing column as Backlog); Delete asks once and removes it on every device. The archive merges as a union, so taking an entry out writes an `archive-out:<id>` mark into `deletedIds` (`{id:'archive-out:<taskId>', ts}`, never a task id, so all code versions sync it untouched) and `compactArchive(archive, deletedIds)` drops copies changed at or before it; a task finished again later files normally, and the re-archive now refreshes its old archive tombstone. Reopen stamps the task now, so it beats its archive tombstone everywhere; Delete adds a plain tombstone. A repeat: if its next occurrence is still dormant the schedule comes back onto the reopened one and the dormant one is deleted (as un-completing does), otherwise it comes back a one-off, so there's never a second live repeat. Not an Undo step (Undo would tombstone the reopened task). `reopenArchived` / `deleteArchived` in the archive-core block; `tests/archive.test.mjs` (two-device merges). Tried locally with `wrangler pages dev` and local D1, including a stale cloud copy pushed back over it. Service worker v94. Not deployed. No schema change.
@@ -173,6 +174,20 @@ Newest first. Most have a longer explanation in `CLAUDE.md`.
   Apple Reminders instead, and failed when locked), so treat Siri capture as best-effort.
 - 2026-06-04: Rebuilt from scratch as Lists + Board + Admin with recurring tasks and themes.
 - 2026-06-03: First version, with Supabase sync.
+
+## Break glass
+
+If both the password and the recovery code are lost: Cloudflare dashboard › Storage & databases › D1 ›
+**life-kanban-db** › Console, run
+
+```sql
+UPDATE settings SET password_enabled = 0, password_hash = NULL, recovery_hash = NULL WHERE id = 1;
+```
+
+(If it says there's no `recovery_hash` column, no code was ever made: drop that part.) The app is then
+open; turn the lock back on in Settings. Deleted tasks can't usefully be brought back from the console:
+everything lives in one JSON document per sync code in `kanban_sync`, with deletes as tombstones inside
+it. Use the app (Archive, or Settings › Data › Restore from a backup) instead.
 
 ## Status
 

@@ -541,6 +541,12 @@
                 </div>
             </div>
             <p id="password-status" class="ui-hint" style="display:none;"></p>
+            <ul class="ui-list" id="recovery-row" hidden>
+                <li class="ui-row compact">
+                    <div class="main"><span>Recovery code</span><span class="sub" id="recovery-sub"></span></div>
+                    <button class="ui-btn small" id="recovery-btn">Make one</button>
+                </li>
+            </ul>
             <div id="password-logout-row" style="display:none;">
                 <button class="ui-btn" id="settings-password-logout">Log out this device</button>
             </div>
@@ -558,9 +564,12 @@
             <input type="password" id="gate-password" class="ui-input" placeholder="Password" aria-label="Password" autocomplete="current-password">
             <small id="gate-error" style="display:none;"></small>
         </label>
+        <p class="ui-hint" id="gate-hint"></p>
+        <p class="ui-note good" id="gate-recovered" hidden></p>
     </div>
     <footer class="ui-actions end">
         <button class="ui-btn primary" id="gate-submit">Unlock</button>
+        <button class="ui-btn primary" id="gate-continue" hidden>Continue</button>
     </footer>
 </dialog>
 

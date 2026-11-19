@@ -14,6 +14,7 @@ function fakeDB() {
       if (/password_enabled = 1, password_hash = \?/.test(sql)) Object.assign(row, { password_enabled: 1, password_hash: args[0] });
       else if (/password_enabled = 1/.test(sql)) row.password_enabled = 1;
       else if (/password_enabled = 0/.test(sql)) Object.assign(row, { password_enabled: 0, password_hash: null });
+      else if (/SET recovery_hash = \?/.test(sql)) row.recovery_hash = args[0];
     },
   });
   return { prepare: (sql) => stmt(sql), row };
@@ -49,4 +50,22 @@ test('a new password signs every old cookie out', async () => {
   assert.equal(await passes(e, req('GET', '/api/sync/abc', { cookie: await signIn(e, 'second-pw') })), true);
   await setPw(e, undefined, false);
   assert.equal(await passes(e, req('GET', '/api/sync/abc')), true, 'off again: open');
+});
+
+test('recovery code: made with a password, unlocks with recovered, renewed, cleared by Off', async () => {
+  const e = env();
+  const code = (await (await setPw(e, 'first-pw')).json()).recovery_code;
+  assert.match(code, /^[A-Z0-9]{4}(-[A-Z0-9]{4}){3}$/);
+  const res = await auth({ request: req('POST', '/api/auth', { body: { password: code.toLowerCase() } }), env: e });
+  assert.deepEqual(await res.json(), { ok: true, recovered: true });
+  const cookie = res.headers.get('Set-Cookie').split(';')[0];
+  assert.equal(await passes(e, req('GET', '/api/sync/abc', { cookie })), true);
+  // new_recovery_code is behind the gate, and the old code stops working
+  assert.equal(await passes(e, req('PUT', '/api/settings', { body: { new_recovery_code: true } })), 401);
+  const fresh = (await (await putSettings({ request: req('PUT', '/api/settings', { body: { new_recovery_code: true } }), env: e })).json()).recovery_code;
+  assert.notEqual(fresh, code);
+  assert.equal((await auth({ request: req('POST', '/api/auth', { body: { password: code } }), env: e })).status, 401);
+  await setPw(e, '', false);
+  assert.equal(e.DB.row.recovery_hash, null);
+  assert.equal((await putSettings({ request: req('PUT', '/api/settings', { body: { new_recovery_code: true } }), env: e })).status, 400);
 });

@@ -5437,13 +5437,28 @@ function init() {
         const pw = document.getElementById('settings-password-input').value;
         if (!pw || pw.length < 4) { alert('Choose a password of at least 4 characters.'); return; }
         try {
-            await apiUpdateSettings(true, pw);
+            const res = await apiUpdateSettings(true, pw);
             // Sign this device in with the new password, or the next sync locks it out.
             await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ password: pw }) });
             document.getElementById('settings-password-input').value = '';
             document.getElementById('password-set-row').style.display = 'none';
-            refreshPasswordUI(true);
+            // Shown once: the only time the recovery code is ever on screen.
+            if (res && res.recovery_code) await showRecovery(res.recovery_code);
+            refreshPasswordUI(true, !!(res && res.recovery_code));
         } catch(err) { alert('Could not enable the lock: ' + err.message); }
+    });
+    // A new recovery code for a lock that's already on (the old one stops working).
+    document.getElementById('recovery-btn').addEventListener('click', async () => {
+        if (passwordHasCode && !confirm('Make a new recovery code? The old one will stop working.')) return;
+        try {
+            const res = await fetch('/api/settings', {
+                method:'PUT', headers:{'content-type':'application/json'}, body: JSON.stringify({ new_recovery_code: true }),
+            });
+            const b = await res.json().catch(() => ({}));
+            if (!res.ok || !b.recovery_code) throw new Error((b.error && b.error.message) || `HTTP ${res.status}`);
+            await showRecovery(b.recovery_code);
+            refreshPasswordUI(true, true);
+        } catch(err) { alert('Could not make a recovery code: ' + err.message); }
     });
     document.getElementById('settings-password-logout').addEventListener('click', async () => {
         try { await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ action:'logout' }) }); } catch(_) {}
@@ -5455,6 +5470,7 @@ function init() {
     if (gateSubmit) {
         gateSubmit.addEventListener('click', unlockSite);
         document.getElementById('gate-password').addEventListener('keydown', e => { if (e.key === 'Enter') unlockSite(); });
+        document.getElementById('gate-continue').addEventListener('click', () => location.reload());
     }
 
     // Reflect the current lock state when Settings opens.
@@ -5770,9 +5786,16 @@ async function apiPut(code, payload) {
 }
 
 // --- Password gate helpers ---
+// The shared recovery code pieces (sites/_shared/safety), loaded only when needed.
+const recoverySheet = () => import('./vendor/safety/recovery-sheet.js');
+async function showRecovery(code) {
+    const { showRecoveryCode } = await recoverySheet();
+    await showRecoveryCode(code, { app: 'Life Kanban' });
+}
 function showPasswordGate() {
     const gate = document.getElementById('password-gate');
     if (gate && !gate.open) gate.showModal();
+    recoverySheet().then(m => { const h = document.getElementById('gate-hint'); if (h) h.textContent = m.RECOVERY_HINT; }).catch(() => {});
 }
 async function unlockSite() {
     const input = document.getElementById('gate-password');
@@ -5782,6 +5805,19 @@ async function unlockSite() {
         const res = await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ password: pw }) });
         if (!res.ok) {
             if (errEl) { errEl.textContent = 'Incorrect password.'; errEl.style.display = ''; errEl.parentElement.classList.add('error'); }
+            return;
+        }
+        const body = await res.json().catch(() => ({}));
+        if (body.recovered) {
+            // Say so before going in: the person should choose a new password.
+            const { RECOVERED_NOTE } = await recoverySheet();
+            document.getElementById('gate-field').hidden = true;
+            document.getElementById('gate-hint').hidden = true;
+            document.getElementById('gate-submit').hidden = true;
+            const note = document.getElementById('gate-recovered');
+            note.textContent = RECOVERED_NOTE; note.hidden = false;
+            const cont = document.getElementById('gate-continue');
+            cont.hidden = false; cont.focus();
             return;
         }
         // Cookie set — reload so the gated data endpoints work and sync re-runs.
@@ -5802,10 +5838,20 @@ async function loadPasswordSetting() {
     try {
         const res = await fetch('/api/settings', { headers:{'accept':'application/json'} });
         const body = await res.json();
-        refreshPasswordUI(!!body.password_enabled);
+        refreshPasswordUI(!!body.password_enabled, !!body.has_recovery_code);
     } catch(_) { refreshPasswordUI(false); }
 }
-function refreshPasswordUI(enabled) {
+let passwordHasCode = false;
+function refreshPasswordUI(enabled, hasCode = false) {
+    passwordHasCode = enabled && hasCode;
+    const rec = document.getElementById('recovery-row');
+    if (rec) {
+        rec.hidden = !enabled;
+        document.getElementById('recovery-sub').textContent = passwordHasCode
+            ? 'Works in place of the password if you forget it.'
+            : 'None yet. Make one in case you forget the password.';
+        document.getElementById('recovery-btn').textContent = passwordHasCode ? 'New code' : 'Make one';
+    }
     const toggle = document.getElementById('settings-password');
     if (toggle) toggle.checked = enabled;
     document.getElementById('password-set-row').style.display = 'none';
