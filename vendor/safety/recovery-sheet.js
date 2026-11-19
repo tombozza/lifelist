@@ -10,20 +10,22 @@
 //   After a sign-in answered { recovered: true }: show RECOVERED_NOTE (e.g. a toast).
 
 export const RECOVERY_HINT = 'Forgot it? Type your recovery code in the password box instead.';
-export const RECOVERED_NOTE = 'Unlocked with your recovery code. Choose a new password in Settings: that also gives you a new code.';
+export const RECOVERED_NOTE = 'Unlocked with your recovery code. Now set a new password where you turned the lock on: that also gives you a new code.';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const icon = (name) => (typeof window !== 'undefined' && typeof window.uiIcon === 'function' ? window.uiIcon(name) : '');
 
 /** Shows the code; resolves when the person says they've saved it. */
-export function showRecoveryCode(code, { app = 'this app' } = {}) {
+export function showRecoveryCode(code, { app = 'this app', lock = 'password', how } = {}) {
+  // lock: what's being protected ('password', 'PIN'); how: the sentence on using the code, if the default doesn't fit.
+  const use = how ?? `If you ever forget the ${lock} for ${app}, type this code in the ${lock} box instead.`;
   const d = document.createElement('dialog');
   d.className = 'ui-sheet';
   d.innerHTML = `<header><h2>Your recovery code</h2></header>
     <div class="body">
-      <p>If you ever forget the password for ${esc(app)}, type this code in the password box instead.</p>
+      <p>${esc(use)}</p>
       <p class="ui-title" data-code style="font-family:var(--font-mono, ui-monospace, monospace);user-select:all;overflow-wrap:anywhere">${esc(code)}</p>
-      <p class="ui-note warn">Save it in your password manager now, next to the password. It's shown only this once.</p>
+      <p class="ui-note warn">Save it in your password manager now, next to the ${esc(lock)}. It's shown only this once.</p>
       <div class="ui-actions">
         <button type="button" class="ui-btn" data-copy>${icon('copy')}Copy</button>
         <button type="button" class="ui-btn primary" data-done>I've saved it</button>
