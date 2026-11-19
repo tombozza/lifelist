@@ -286,7 +286,7 @@ function loadState() {
             migrateColumns(p.tasks);
             // One entry per archived task (see compactArchive). In memory only:
             // the next save persists it, the next merge pushes it.
-            p.archive = compactArchive(p.archive);
+            p.archive = compactArchive(p.archive, p.deletedIds);
             // Persist straight away: saveState() can't run yet (it writes the
             // `state` this function is still returning), and an unsaved
             // migration would re-run on every load. The bumped tagsUpdatedAt
@@ -3228,7 +3228,7 @@ function renderAdminArchive(container) {
     compactBtn.textContent = 'Compact archive';
     compactBtn.addEventListener('click', async () => {
         const before = Math.max(payloadBytes(syncPayload()), syncStatus.cloudBytes || 0);
-        state.archive = compactArchive(state.archive);
+        state.archive = compactArchive(state.archive, state.deletedIds);
         archiveDone(state, todayStr(), Date.now());
         _baseSave();
         const pushed = await pushToCloud();
@@ -3254,16 +3254,55 @@ function renderAdminArchive(container) {
             const ths = taskThemes(t);
             const tr = document.createElement('div');
             tr.className = 'ui-row archive-task-row';
-            tr.innerHTML = `
-                ${ths.map(th => `<span class="ui-badge accent" style="--accent:${th.color}">${th.name}</span>`).join('')}
-                <span class="ui-spacer">${t.title}</span>
-                ${t.size ? `<span class="ui-badge">${t.size.toUpperCase()}</span>` : ''}
-            `;
+            const badges = ths.map(th => `<span class="ui-badge accent" style="--accent:${th.color}">${th.name}</span>`).join('')
+                + (t.size ? `<span class="ui-badge">${t.size.toUpperCase()}</span>` : '');
+            tr.innerHTML = `<div class="main"><span>${t.title}</span>${badges ? `<span class="ui-chips">${badges}</span>` : ''}</div>`;
+            // Reopen and Delete (19 Nov 2026): a task archived by mistake can come back
+            const reopen = document.createElement('button');
+            reopen.type = 'button';
+            reopen.className = 'ui-btn small';
+            reopen.textContent = 'Reopen';
+            reopen.addEventListener('click', () => archiveRowAction(t.id, 'reopen'));
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'ui-btn small icon quiet danger';
+            del.innerHTML = uiIcon('trash');
+            del.title = 'Delete';
+            del.setAttribute('aria-label', 'Delete ' + t.title);
+            del.addEventListener('click', () => archiveRowAction(t.id, 'delete'));
+            tr.append(reopen, del);
             taskList.appendChild(tr);
         });
         weekEl.appendChild(taskList);
         container.appendChild(weekEl);
     });
+}
+
+// Reopen or Delete one archived task (reopenArchived / deleteArchived in the
+// ARCHIVE block). The page keeps its scroll position.
+function archiveRowAction(id, kind) {
+    const y = window.scrollY;
+    const now = Date.now();
+    let msg;
+    if (kind === 'reopen') {
+        const t = reopenArchived(state, id, now, boardColumns().map(c => c.id));
+        if (!t) return;
+        migrateColumns([t]);
+        const col = KANBAN_COLS.find(c => c.id === t.kanbanColumn);
+        msg = 'Reopened in ' + (col ? col.name : 'Backlog') + (t.recurring ? ', repeat back on' : '') + ': ' + t.title;
+    } else {
+        const copy = archivedCopy(state, id);
+        if (!copy || !confirm(`Delete "${copy.title}" for good? It goes from every device.`)) return;
+        deleteArchived(state, id, now);
+        msg = 'Deleted: ' + copy.title;
+    }
+    // Not an undo step: Undo only knows the board, so undoing a reopen would
+    // tombstone the task and it would be gone from the archive and the board.
+    undoing = true;
+    try { saveState(); } finally { undoing = false; }
+    render();
+    if (window.scrollY !== y) window.scrollTo(0, y);
+    showToast(msg);
 }
 
 function renderAdminData(container) {
@@ -3530,6 +3569,20 @@ function markReviewed(id) {
 //     tombstone has been pruned.
 //  3. compactArchive(): one entry per task id, in the earliest week it was filed,
 //     using its most recent copy. Runs on load and on every merge.
+//
+// Reopen and Delete on an archive row (19 Nov 2026). The archive merges as a
+// union, so dropping an entry locally would come straight back from the cloud.
+// Taking one out writes an "archive-out" mark into deletedIds,
+// {id: 'archive-out:<taskId>', ts}: it never matches a task id, so every
+// version of the code syncs it untouched, and compactArchive() drops any
+// archived copy of that task last changed at or before ts. A task finished and
+// archived again later has a newer copy, so it files normally.
+//  - Reopen puts the copy back as an active task stamped now, which beats the
+//    task's archive tombstone everywhere (applyTombstones lifts it).
+//  - Delete also writes a plain {id, ts} tombstone, so the task is gone everywhere.
+//  - A repeat: if the next occurrence is still dormant, the schedule comes back
+//    onto the reopened task and the dormant one is deleted (as un-completing
+//    does); otherwise the repeat has moved on and the reopened one is a one-off.
 // Pure functions of a state object between the markers, so
 // scripts can run them against a downloaded blob.
 // >>> archive-core
@@ -3542,13 +3595,26 @@ function archiveEntryCount(archive) {
     return (archive || []).reduce((n, w) => n + ((w && w.tasks) || []).length, 0);
 }
 
-function compactArchive(archive) {
+const ARCHIVE_OUT = 'archive-out:';
+
+// Archived copies taken out by Reopen or Delete (see above), id -> ts.
+function archiveOutMarks(deletedIds) {
+    const m = new Map();
+    (deletedIds || []).forEach(x => {
+        if (x && typeof x.id === 'string' && x.id.startsWith(ARCHIVE_OUT)) m.set(x.id.slice(ARCHIVE_OUT.length), x.ts || 0);
+    });
+    return m;
+}
+
+function compactArchive(archive, deletedIds) {
+    const out_ = archiveOutMarks(deletedIds);
+    const isOut = t => t && t.id && out_.has(t.id) && (t.updatedAt || 0) <= out_.get(t.id);
     const weeks = [...(archive || [])].filter(w => w && w.weekStart).sort((a, b) => a.weekStart.localeCompare(b.weekStart));
     const best = new Map();          // id -> { week, copy, order }
     const loose = [];                // id-less entries stay where they were
     let order = 0;
     weeks.forEach(w => (w.tasks || []).forEach(t => {
-        if (!t) return;
+        if (!t || isOut(t)) return;
         if (!t.id) { loose.push({ week: w.weekStart, copy: t, order: order++ }); return; }
         const b = best.get(t.id);
         if (!b) { best.set(t.id, { week: w.weekStart, copy: t, order: order++ }); return; }
@@ -3567,8 +3633,77 @@ function compactArchive(archive) {
 
 function addArchiveTombstone(s, id, now) {
     if (!s.deletedIds) s.deletedIds = [];
-    if (s.deletedIds.some(x => x.id === id)) return;
+    const old = s.deletedIds.find(x => x.id === id);
+    // A task reopened and finished again: refresh the old archive tombstone, or
+    // the newer edit would lift it on the other devices. A delete stays a delete.
+    if (old) { if (old.archived && (old.ts || 0) < now) old.ts = now; return; }
     s.deletedIds.push({ id, ts: now, archived: true });
+}
+
+function markArchiveOut(s, id, now) {
+    if (!s.deletedIds) s.deletedIds = [];
+    const key = ARCHIVE_OUT + id;
+    s.deletedIds = s.deletedIds.filter(x => x.id !== key);
+    s.deletedIds.push({ id: key, ts: now });
+}
+
+function archivedCopy(s, id) {
+    let found = null;
+    (s.archive || []).forEach(w => (w.tasks || []).forEach(t => {
+        if (t && t.id === id && (!found || (t.updatedAt || 0) >= (found.updatedAt || 0))) found = t;
+    }));
+    return found;
+}
+
+// Reopen an archived task onto the board. cols: the board column ids; it goes
+// back to the column it was finished from, else Backlog (Live comes back as
+// Ready, with no day). Returns the task, or null if there was no such copy.
+function reopenArchived(s, id, now, cols) {
+    const copy = archivedCopy(s, id);
+    if (!copy) return null;
+    if (!s.deletedIds) s.deletedIds = [];
+    markArchiveOut(s, id, now);
+    let t = (s.tasks || []).find(x => x.id === id);
+    if (!t) {
+        t = { ...copy };
+        s.tasks.push(t);
+    }
+    t.status = 'active';
+    const prev = { 'next': 'live', 'in-progress': 'live', 'backlog-day': 'backlog', 'backlog-evening': 'backlog' }[t._prevKanban] || t._prevKanban;
+    t.kanbanColumn = (cols || []).includes(prev) ? prev : 'backlog';
+    delete t._prevKanban;
+    t.completedDate = null;
+    t.planDay = null; t.carriedFrom = null;
+    delete t.missed; delete t.missedOn;
+    if (t.spawnedChildId) {
+        const child = s.tasks.find(x => x.id === t.spawnedChildId);
+        if (child && child.status === 'scheduled') {
+            t.recurring = child.recurring || null;
+            if (!t.recurRoot) t.recurRoot = child.recurRoot || null;
+            delete t.recurringSpawned;
+            s.tasks = s.tasks.filter(x => x.id !== child.id);
+            s.deletedIds = s.deletedIds.filter(x => x.id !== child.id);
+            s.deletedIds.push({ id: child.id, ts: now });
+        }
+        delete t.spawnedChildId;
+    }
+    t.updatedAt = now;
+    // its own archive tombstone loses to this edit anyway; drop it here too
+    s.deletedIds = s.deletedIds.filter(x => !(x.id === id && x.archived));
+    s.archive = compactArchive(s.archive, s.deletedIds);
+    return t;
+}
+
+// Delete an archived task for good, on every device.
+function deleteArchived(s, id, now) {
+    if (!archivedCopy(s, id)) return false;
+    if (!s.deletedIds) s.deletedIds = [];
+    markArchiveOut(s, id, now);
+    s.tasks = (s.tasks || []).filter(x => x.id !== id);
+    s.deletedIds = s.deletedIds.filter(x => x.id !== id);
+    s.deletedIds.push({ id, ts: now });
+    s.archive = compactArchive(s.archive, s.deletedIds);
+    return true;
 }
 
 // Move completed tasks into the archive, each under the week it was completed.
@@ -3592,7 +3727,7 @@ function archiveDone(s, today, now, opts) {
     });
     const ids = new Set(go.map(t => t.id));
     s.tasks = s.tasks.filter(t => !ids.has(t.id));
-    s.archive = compactArchive(s.archive);
+    s.archive = compactArchive(s.archive, s.deletedIds);
     return go.length;
 }
 
@@ -5702,7 +5837,7 @@ async function pullFromCloud() {
         // then take anything completed before this week off the board. Push back
         // if the cloud's archive isn't already exactly this (e.g. an older device
         // pushed its bloated copy), so the cloud row shrinks too. ---
-        state.archive = compactArchive([...(state.archive||[]), ...(d.archive||[])]);
+        state.archive = compactArchive([...(state.archive||[]), ...(d.archive||[])], state.deletedIds);
         if (autoArchive()) localContrib = true;
         if (archiveEntryCount(state.archive) !== archiveEntryCount(d.archive)) localContrib = true;
 
