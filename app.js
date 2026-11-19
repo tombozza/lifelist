@@ -3320,16 +3320,19 @@ function renderAdminData(container) {
     exportBtn.textContent = 'Download backup';
     exportBtn.addEventListener('click', exportData);
 
-    const importLabel = document.createElement('label');
-    importLabel.className = 'ui-btn block';
-    importLabel.textContent = 'Import backup';
-    const importInput = document.createElement('input');
-    importInput.type = 'file'; importInput.accept = '.json'; importInput.style.display = 'none';
-    importInput.addEventListener('change', e => { if (e.target.files[0]) importData(e.target.files[0]); });
-    importLabel.appendChild(importInput);
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.className = 'ui-btn block';
+    restoreBtn.textContent = 'Restore from a backup';
+    restoreBtn.addEventListener('click', openRestoreBackup);
+
+    const hint = document.createElement('p');
+    hint.className = 'ui-hint';
+    hint.textContent = "Restoring only adds what isn't here now. Nothing here is changed or deleted.";
 
     wrap.appendChild(exportBtn);
-    wrap.appendChild(importLabel);
+    wrap.appendChild(restoreBtn);
+    wrap.appendChild(hint);
     container.appendChild(wrap);
 }
 
@@ -3757,6 +3760,113 @@ function applyTombstones(tasks, deletedIds) {
 }
 
 // <<< archive-core
+
+// RESTORE FROM A BACKUP (19 Nov 2026, Round 2 of the app review). Import used to
+// replace the whole state with the file, and the next pull merged the cloud's
+// copy straight back over it: every task in an old file has an older updatedAt,
+// so it always lost. Now a backup only ADDS what isn't here: tasks, archived
+// tasks, themes, tags and saved notes whose id is missing. Nothing here is
+// changed or deleted. What it adds is stamped now, so it wins the merge and is
+// pushed to the cloud at once, on every device:
+//  - a task gets updatedAt = now (beats an archive tombstone or archive-out mark);
+//  - a task or archive copy whose id was deleted for good here (a plain
+//    tombstone, which always wins) comes back under a new id, with parentId and
+//    a step's cardId pointing at the new id;
+//  - themes, tags and saved notes sync wholesale, so their *UpdatedAt is
+//    stamped now (a restore is a real edit; the caller pulls first, so this
+//    device is current before it stamps);
+//  - a repeat whose series is still going here comes back as a one-off, and a
+//    dormant occurrence of such a series is skipped, so there's never a second
+//    live repeat.
+// `missing` is restoreMissing from vendor/safety/bin.js; pure functions of a
+// state object, tested by tests/restore.test.mjs.
+// >>> restore-core
+function restoreSeriesRoot(t) { return t.recurRoot || (t.recurring ? t.id : null); }
+
+function restorePlan(s, backup, missing) {
+    if (!backup || typeof backup !== 'object' || !Array.isArray(backup.tasks)) throw new Error("it isn't a Life Kanban backup");
+    const archived = [];
+    (s.archive || []).forEach(w => (w.tasks || []).forEach(t => { if (t && t.id) archived.push(t); }));
+    const here = [...(s.tasks || []), ...archived];
+    const roots = new Set((s.tasks || []).map(restoreSeriesRoot).filter(Boolean));
+    const fromFile = backup.tasks.filter(t => t && t.id && !(t.status === 'scheduled' && roots.has(restoreSeriesRoot(t))));
+    const tasks = missing(here, fromFile, t => t.id);
+    const taken = new Set(tasks.add.map(t => t.id));
+    const fileArchive = [];
+    (backup.archive || []).forEach(w => (w && w.weekStart && w.tasks || []).forEach(t => {
+        if (t && t.id && !taken.has(t.id)) fileArchive.push({ week: w.weekStart, task: t });
+    }));
+    const archive = missing(here.map(t => ({ task: t })), fileArchive, e => e.task.id);
+    const themes = missing(s.themes || [], (backup.themes || []).filter(t => t && t.id), t => t.id);
+    const tagsHere = [];
+    (s.tagCategories || []).forEach(c => (c.tags || []).forEach(tag => tagsHere.push({ tag })));
+    const tagsFile = [];
+    (backup.tagCategories || []).forEach(c => c && c.id && (c.tags || []).forEach(tag => {
+        if (tag && tag.id) tagsFile.push({ cat: { id: c.id, name: c.name, color: c.color }, tag });
+    }));
+    const tags = missing(tagsHere, tagsFile, e => e.tag.id);
+    const notes = missing(s.smartNotes || [], (backup.smartNotes || []).filter(n => n && n.id), n => n.id);
+    return { tasks, archive, themes, tags, notes };
+}
+
+function applyRestore(s, plan, now, newId) {
+    if (!s.deletedIds) s.deletedIds = [];
+    const gone = new Set(s.deletedIds.filter(x => x && !x.archived && !String(x.id).startsWith(ARCHIVE_OUT)).map(x => x.id));
+    const idMap = new Map();
+    const fresh = id => {
+        if (!gone.has(id)) return id;
+        if (!idMap.has(id)) idMap.set(id, newId());
+        return idMap.get(id);
+    };
+    const roots = new Set((s.tasks || []).map(restoreSeriesRoot).filter(Boolean));
+    const added = plan.tasks.add.map(t => {
+        const c = JSON.parse(JSON.stringify(t));
+        if (roots.has(restoreSeriesRoot(c))) {
+            c.recurring = null; c.recurRoot = null;
+            delete c.recurringSpawned; delete c.spawnedChildId;
+        }
+        c.id = fresh(c.id);
+        c.updatedAt = now;
+        return c;
+    });
+    added.forEach(c => {
+        if (c.parentId && idMap.has(c.parentId)) c.parentId = idMap.get(c.parentId);
+        (c.subtasks || []).forEach(st => { if (st && st.cardId && idMap.has(st.cardId)) st.cardId = idMap.get(st.cardId); });
+        // its own archive tombstone loses to this stamp anyway; drop it here too
+        s.deletedIds = s.deletedIds.filter(x => !(x.id === c.id && x.archived));
+    });
+    s.tasks = [...(s.tasks || []), ...added];
+    if (plan.archive.add.length) {
+        if (!s.archive) s.archive = [];
+        plan.archive.add.forEach(e => {
+            const c = { ...JSON.parse(JSON.stringify(e.task)), id: fresh(e.task.id), updatedAt: now };
+            let w = s.archive.find(a => a.weekStart === e.week);
+            if (!w) { w = { weekStart: e.week, tasks: [] }; s.archive.push(w); }
+            w.tasks.push(c);
+        });
+        s.archive = compactArchive(s.archive, s.deletedIds);
+    }
+    if (plan.themes.add.length) {
+        s.themes = [...(s.themes || []), ...plan.themes.add.map(t => JSON.parse(JSON.stringify(t)))];
+        s.themesUpdatedAt = now;
+    }
+    if (plan.tags.add.length) {
+        if (!s.tagCategories) s.tagCategories = [];
+        plan.tags.add.forEach(e => {
+            let c = s.tagCategories.find(x => x.id === e.cat.id);
+            if (!c) { c = { ...e.cat, tags: [] }; s.tagCategories.push(c); }
+            if (!c.tags) c.tags = [];
+            c.tags.push({ ...e.tag });
+        });
+        s.tagsUpdatedAt = now;
+    }
+    if (plan.notes.add.length) {
+        s.smartNotes = [...(s.smartNotes || []), ...plan.notes.add.map(n => JSON.parse(JSON.stringify(n)))];
+        s.smartNotesUpdatedAt = now;
+    }
+    return added.length + plan.archive.add.length;
+}
+// <<< restore-core
 
 function archiveCompleted() {
     if (!archiveDone(state, todayStr(), Date.now(), { all: true })) return;
@@ -4982,15 +5092,34 @@ function exportData() {
     a.click(); URL.revokeObjectURL(url);
 }
 
-function importData(file) {
-    const reader = new FileReader();
-    reader.onload = e => {
-        try {
-            const d = JSON.parse(e.target.result);
-            if (d.tasks) { state = d; if(!state.archive)state.archive=[]; if(!state.settings)state.settings={theme:'light'}; saveState(); applyTheme(); render(); }
-        } catch { alert('Invalid file'); }
-    };
-    reader.readAsText(file);
+// Restore from a backup: adds only what isn't here (see "RESTORE FROM A BACKUP").
+// Pulls first so this device is current, then adds, saves and syncs straight away.
+async function openRestoreBackup() {
+    const [{ openRestore }, { restoreMissing }] = await Promise.all([
+        import('./vendor/safety/bin-sheet.js'), import('./vendor/safety/bin.js')]);
+    const y = window.scrollY;
+    const added = await openRestore({
+        read: async file => JSON.parse(await file.text()),
+        plan: async backup => {
+            if (syncEnabled) await pullFromCloud();
+            return restorePlan(state, backup, restoreMissing);
+        },
+        names: { tasks: ['task', 'tasks'], archive: ['archived task', 'archived tasks'], themes: ['theme', 'themes'],
+            tags: ['tag', 'tags'], notes: ['saved note', 'saved notes'] },
+        apply: async plan => {
+            applyRestore(state, plan, Date.now(), genId);
+            migrateColumns(state.tasks);
+            // Not an undo step: Undo only knows the board, and would tombstone what came back.
+            undoing = true;
+            try { saveState(); } finally { undoing = false; }
+            clearTimeout(pushTimer);
+            if (syncEnabled) { await pullFromCloud(); await pushToCloud(); }
+            render();
+            if (window.scrollY !== y) window.scrollTo(0, y);
+            return { ok: true };
+        },
+    });
+    return added;
 }
 
 // ============ SETTINGS ============
