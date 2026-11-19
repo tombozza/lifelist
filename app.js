@@ -1245,7 +1245,7 @@ function renderStaleBanner() {
     const dismiss = document.createElement('button');
     dismiss.className = 'ui-btn quiet icon small';
     dismiss.setAttribute('aria-label', 'Snooze until next week');
-    dismiss.innerHTML = '&times;';
+    dismiss.innerHTML = uiIcon('x');
     dismiss.title = 'Snooze until next week';
     // Closing snoozes the reminder until the start of next week, so it stops
     // nagging but comes back for the following weekly review.
@@ -4387,7 +4387,7 @@ function renderSubtaskEditor() {
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'ui-btn quiet icon small subtask-del';
-        del.innerHTML = '&times;';
+        del.innerHTML = uiIcon('x');
         del.title = 'Remove';
         del.setAttribute('aria-label', 'Remove');
         del.addEventListener('click', () => { modalSubtasks.splice(idx, 1); renderSubtaskEditor(); });
