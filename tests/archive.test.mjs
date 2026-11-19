@@ -10,7 +10,7 @@ const helpers = `
 function getWeekStart(d) { const x = new Date(d + 'T12:00:00Z'); const k = (x.getUTCDay() + 6) % 7; x.setUTCDate(x.getUTCDate() - k); return x.toISOString().slice(0, 10); }
 function addDays(d, n) { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
 `;
-const A = new Function(helpers + core + '; return { compactArchive, archiveDone, mergeTombstones, applyTombstones, reopenArchived, deleteArchived, archivedCopy };')();
+const A = new Function(helpers + core + '; return { compactArchive, archiveDone, mergeTombstones, applyTombstones, reopenArchived, deleteArchived, archivedCopy, trimCutoff, trimCount, trimArchive };')();
 const COLS = ['backlog', 'live', 'waiting', 'blocked', 'ongoing'];
 const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -121,4 +121,72 @@ test('reopening a repeat that has moved on gives a one-off, not a second repeat'
   assert.equal(t.recurring, null);
   assert.equal(s.tasks.filter(x => x.recurring).length, 1);
   assert.equal(s.tasks.find(x => x.id === 'r__2026-11-10').status, 'active');
+});
+
+// ---- Trim archive (19 Nov 2026) ----
+const DAY = 24 * 3600 * 1000;
+function bigArchive() {
+  return { tasks: [], deletedIds: [], archive: [
+    { weekStart: '2025-06-02', tasks: [{ id: 'old1', title: 'Old one', completedDate: '2025-06-03', updatedAt: 100 }, { id: 'old2', title: 'Old two', completedDate: '2025-06-04', updatedAt: 100 }] },
+    { weekStart: '2026-09-07', tasks: [{ id: 'mid', title: 'Mid', completedDate: '2026-09-08', updatedAt: 100 }] },
+    { weekStart: '2026-11-09', tasks: [{ id: 'new', title: 'New', completedDate: '2026-11-10', updatedAt: 100 }] },
+  ] };
+}
+
+test('trim cutoff is N months back, clamped to the end of a short month', () => {
+  assert.equal(A.trimCutoff('2026-11-19', 12), '2025-11-19');
+  assert.equal(A.trimCutoff('2026-11-19', 3), '2026-08-19');
+  assert.equal(A.trimCutoff('2026-05-31', 3), '2026-02-28');
+  assert.equal(A.trimCutoff('2026-01-15', 6), '2025-07-15');
+});
+
+test('trim counts and removes only copies finished before the cutoff, with one mark', () => {
+  const s = bigArchive();
+  assert.equal(A.trimCount(s, '2025-11-19'), 2);
+  assert.equal(A.trimCount(s, '2026-08-19'), 2);
+  assert.equal(A.trimCount(s, '2026-11-01'), 3);
+  assert.equal(A.trimArchive(s, '2025-11-19', 5000), 2);
+  assert.deepEqual(inArchive(s), ['mid', 'new']);
+  assert.equal(s.deletedIds.length, 1);
+  A.trimArchive(s, '2026-11-01', 6000);
+  assert.deepEqual(inArchive(s), ['new']);
+  assert.equal(s.deletedIds.length, 1, 'a second trim replaces the mark');
+});
+
+test('trimmed copies do not come back from a device that still has them', () => {
+  const a = bigArchive(), b = bigArchive();
+  A.trimArchive(a, '2025-11-19', 5000);
+  const b2 = merge(b, a, 6000);           // B pulls A's trim
+  assert.deepEqual(inArchive(b2), ['mid', 'new']);
+  const a2 = merge(a, b, 6000);           // A pulls B's old, untrimmed copy
+  assert.deepEqual(inArchive(a2), ['mid', 'new']);
+});
+
+test('a restore after a trim brings old copies back (they are stamped later)', () => {
+  const s = bigArchive();
+  A.trimArchive(s, '2025-11-19', 5000);
+  s.archive.push({ weekStart: '2025-06-02', tasks: [{ id: 'old1', title: 'Old one', completedDate: '2025-06-03', updatedAt: 7000 }] });
+  const s2 = merge(s, { tasks: [], archive: [], deletedIds: [] }, 8000);
+  assert.deepEqual(inArchive(s2), ['old1', 'mid', 'new']);
+});
+
+test('archive tombstones age out after 90 days; deletes keep two years; the trim mark never ages', () => {
+  const now = 1000 * DAY;
+  const list = [
+    { id: 'a1', ts: now - 100 * DAY, archived: true },
+    { id: 'a2', ts: now - 30 * DAY, archived: true },
+    { id: 'd1', ts: now - 400 * DAY },
+    { id: 'archive-out:x', ts: now - 400 * DAY },
+    { id: 'archive-trim', ts: now - 900 * DAY, before: '2020-01-01' },
+  ];
+  assert.deepEqual(A.mergeTombstones(list, [], now).map(x => x.id), ['a2', 'd1', 'archive-out:x', 'archive-trim']);
+});
+
+test('a task finished long ago that an old device still has on its board is re-filed and trimmed', () => {
+  const s = bigArchive();
+  A.trimArchive(s, '2025-11-19', 5000);
+  const stale = { tasks: [{ id: 'old3', title: 'Stale', status: 'complete', kanbanColumn: 'complete', completedDate: '2025-07-01', updatedAt: 200 }], archive: [], deletedIds: [] };
+  const s2 = merge(s, stale, 6000);
+  assert.deepEqual(live(s2), []);
+  assert.deepEqual(inArchive(s2), ['mid', 'new']);
 });

@@ -13,12 +13,24 @@ export async function onRequestGet({ params, env }) {
 }
 
 // PUT /api/sync/:code  body: <JSON blob> -> upsert the blob for this code.
+// D1 refuses a value over 2,000,000 bytes. Say so plainly (413, too_big) rather
+// than a bare 500, so the app can tell Tom it's full instead of "Sync failed".
+const CAP_BYTES = 2000000;
+
 export async function onRequestPut({ params, request, env }) {
   const body = await request.json();
+  const data = JSON.stringify(body);
+  const bytes = new TextEncoder().encode(data).length;
+  if (bytes > CAP_BYTES) return json({ error: 'too_big', bytes, cap: CAP_BYTES }, 413);
   const updated_at = new Date().toISOString();
-  await env.DB.prepare(
-    `INSERT INTO kanban_sync (sync_code, data, updated_at) VALUES (?, ?, ?)
-       ON CONFLICT(sync_code) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
-  ).bind(params.code, JSON.stringify(body), updated_at).run();
+  try {
+    await env.DB.prepare(
+      `INSERT INTO kanban_sync (sync_code, data, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(sync_code) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
+    ).bind(params.code, data, updated_at).run();
+  } catch (e) {
+    if (/too big|TOOBIG/i.test(String(e && e.message))) return json({ error: 'too_big', bytes, cap: CAP_BYTES }, 413);
+    throw e;
+  }
   return json({ ok: true, updated_at });
 }

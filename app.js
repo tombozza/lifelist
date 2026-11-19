@@ -3238,6 +3238,7 @@ function renderAdminArchive(container) {
     });
     sizeNote.appendChild(compactBtn);
     container.appendChild(sizeNote);
+    container.appendChild(trimArchiveCard());
 
     if (!state.archive.length) {
         container.appendChild(emptyState('No archived tasks yet'));
@@ -3276,6 +3277,85 @@ function renderAdminArchive(container) {
         weekEl.appendChild(taskList);
         container.appendChild(weekEl);
     });
+}
+
+// Trim archive (see "Trim archive" in the ARCHIVE block). Never automatic: Tom
+// picks the age, sees the count, and is offered a backup first.
+let trimMonths = 12;
+let trimBackedUp = false;
+let trimAsking = false;   // the question stays open across a sync redraw
+function trimArchiveCard() {
+    const card = document.createElement('div');
+    card.className = 'ui-card flat';
+    card.id = 'trim-archive';
+    card.innerHTML = `<div class="ui-stack">
+        <h3 class="ui-h2">Trim archive</h3>
+        <p class="ui-hint">Removes old archived tasks from every device to make room. Download a backup first: Restore from a backup brings them back.</p>
+        <label class="ui-field"><span>Remove tasks finished more than</span>
+            <select class="ui-input" id="trim-months">
+                <option value="12">12 months ago</option>
+                <option value="6">6 months ago</option>
+                <option value="3">3 months ago</option>
+            </select></label>
+        <p class="ui-hint" id="trim-count"></p>
+        <div class="ui-actions">
+            <button type="button" class="ui-btn small" id="trim-backup">Download backup</button>
+            <button type="button" class="ui-btn small danger" id="trim-go">Trim</button>
+        </div>
+        <div class="ui-stack" id="trim-ask" hidden>
+            <p class="ui-note warn trim-ask-text"></p>
+            <div class="ui-actions">
+                <button type="button" class="ui-btn small" id="trim-no">Cancel</button>
+                <button type="button" class="ui-btn small danger primary" id="trim-yes">Remove</button>
+            </div>
+        </div>
+    </div>`;
+    const sel = card.querySelector('#trim-months');
+    sel.value = String(trimMonths);
+    const countEl = card.querySelector('#trim-count');
+    const go = card.querySelector('#trim-go');
+    const update = () => {
+        const before = trimCutoff(todayStr(), trimMonths);
+        const n = trimCount(state, before);
+        countEl.textContent = n ? `${n} archived ${n === 1 ? 'task' : 'tasks'} finished before ${formatDateFull(before)}.` : `Nothing archived was finished before ${formatDateFull(before)}.`;
+        go.textContent = n ? `Trim ${n}` : 'Trim';
+        go.disabled = !n;
+        return { before, n };
+    };
+    update();
+    sel.addEventListener('change', () => { trimMonths = Number(sel.value) || 12; update(); });
+    card.querySelector('#trim-backup').addEventListener('click', () => {
+        exportData(); trimBackedUp = true;
+        const t = card.querySelector('.trim-ask-text');
+        t.textContent = t.textContent.replace(' Download a backup first to keep a copy.', '');
+    });
+    // Asked in the card, not a browser confirm(): the count, a backup first, then Remove.
+    const ask = card.querySelector('#trim-ask');
+    const hideAsk = () => { trimAsking = false; ask.hidden = true; go.hidden = false; sel.disabled = false; };
+    const showAsk = () => {
+        const { before, n } = update();
+        if (!n) { hideAsk(); return; }
+        trimAsking = true;
+        ask.querySelector('.trim-ask-text').textContent = `Remove ${n} archived ${n === 1 ? 'task' : 'tasks'} finished before ${formatDateFull(before)} from every device?` + (trimBackedUp ? '' : ' Download a backup first to keep a copy.');
+        ask.querySelector('#trim-yes').textContent = `Remove ${n}`;
+        ask.hidden = false; go.hidden = true; sel.disabled = true;
+    };
+    go.addEventListener('click', showAsk);
+    if (trimAsking) showAsk();
+    card.querySelector('#trim-no').addEventListener('click', hideAsk);
+    card.querySelector('#trim-yes').addEventListener('click', () => {
+        const { before, n } = update();
+        if (!n) { hideAsk(); return; }
+        trimAsking = false;
+        const y = window.scrollY;
+        const done = trimArchive(state, before, Date.now());
+        undoing = true;
+        try { saveState(); } finally { undoing = false; }
+        render();
+        if (window.scrollY !== y) window.scrollTo(0, y);
+        showToast(`Trimmed ${done} archived ${done === 1 ? 'task' : 'tasks'}`);
+    });
+    return card;
 }
 
 // Reopen or Delete one archived task (reopenArchived / deleteArchived in the
@@ -3586,13 +3666,67 @@ function markReviewed(id) {
 //  - A repeat: if the next occurrence is still dormant, the schedule comes back
 //    onto the reopened task and the dormant one is deleted (as un-completing
 //    does); otherwise the repeat has moved on and the reopened one is a one-off.
+// Trim archive (19 Nov 2026, Round 5). Every finished task adds a copy, so the
+// archive only grows toward the row's cap. Settings › Archive › Trim archive
+// removes copies finished before a date (12, 6 or 3 months ago), only when Tom
+// picks it. One mark in deletedIds, {id: 'archive-trim', ts, before}, makes it
+// stick: compactArchive() drops any copy finished before `before` and last
+// changed at or before ts, so a device that still holds them can't bring them
+// back, and the list gains one entry however many go. A newer trim replaces it;
+// it is never aged out. A restore stamps its copies now, so they survive it.
+// Archive tombstones (one per finished task) are only needed while a device may
+// still hold the task on its board, and archiveDone() re-files those anyway, so
+// they now go after 90 days; plain deletes and archive-out marks keep two years.
 // Pure functions of a state object between the markers, so
 // scripts can run them against a downloaded blob.
 // >>> archive-core
-const ARCHIVE_WARN_BYTES = 1.5 * 1024 * 1024;
+// D1 refuses a value over 2,000,000 bytes, and the whole state is one row.
+const SYNC_CAP_BYTES = 2000000;
+const ARCHIVE_WARN_BYTES = 0.75 * SYNC_CAP_BYTES;
 // Tombstones are ~40 bytes each; two years keeps a long-unopened device from
 // resurrecting a delete without the list ever getting big.
 const TOMBSTONE_KEEP_MS = 730 * 24 * 3600 * 1000;
+const ARCHIVE_TOMBSTONE_KEEP_MS = 90 * 24 * 3600 * 1000;
+const ARCHIVE_TRIM = 'archive-trim';
+
+const isDay = d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+// The day an archived copy was finished: its completedDate, else its week.
+function archiveFinishedDay(t, weekStart) {
+    return t && isDay(t.completedDate) ? t.completedDate : weekStart;
+}
+
+// The day `months` months before `today` (YYYY-MM-DD), clamped to month end.
+function trimCutoff(today, months) {
+    const [y, m, d] = today.split('-').map(Number);
+    const first = new Date(Date.UTC(y, m - 1 - months, 1));
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+    first.setUTCDate(Math.min(d, last));
+    return first.toISOString().slice(0, 10);
+}
+
+function archiveTrimMark(deletedIds) {
+    return (deletedIds || []).find(x => x && x.id === ARCHIVE_TRIM && isDay(x.before)) || null;
+}
+
+// Archived copies a trim before `before` would remove.
+function trimCount(s, before) {
+    let n = 0;
+    (s.archive || []).forEach(w => (w && w.tasks || []).forEach(t => {
+        if (t && archiveFinishedDay(t, w.weekStart || '') < before) n++;
+    }));
+    return n;
+}
+
+// Remove archived copies finished before `before`, on every device. Returns how many.
+function trimArchive(s, before, now) {
+    if (!isDay(before)) return 0;
+    const n = trimCount(s, before);
+    if (!s.deletedIds) s.deletedIds = [];
+    s.deletedIds = s.deletedIds.filter(x => !(x && x.id === ARCHIVE_TRIM));
+    s.deletedIds.push({ id: ARCHIVE_TRIM, ts: now, before });
+    s.archive = compactArchive(s.archive, s.deletedIds);
+    return n;
+}
 
 function archiveEntryCount(archive) {
     return (archive || []).reduce((n, w) => n + ((w && w.tasks) || []).length, 0);
@@ -3611,13 +3745,15 @@ function archiveOutMarks(deletedIds) {
 
 function compactArchive(archive, deletedIds) {
     const out_ = archiveOutMarks(deletedIds);
-    const isOut = t => t && t.id && out_.has(t.id) && (t.updatedAt || 0) <= out_.get(t.id);
+    const trim = archiveTrimMark(deletedIds);
+    const isOut = (t, week) => (t && t.id && out_.has(t.id) && (t.updatedAt || 0) <= out_.get(t.id)) ||
+        (trim && t && archiveFinishedDay(t, week) < trim.before && (t.updatedAt || 0) <= (trim.ts || 0));
     const weeks = [...(archive || [])].filter(w => w && w.weekStart).sort((a, b) => a.weekStart.localeCompare(b.weekStart));
     const best = new Map();          // id -> { week, copy, order }
     const loose = [];                // id-less entries stay where they were
     let order = 0;
     weeks.forEach(w => (w.tasks || []).forEach(t => {
-        if (!t || isOut(t)) return;
+        if (!t || isOut(t, w.weekStart)) return;
         if (!t.id) { loose.push({ week: w.weekStart, copy: t, order: order++ }); return; }
         const b = best.get(t.id);
         if (!b) { best.set(t.id, { week: w.weekStart, copy: t, order: order++ }); return; }
@@ -3734,7 +3870,12 @@ function archiveDone(s, today, now, opts) {
     return go.length;
 }
 
-// Union two tombstone lists (newest ts per id), pruned after TOMBSTONE_KEEP_MS.
+// Union two tombstone lists (newest ts per id), pruned by age: archive
+// tombstones after 90 days, the rest after two years, the trim mark never.
+function tombstoneKept(x, now) {
+    if (x.id === ARCHIVE_TRIM) return true;
+    return (x.ts || 0) > now - (x.archived ? ARCHIVE_TOMBSTONE_KEEP_MS : TOMBSTONE_KEEP_MS);
+}
 function mergeTombstones(a, b, now) {
     const m = new Map();
     [...(a || []), ...(b || [])].forEach(x => {
@@ -3742,7 +3883,7 @@ function mergeTombstones(a, b, now) {
         const prev = m.get(x.id);
         if (!prev || (x.ts || 0) > (prev.ts || 0)) m.set(x.id, x);
     });
-    return [...m.values()].filter(x => (x.ts || 0) > now - TOMBSTONE_KEEP_MS);
+    return [...m.values()].filter(x => tombstoneKept(x, now));
 }
 
 // Drop tombstoned tasks. A delete always wins; an archive tombstone loses to an
@@ -3884,7 +4025,8 @@ function payloadBytes(obj) {
     try { return new TextEncoder().encode(JSON.stringify(obj)).length; } catch (_) { return 0; }
 }
 function formatBytes(n) {
-    return n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(2) + ' MB' : Math.round(n / 1024) + ' KB';
+    // decimal units, so "of 2 MB" matches the 2,000,000-byte cap
+    return n >= 1e6 ? (n / 1e6).toFixed(2) + ' MB' : Math.round(n / 1000) + ' KB';
 }
 
 // Activate any dormant recurrence whose date has arrived: it flips to an
@@ -5173,6 +5315,8 @@ function init() {
         });
     });
 
+    document.querySelectorAll('[data-trim-open]').forEach(btn => btn.addEventListener('click', openTrimArchive));
+
     // Admin tabs
     document.querySelectorAll('.admin-tab').forEach(tab => {
         tab.addEventListener('click', () => {
@@ -5781,6 +5925,7 @@ async function apiPut(code, payload) {
         body: JSON.stringify(payload),
     });
     if (res.status === 401) { showPasswordGate(); throw new Error('locked'); }
+    if (res.status === 413) throw new Error(TOO_FULL);
     if (!res.ok) throw new Error(`PUT /api/sync ${res.status}`);
     return res.json();
 }
@@ -5880,15 +6025,56 @@ async function pushToCloud() {
     try {
         const payload = syncPayload();
         syncStatus.bytes = payloadBytes(payload);
+        // Over the cap the save would only fail: say so, and keep it on this device
+        if (syncStatus.bytes > SYNC_CAP_BYTES) throw new Error(TOO_FULL);
         await apiPut(SYNC_CODE, payload);
         syncStatus.pushError = '';
         syncStatus.cloudBytes = syncStatus.bytes;
         syncStatus.lastOkAt = Date.now();
         return true;
     } catch(e) {
-        if (String(e).indexOf('locked') === -1) { console.error('Sync push failed:', e); syncStatus.pushError = String(e.message || e); }
+        if (String(e).indexOf('locked') === -1) {
+            console.error('Sync push failed:', e);
+            const full = String(e.message || e) === TOO_FULL;
+            if (full && syncStatus.pushError !== TOO_FULL) showToast('Too full to sync: changes stay on this device. Trim the archive in Settings › Archive.', { bad: true });
+            syncStatus.pushError = String(e.message || e);
+        }
         return false;
     } finally { renderSyncStatus(); }
+}
+
+// Size warning (19 Nov 2026, Round 5): past 75% of the cap a note on the Board
+// and in Settings says how full it is and opens Trim archive; when a save is
+// refused for size it says so plainly. Updated in place with the sync badge.
+const TOO_FULL = 'too_full';
+function sizeWarning() {
+    const bytes = Math.max(syncStatus.bytes || 0, syncStatus.cloudBytes || 0);
+    const pct = Math.round(bytes / SYNC_CAP_BYTES * 100);
+    if (syncStatus.pushError === TOO_FULL) return { full: true, text: `Too full to sync (${formatBytes(bytes)} of 2 MB). Changes stay on this device until the archive is trimmed.` };
+    if (bytes > ARCHIVE_WARN_BYTES) return { full: false, text: `Sync storage is ${pct}% full (${formatBytes(bytes)} of 2 MB). Trim the archive to make room.` };
+    return null;
+}
+function openTrimArchive() {
+    currentAdminTab = 'archive';
+    closeSheet('settings-modal');
+    showView('admin');
+    const el = document.getElementById('trim-archive');
+    // clear of the sticky top bar
+    const bar = document.getElementById('app-header');
+    if (el) window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - (bar ? bar.offsetHeight : 0) - 12);
+}
+function renderSizeNotes() {
+    const w = sizeWarning();
+    ['size-note-board', 'size-note-settings'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.hidden = !w;
+        if (!w) return;
+        el.classList.toggle('bad', w.full);
+        el.classList.toggle('warn', !w.full);
+        const txt = el.querySelector('.size-note-text');
+        if (txt.textContent !== w.text) txt.textContent = w.text;
+    });
 }
 
 // ---- Sync status (11 Nov 2026) ----
@@ -5907,6 +6093,7 @@ function hhmm(ts) { return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-d
 function syncState() {
     const big = Math.max(syncStatus.bytes, syncStatus.cloudBytes) > ARCHIVE_WARN_BYTES;
     const since = syncStatus.lastOkAt ? 'Not synced since ' + hhmm(syncStatus.lastOkAt) : 'Not synced yet';
+    if (syncStatus.pushError === TOO_FULL) return { kind: 'bad', text: 'Too full to sync', tip: 'Too full to sync: changes stay on this device. Trim the archive in Settings › Archive.' };
     if (syncStatus.pushError || syncStatus.pullError) {
         const offline = navigator.onLine === false;
         return { kind: 'bad', text: offline ? 'Offline' : 'Sync failed', tip: since + (offline ? ' · offline' : ' · sync error') + '. Tap to retry.', detail: syncStatus.pushError || syncStatus.pullError };
@@ -5919,6 +6106,7 @@ function syncState() {
 
 // Updates the badge in place; never redraws the page.
 function renderSyncStatus() {
+    renderSizeNotes();
     const btn = document.getElementById('sync-status');
     if (!btn) return;
     const st = syncState();

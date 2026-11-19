@@ -135,6 +135,10 @@
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" class="view">
         <div class="board-stats" id="board-stats"></div>
+        <div id="size-note-board" class="ui-note page-note warn" hidden>
+            <span class="ui-spacer size-note-text"></span>
+            <div class="ui-actions"><button class="ui-btn small" type="button" data-trim-open>Trim archive</button></div>
+        </div>
         <div id="review-banner" class="ui-note page-note" style="display:none;"></div>
         <div id="list-reminder" class="ui-note page-note" style="display:none;">
             <span class="ui-spacer">Lists not checked today</span>
@@ -492,6 +496,10 @@
         <button class="ui-btn quiet icon small" id="settings-close" aria-label="Close"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#x"/></svg></button>
     </header>
     <div class="body">
+        <div id="size-note-settings" class="ui-note warn" hidden>
+            <span class="ui-spacer size-note-text"></span>
+            <div class="ui-actions"><button class="ui-btn small" type="button" data-trim-open>Trim archive</button></div>
+        </div>
         <div class="ui-stack">
             <span class="ui-label">Manage</span>
             <div class="settings-admin">
