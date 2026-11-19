@@ -39,11 +39,11 @@ export function createSaveQueue({ name, send, onChange, onDrop, storage }) {
       const op = ops[0];
       try {
         await send(op.op);
-        ops.shift(); save(); failing = false; lastError = ''; tries = 0;
+        ops = ops.filter((x) => x !== op); save(); failing = false; lastError = ''; tries = 0;
       } catch (e) {
         const s = Number(e?.status);
         if (s >= 400 && s < 500 && ![401, 403, 408, 429].includes(s)) {
-          ops.shift(); save();
+          ops = ops.filter((x) => x !== op); save();
           try { onDrop?.(op.op, e); } catch { /* ignore */ }
           continue;
         }
@@ -65,7 +65,9 @@ export function createSaveQueue({ name, send, onChange, onDrop, storage }) {
 
   return {
     push(op) {
-      if (op && op.key != null) ops = ops.filter((x) => x.op.key !== op.key);
+      // A newer op replaces a waiting one with the same key, but never the one being sent right now: that one
+      // is removed by identity when its send finishes, so the newer op must stay behind it.
+      if (op && op.key != null) ops = ops.filter((x, i) => (sending && i === 0) || x.op.key !== op.key);
       ops.push({ op, at: Date.now() });
       save(); flush();
     },
