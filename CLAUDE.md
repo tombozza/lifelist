@@ -195,6 +195,19 @@ button follows the box). `normaliseUrl()` adds `https://` to a bare address.
 Cards, Today rows and list rows show it as a chip with the site's name
 (`linkChipEl`); the chip *is* the link and stops the click from opening the task.
 
+## Sync: no blind overwrites
+
+The whole state is one blob (`/api/sync/:code`). Since 20 Nov 2026 a save carries
+`x-base-version` (the row's `updated_at` from the last read or write, `cloudVersion`);
+the server refuses it with 409 if another device saved since, and `pushToCloud` then
+pulls, merges and pushes again. Before that, a device that hadn't caught up erased
+newer work from other devices. Two rules that follow:
+
+- **Deterministic housekeeping never stamps `updatedAt`.** `rollOverPlan()` and
+  `missOccurrence()` used to, and a background tab rolling over at midnight on a stale
+  copy beat real ticks made elsewhere. Every device works these out itself.
+- Requests without the header still overwrite (older cached apps, the `-inbox` row).
+
 ## Undo
 
 Ctrl/⌘-Z, plus an **Undo** toast after every completion (phones have no Ctrl-Z).

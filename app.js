@@ -2326,7 +2326,9 @@ function rollOverPlan() {
         if (!t.carriedFrom) t.carriedFrom = t.planDay;
         t.planDay = today;
         t.planOrder = top - late.length + i;
-        t.updatedAt = Date.now();
+        // No updatedAt stamp: every device works this out for itself, and a
+        // stamp let a tab that hadn't caught up (asleep in the background at
+        // midnight) beat a tick made elsewhere and bring the task back.
     });
     return true;
 }
@@ -2346,7 +2348,7 @@ function missOccurrence(t) {
     t.kanbanColumn = null;
     t.missedOn = t.planDay;
     t.recurring = null;
-    t.updatedAt = Date.now();
+    // No updatedAt stamp, for the same reason as rollOverPlan
 }
 
 // Put a task on a day (or back in Ready with day = null), at the bottom.
@@ -5907,19 +5909,31 @@ async function apiGet(code) {
     if (res.status === 401) { showPasswordGate(); throw new Error('locked'); }
     if (!res.ok) throw new Error(`GET /api/sync ${res.status}`);
     const body = await res.json();
+    if (code === SYNC_CODE && 'version' in body) cloudVersion = body.version || 'none';
     return body.data; // parsed blob or null
 }
 
+// The cloud row's version as last read or written (20 Nov 2026). A save sends it,
+// and the server refuses (409) if another device has saved since, so a device that
+// hasn't caught up can no longer wipe newer work. Unknown (undefined) only before
+// the first pull, and no save happens before that.
+let cloudVersion;
+const CONFLICT = 'conflict';
+
 async function apiPut(code, payload) {
+    const headers = { 'content-type': 'application/json' };
+    const main = code === SYNC_CODE;
+    if (main && cloudVersion !== undefined) headers['x-base-version'] = cloudVersion;
     const res = await fetch(`/api/sync/${encodeURIComponent(code)}`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
+        method: 'PUT', headers, body: JSON.stringify(payload),
     });
     if (res.status === 401) { showPasswordGate(); throw new Error('locked'); }
     if (res.status === 413) throw new Error(TOO_FULL);
+    if (res.status === 409) throw new Error(CONFLICT);
     if (!res.ok) throw new Error(`PUT /api/sync ${res.status}`);
-    return res.json();
+    const body = await res.json();
+    if (main && body.version) cloudVersion = body.version;
+    return body;
 }
 
 // --- Password gate helpers ---
@@ -6012,6 +6026,7 @@ function syncPayload() {
     return { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt, tagCategories: state.tagCategories, tagsUpdatedAt: state.tagsUpdatedAt, smartNotes: state.smartNotes, smartNotesUpdatedAt: state.smartNotesUpdatedAt };
 }
 
+let conflictRetries = 0;
 async function pushToCloud() {
     if (!syncEnabled || syncPaused) return false;
     try {
@@ -6023,8 +6038,16 @@ async function pushToCloud() {
         syncStatus.pushError = '';
         syncStatus.cloudBytes = syncStatus.bytes;
         syncStatus.lastOkAt = Date.now();
+        conflictRetries = 0;
         return true;
     } catch(e) {
+        // Another device saved first: take its changes in, then save again (the
+        // pull pushes when this device still has something the cloud lacks).
+        if (String(e.message || e) === CONFLICT && conflictRetries < 3) {
+            conflictRetries++;
+            pullFromCloud();
+            return false;
+        }
         if (String(e).indexOf('locked') === -1) {
             console.error('Sync push failed:', e);
             const full = String(e.message || e) === TOO_FULL;
