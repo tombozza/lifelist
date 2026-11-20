@@ -134,12 +134,10 @@
 
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" class="view">
-        <div class="board-stats" id="board-stats"></div>
         <div id="size-note-board" class="ui-note page-note warn" hidden>
             <span class="ui-spacer size-note-text"></span>
             <div class="ui-actions"><button class="ui-btn small" type="button" data-trim-open>Trim archive</button></div>
         </div>
-        <div id="review-banner" class="ui-note page-note" style="display:none;"></div>
         <div id="list-reminder" class="ui-note page-note" style="display:none;">
             <span class="ui-spacer">Lists not checked today</span>
             <div class="ui-actions">
@@ -148,8 +146,16 @@
                 <button class="ui-btn small" id="reminder-tomorrow">Tomorrow</button>
             </div>
         </div>
-        <div class="ui-chips scroll theme-tabs" id="board-filter"></div>
-        <div class="tag-filter" id="board-tag-filter"></div>
+        <!-- One toolbar: filters on the left, the week's tally and Review at the end.
+             On a wide screen it is a single line; on a phone the filters take their own row. -->
+        <div class="board-top">
+            <div class="ui-chips scroll theme-tabs" id="board-filter"></div>
+            <div class="tag-filter" id="board-tag-filter"></div>
+            <div class="ui-actions board-top-end">
+                <div class="board-stats" id="board-stats"></div>
+                <button type="button" class="ui-btn small" id="review-banner" hidden>Review <span class="ui-badge accent"></span></button>
+            </div>
+        </div>
         <div id="board-columns" class="board-columns"></div>
     </section>
 

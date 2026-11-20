@@ -98,7 +98,6 @@ let currentFilters = { priority:'', size:'', status:'active', search:'', age:'' 
 let activeTagFilter = [];
 let tagFilterOpen = false;
 let staleBannerDismissed = false;
-let reviewBannerDismissed = false;
 let reopenReviewAfterTask = false;
 let currentAdminTab = 'themes';
 let bulkMode = false;
@@ -1154,34 +1153,15 @@ function reviewQueue() {
     return state.tasks.filter(t => themesPass(t, hidden) && needsReview(t));
 }
 
+// A small "Review" button with its count at the end of the board's toolbar
+// (it used to be a full-width note that pushed the board down)
 function renderReviewBanner() {
-    const banner = document.getElementById('review-banner');
-    const queue = reviewQueue();
-    if (!queue.length || reviewBannerDismissed) {
-        banner.style.display = 'none';
-        return;
-    }
-    banner.style.display = 'flex';
-    banner.innerHTML = '';
-    const txt = document.createElement('span');
-    txt.className = 'ui-spacer';
-    txt.innerHTML = `<strong>${queue.length}</strong> to review`;
-    banner.appendChild(txt);
-    const actions = document.createElement('div');
-    actions.className = 'ui-actions';
-    const reviewBtn = document.createElement('button');
-    reviewBtn.className = 'ui-btn small primary';
-    reviewBtn.textContent = 'Review';
-    reviewBtn.addEventListener('click', openReviewModal);
-    const dismiss = document.createElement('button');
-    dismiss.className = 'ui-btn quiet icon small';
-    dismiss.setAttribute('aria-label', 'Dismiss');
-    dismiss.innerHTML = uiIcon('x');
-    dismiss.title = 'Dismiss';
-    dismiss.addEventListener('click', () => { reviewBannerDismissed = true; renderReviewBanner(); });
-    actions.appendChild(reviewBtn);
-    actions.appendChild(dismiss);
-    banner.appendChild(actions);
+    const btn = document.getElementById('review-banner');
+    const n = reviewQueue().length;
+    btn.hidden = !n;
+    btn.querySelector('.ui-badge').textContent = n || '';
+    btn.title = n + ' to review';
+    if (!btn.dataset.wired) { btn.dataset.wired = '1'; btn.addEventListener('click', openReviewModal); }
 }
 
 function openReviewModal() {
@@ -2183,7 +2163,7 @@ function renderBoardWeekStat() {
     const cls = w.delta === null ? '' : w.delta > 0 ? ' good' : w.delta < 0 ? ' bad' : '';
     const pill = document.createElement('div');
     pill.className = 'board-week-stat';
-    pill.innerHTML = `<strong>${w.count}</strong> completed this week${arrow ? `<span class="ui-badge${cls}">${arrow.trim()}</span>` : ''}`;
+    pill.innerHTML = `<strong>${w.count}</strong> done this week${arrow ? `<span class="ui-badge${cls}">${arrow.trim()}</span>` : ''}`;
     host.appendChild(pill);
 }
 
@@ -5348,7 +5328,6 @@ function init() {
         const target = quickAddPlanTarget();
         if (target === undefined) {
             addTask({ title, reviewed: false, kanbanColumn: null });
-            reviewBannerDismissed = false;
         } else {
             addTask({ title, reviewed: true, kanbanColumn: 'live', planDay: target, area: todayFocusArea() || undefined,
                 planOrder: nextPlanOrder(target ? planTasks(target) : readyTasks()) });

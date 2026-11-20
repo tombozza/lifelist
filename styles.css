@@ -130,8 +130,25 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .chip-parent { max-width:140px; overflow:hidden; text-overflow:ellipsis; }
 
 /* ---- Board ---- */
-.board-stats { display:flex; gap: var(--sp-4); margin-bottom: var(--sp-3); flex-wrap:wrap; }
+/* The board's toolbar: filters, Tags, then the week's tally and Review at the end.
+   One line on a wide screen; on a phone the theme chips get a row of their own.
+   The tag panel (when open) drops below as a full-width row. */
+.board-top { display:flex; flex-wrap:wrap; align-items:center; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); }
+.board-top > .theme-tabs, .board-top > .tag-filter { margin-bottom:0; }
+.board-top > .theme-tabs { flex: 1 1 100%; min-width:0; }
+.board-top > .tag-filter { display:contents; }
+.board-top .tag-filter-body { flex: 1 1 100%; order:9; margin-top:0; }
+.board-top-end { margin-inline-start:auto; align-items:center; }
+.board-top-end:not(:has(> :not([hidden]):not(:empty))) { display:none; }
+.board-stats { display:flex; }
+/* on a phone the trend badge goes, so Tags, the tally and Review share one row */
+@media (max-width: 420px) { .board-week-stat .ui-badge { display:none; } }
 .board-stats:empty { display:none; }
+@media (min-width: 900px) {
+    .board-top { flex-wrap:nowrap; }
+    .board-top:has(.tag-filter-body) { flex-wrap:wrap; }
+    .board-top > .theme-tabs { flex: 1 1 0; margin-inline:0; padding-inline:0; }
+}
 .board-week-stat { font-size: var(--text-sm); color: var(--text-2); display:inline-flex; gap: var(--sp-2); align-items:center; }
 .board-week-stat strong { color: var(--text); }
 

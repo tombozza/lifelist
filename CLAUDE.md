@@ -231,6 +231,16 @@ checkbox, and the week's tally sits above the board (`renderBoardWeekStat`). Don
 delete the `complete` entry: the archive, `clearCompleted()` and the list chips all
 still look up its name.
 
+**The board's top is one toolbar** (`.board-top`, 20 Nov 2026; Tom: the top "takes up half
+of the screen and is the least important information"). Work/Home and the theme chips
+(scrolling), the Tags chip, then at the end the week's tally ("N done this week") and a
+small **Review** button with its count (`#review-banner`, a `ui-btn small` with a
+`ui-badge`; it replaced the full-width "N to review" note and its dismiss ×). One line on a
+wide screen; on a phone the chips take a row and Tags, the tally and Review share the next
+(the trend badge hides under 420px so they fit). The open tag panel drops below as a
+full-width row (`#board-tag-filter` is `display:contents` inside the toolbar). The size
+warning and the Lists reminder stay full-width notes: they are rare and need acting on.
+
 ## Today (the top tier)
 
 The tiers, bottom to top: snoozed list items → themed Lists → off-board → the
