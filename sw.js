@@ -1,4 +1,4 @@
-const CACHE_NAME = 'life-kanban-v98';
+const CACHE_NAME = 'life-kanban-v99';
 const ASSETS = [
     './',
     './index.html',

@@ -1164,6 +1164,17 @@ function renderReviewBanner() {
     if (!btn.dataset.wired) { btn.dataset.wired = '1'; btn.addEventListener('click', openReviewModal); }
 }
 
+// Tom (20 Nov 2026): new items should pop up "whenever I open … otherwise I'll miss
+// stuff". So the Review sheet opens by itself on launch, and when the app comes back after
+// being away at least REVIEW_PROMPT_AWAY_MS (a phone keeps the PWA alive, so going back to it
+// is "opening" it). Once per opening: closing it leaves it closed until the next one. Never
+// over another sheet (or the password gate), and never with nothing to review.
+const REVIEW_PROMPT_AWAY_MS = 10 * 60 * 1000;
+function promptReviewOnOpen() {
+    if (!reviewQueue().length || document.querySelector('dialog[open]')) return;
+    openReviewModal();
+}
+
 function openReviewModal() {
     renderReviewList();
     openSheet('review-modal');
@@ -1177,8 +1188,10 @@ function renderReviewList() {
     const list = document.getElementById('review-list');
     list.innerHTML = '';
     const queue = reviewQueue();
+    document.getElementById('review-title').textContent = queue.length
+        ? `${queue.length} new item${queue.length > 1 ? 's' : ''} to review` : 'Review new items';
     if (!queue.length) {
-        list.innerHTML = '<div class="ui-empty"><span class="icon">🎉</span><strong>All caught up</strong></div>';
+        list.innerHTML = `<div class="ui-empty"><span class="icon">${uiIcon('circle-check')}</span><strong>All caught up</strong></div>`;
         return;
     }
     const box = listBox(list);
@@ -6245,10 +6258,17 @@ let firstSync = Promise.resolve();
     // password gate is shown — auth (unlockSite) re-runs this.
     syncEnabled = true;
     firstSync = pullFromCloud().then(() => {
-        checkInbox();
         setInterval(() => { if (!document.hidden) { pullFromCloud(); checkInbox(); } }, SYNC_POLL_MS);
+        return checkInbox();
     }).catch(() => {});
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) { pullFromCloud(); checkInbox(); } });
+    // Opening the app with new items waiting pops the Review sheet (below)
+    firstSync.then(promptReviewOnOpen);
+    let hiddenAt = 0;
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) { hiddenAt = Date.now(); return; }
+        const reopened = hiddenAt && Date.now() - hiddenAt >= REVIEW_PROMPT_AWAY_MS;
+        Promise.all([pullFromCloud(), checkInbox()]).catch(() => {}).then(() => { if (reopened) promptReviewOnOpen(); });
+    });
     window.addEventListener('focus', () => pullFromCloud());
     window.addEventListener('online', () => pullFromCloud());
 })();

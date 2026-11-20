@@ -241,6 +241,13 @@ wide screen; on a phone the chips take a row and Tags, the tally and Review shar
 full-width row (`#board-tag-filter` is `display:contents` inside the toolbar). The size
 warning and the Lists reminder stay full-width notes: they are rare and need acting on.
 
+**Review pops up on open** (20 Nov 2026, Tom: "otherwise I'll miss stuff"). With anything in
+`reviewQueue()`, the Review sheet opens by itself after the first sync (and inbox check) on
+launch, and when the app comes back after at least 10 minutes away (`REVIEW_PROMPT_AWAY_MS`;
+a phone keeps the PWA alive, so returning is "opening"). Once per opening, never over another
+open dialog (the password gate included), never with nothing to review
+(`promptReviewOnOpen`). Its title carries the count ("8 new items to review").
+
 ## Today (the top tier)
 
 The tiers, bottom to top: snoozed list items → themed Lists → off-board → the
