@@ -206,7 +206,7 @@ newer work from other devices. Two rules that follow:
 - **Deterministic housekeeping never stamps `updatedAt`.** `rollOverPlan()` and
   `missOccurrence()` used to, and a background tab rolling over at midnight on a stale
   copy beat real ticks made elsewhere. Every device works these out itself.
-- Requests without the header still overwrite (older cached apps, the `-inbox` row).
+- Requests without the header are refused with 409 (an older cached app: it reloads to the new one by itself), except the `-inbox` row. Old copies saved stale data twice before this (20 and 21 Nov 2026).
 
 ## Undo
 

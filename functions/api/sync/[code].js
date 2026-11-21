@@ -21,7 +21,7 @@ export async function onRequestGet({ params, env }) {
 // tasks, ticks). The app now sends the version it last read in `x-base-version`
 // ("none" when there was no row). If the row has moved on since, the save is
 // refused with 409 and the app pulls, merges and saves again. A request without
-// the header (an older cached app, the inbox row) still saves as before.
+// the header is refused (an older cached app), except for the inbox row.
 const CAP_BYTES = 2000000;
 
 export async function onRequestPut({ params, request, env }) {
@@ -30,6 +30,12 @@ export async function onRequestPut({ params, request, env }) {
   const bytes = new TextEncoder().encode(data).length;
   if (bytes > CAP_BYTES) return json({ error: 'too_big', bytes, cap: CAP_BYTES }, 413);
   const base = request.headers.get('x-base-version');
+  // An app from before the version check (a tab or phone still running old
+  // cached code) may not save the board at all: it saved stale copies over
+  // newer work twice (20 and 21 Nov 2026). It reloads to the new app on its own;
+  // until then its saves are refused and its pulls still work. The inbox row
+  // (written by Shortcuts) is exempt.
+  if (base === null && !params.code.endsWith('-inbox')) return json({ error: 'conflict', reason: 'old_app' }, 409);
   const updated_at = new Date().toISOString();
   try {
     if (base === null) {
