@@ -199,7 +199,7 @@ export function openUpdates(o) {
     wrap.className = 'mg-scrim';
     wrap.innerHTML = `<div class="mg-sheet au-sheet" role="dialog" aria-modal="true" aria-labelledby="au-title">
       <div class="mg-head"><span class="mg-badge">${SPARK}</span><h2 id="au-title">AI Updates <span class="au-app">· ${esc(name)}</span></h2>
-        <button type="button" class="mg-x" data-au="close" aria-label="Close">✕</button></div>
+        <button type="button" class="mg-x" data-au="close" aria-label="Close">${(window.uiIcon && window.uiIcon('x')) || '✕'}</button></div>
       <div class="mg-body"></div></div>`;
     document.body.append(wrap);
     const body = wrap.querySelector('.mg-body');
@@ -269,7 +269,7 @@ export function openUpdates(o) {
     function render() {
       const sheet = wrap.querySelector('.mg-sheet');
       const y = sheet.scrollTop;
-      body.innerHTML = st.result ? resultView() : home.html(home.pasteCard(`<textarea id="au-reply" rows="5" aria-label="Reply" placeholder="Paste reply">${esc(st.reply)}</textarea>
+      body.innerHTML = st.result ? resultView() : home.html(home.pasteCard(`<textarea id="au-reply" rows="5" aria-label="Reply">${esc(st.reply)}</textarea>
           <div class="mg-actions"><button type="button" class="mg-go" data-au="check">Check it</button></div>`));
       sheet.scrollTop = y;
     }

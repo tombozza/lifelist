@@ -78,7 +78,7 @@ export function openMagic(o) {
     wrap.className = 'mg-scrim';
     wrap.innerHTML = `<div class="mg-sheet" role="dialog" aria-modal="true" aria-labelledby="mg-title">
       <div class="mg-head"><span class="mg-badge">${SPARK}</span><h2 id="mg-title">${esc(val(o.title))}</h2>
-        <button type="button" class="mg-x" data-mg="close" aria-label="Close">✕</button></div>
+        <button type="button" class="mg-x" data-mg="close" aria-label="Close">${(window.uiIcon && window.uiIcon('x')) || '✕'}</button></div>
       <div class="mg-using" hidden></div>
       ${o.choices?.length ? '<div class="mg-opts"></div>' : ''}
       <div class="mg-body"></div></div>`;

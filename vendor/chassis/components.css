@@ -82,7 +82,7 @@
 ui-icon { display: inline-flex; vertical-align: middle; }
 /* An icon beside words: buttons and chips have their own gap; in a heading, label or plain line of
    text the icon leads with a small gap (no space character needed). */
-:is(.ui-h2, .ui-label, .ui-hint, .ui-sub, .ui-row .main > span, .ui-note) > .ui-icon:first-child { margin-inline-end: var(--sp-1, 4px); }
+:is(.ui-h2, .ui-label, .ui-hint, .ui-sub, .ui-row .main > span, .ui-note) > :is(.ui-icon, ui-icon):first-child { margin-inline-end: var(--sp-1, 4px); }
 .ui-empty > .icon { color: var(--text-3); }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────────── */
@@ -216,6 +216,12 @@ select.ui-input {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 12px center; background-size: 12px;
 }
+/* A field and its button on one line, such as an add box (rule 9: an add box is a field and its
+   button, nothing else): <div class="ui-addrow"><input class="ui-input" aria-label="…"><button class="ui-btn">Add</button></div>.
+   The box takes the room; the button keeps its words on one line. */
+.ui-addrow { display: flex; gap: var(--sp-2); align-items: center; }
+.ui-addrow > .ui-input { flex: 1 1 auto; min-inline-size: 80px; }
+.ui-addrow > :not(.ui-input) { flex: none; }
 /* A search box: <input class="ui-input search" type="search"> */
 .ui-input.search {
   padding-left: 36px;
@@ -277,6 +283,8 @@ label.ui-card.check { display: flex; }
   font: inherit; background: none; inline-size: 100%; margin: 0; border-left: 0; border-right: 0; border-bottom: 0;
 }
 .ui-list > :first-child.ui-row, .ui-list > li:first-child > .ui-row { border-top: 0; }
+/* A row hidden at the top (filtered out) doesn't leave the next one with a line above it. */
+.ui-list > [hidden]:first-child + .ui-row { border-top: 0; }
 .ui-row > .main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .ui-row > .main > :first-child { font-weight: 600; overflow-wrap: anywhere; }
 .ui-row > .main > .sub { font-size: var(--text-sm); color: var(--text-2); }
@@ -526,6 +534,81 @@ progress.ui-progress.bad { color: var(--danger); }
   .ui-sheet.page { inline-size: 100%; block-size: 100dvh; max-block-size: 100dvh; margin: 0; border-radius: 0; box-shadow: none; }
   .ui-sheet.page > header { padding-top: max(var(--sp-4), env(safe-area-inset-top)); }
 }
+
+/* ── Picker sheet ────────────────────────────────────────────────────────────── */
+/* Pick one of the person's own things (a spot, a category, a person, a place), or add a new one
+   (21 Nov 2026, Tom: "I hate using like native drop downs … I need the option to add it"). Drawn by
+   uiPick() in picker.js: a labelled search box that filters in place, the rows under group headings,
+   an Add "…" row when nothing matches exactly, an optional second step (which room), and Back to the
+   sheet underneath. The sheet is a .ui-sheet; these are the only extra pieces. */
+.ui-pick-group { display: grid; gap: var(--sp-2); }
+.ui-pick .ui-row > .ui-icon.tick { flex: none; color: var(--accent); }
+.ui-row.add { color: var(--accent); }
+.ui-row.add > .main > :first-child { color: var(--accent); }
+.ui-row.add > .ui-icon { flex: none; }
+.ui-row[disabled] { opacity: 0.5; cursor: progress; }
+.ui-pick > footer { justify-content: flex-start; }
+/* One height while open, so filtering down to a row or two doesn't shrink the sheet; the search box sits
+   outside the scrolling list, so it never moves. On a phone picker.js keeps it above the keyboard:
+   --pick-vh is the height you can see, --pick-kb the keyboard's. */
+.ui-pick { block-size: min(86vh, 760px); }
+.ui-pick > .ui-pick-search { padding: 0 var(--sp-5) var(--sp-2); }
+.ui-pick > .body { flex: 1; align-content: start; }
+@media (max-width: 560px) {
+  .ui-pick { block-size: calc(var(--pick-vh, 100dvh) * 0.92); max-block-size: none; margin-block-end: var(--pick-kb, 0px); }
+}
+/* The field that opens a picker: looks like a text box, shows the choice, opens uiPick() on tap.
+   <label class="ui-field"><span>Kept in</span><button type="button" class="ui-input ui-pickfield"><span>Wardrobe · Bedroom</span></button></label>
+   Nothing chosen yet: <span class="none">Not filed</span>. */
+.ui-pickfield { display: flex; align-items: center; gap: var(--sp-2); text-align: start; cursor: pointer; color: var(--text); font: inherit; font-size: var(--text-input); }
+.ui-pickfield > span { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-pickfield > .none { color: var(--text-3); }
+.ui-pickfield::after { content: ''; flex: none; inline-size: 8px; block-size: 8px; margin-inline-end: 4px; border: solid var(--text-3); border-width: 2px 2px 0 0; transform: rotate(45deg); }
+
+/* The icon chooser, uiPickIcon() in picker.js: the same sheet, with a grid of icon buttons; the current one
+   (aria-pressed) is ringed in the accent. */
+.ui-iconpick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--tap), 1fr)); gap: var(--sp-1); }
+.ui-iconpick-grid > .ui-btn[aria-pressed="true"] { color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.ui-iconpick-grid > .ui-btn[hidden] { display: none; }
+
+/* ── Help sheet and numbered steps ──────────────────────────────────────────── */
+/* Step-by-step how-to guides inside every app (21 Nov 2026, Tom: "more how-to than FAQ"). Drawn by uiHelp.open()
+   in help.js: a .ui-sheet with the search box and topic chips held above the list (like the picker), the guides
+   as .ui-row buttons under .ui-label headings, and one guide as where-it-starts, .ui-steps, a .ui-note.good for
+   "when it's worked", and Back / Take me there in the footer. The sheet keeps one height while it's open. */
+.ui-help { block-size: min(86vh, 760px); }
+.ui-help > .ui-help-top { display: grid; gap: var(--sp-3); padding: 0 var(--sp-5) var(--sp-3); }
+.ui-help > .ui-help-top .ui-chips.scroll { margin-inline: calc(var(--sp-5) * -1); padding-inline: var(--sp-5); }
+.ui-help > .body { flex: 1; align-content: start; }
+.ui-help > [hidden] { display: none; }
+.ui-help > footer { justify-content: space-between; }
+.ui-help-group { display: grid; gap: var(--sp-2); }
+.ui-help-where { display: flex; gap: var(--sp-2); align-items: flex-start; margin: 0; font-weight: 600; color: var(--accent-ink, var(--accent)); }
+.ui-help-where > .ui-icon { flex: none; margin-top: 2px; }
+.ui-help-mark { flex: none; display: inline-flex; color: var(--accent-ink, var(--accent)); }
+.ui-help-mark > svg { inline-size: var(--icon-md); block-size: var(--icon-md); }
+.ui-help-asked { margin: 0; color: var(--text-2); }
+.ui-help-answer { margin: 0; line-height: 1.5; white-space: pre-line; }
+/* On a computer the topic chips wrap (no sideways scrolling with a mouse), and a guide being read sizes to
+   its content instead of keeping the list's height. */
+@media (min-width: 561px) {
+  .ui-help > .ui-help-top .ui-chips.scroll { flex-wrap: wrap; overflow: visible; margin-inline: 0; padding-inline: 0; }
+  .ui-help.reading { block-size: fit-content; }
+}
+@media (max-width: 560px) {
+  .ui-help { block-size: calc(var(--help-vh, 100dvh) * 0.92); max-block-size: none; margin-block-end: var(--help-kb, 0px); }
+}
+/* <ol class="ui-steps"><li>Tap Payment in the header.</li>…</ol>: numbered steps, each number in an accent
+   circle beside its words. For any "do this, then this" (a guide, a set-up, a how-to on a page). */
+.ui-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); counter-reset: ui-step; }
+.ui-steps > li { counter-increment: ui-step; display: grid; grid-template-columns: var(--tap-xs, 28px) 1fr; gap: var(--sp-3); align-items: start; line-height: 1.45; }
+.ui-steps > li::before {
+  content: counter(ui-step); display: grid; place-items: center; inline-size: var(--tap-xs, 28px); block-size: var(--tap-xs, 28px);
+  border-radius: var(--r-full); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--text);
+  font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.ui-steps > li { padding-top: 3px; }
+.ui-steps > li::before { margin-top: -3px; }
 
 /* ── Toast and empty state ───────────────────────────────────────────────────── */
 /* <div class="ui-toast" role="status">Saved</div>: add it, remove it after about 2.5s. */
@@ -780,6 +863,61 @@ button.ui-thumb { cursor: pointer; }
 }
 .ui-actionbar > .count { flex: 1 1 6em; min-width: 0; font-size: var(--text-sm); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body:has(.ui-tabbar) .ui-actionbar { bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+/* ── Manage list (manage.js) ─────────────────────────────────────────────────── */
+/* Add, rename, rearrange, move and delete the person's own things (21 Nov 2026, Tom: "having to default to
+   Claude to add something I need in the app"). Drawn by uiManage() in manage.js inside any element, or
+   uiManage.sheet() for an Organise page: groups are .ui-mgroup (a .ui-label heading, a .ui-card.flat list,
+   an Add button that opens a field in place), rows are .ui-row with a drag handle (.ui-grip) and a ⋯ menu.
+   Everything else is existing ui- pieces; these are the extras for dragging and picking. */
+.ui-manage { display: grid; gap: var(--sp-6); }
+.ui-manage.selecting { padding-block-end: calc(var(--tap) * 2); }   /* room above the action bar */
+.ui-mgroup { position: relative; }
+.ui-mhead { gap: var(--sp-1); }
+.ui-mhead > .ui-label { margin: 0; }
+.ui-mcount { color: var(--text-3); font-weight: 400; }
+.ui-mrow { gap: var(--sp-1); }
+.ui-mrow > button.main {
+  padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; min-height: var(--tap-sm); align-content: center;
+}
+.ui-mrow > label.check.main { display: flex; min-height: var(--tap-sm); }
+.ui-mname { display: grid; gap: 2px; min-width: 0; }
+.ui-mname > :first-child { font-weight: 600; overflow-wrap: anywhere; }
+.ui-mname > .sub { font-size: var(--text-sm); color: var(--text-2); }
+.ui-grip { touch-action: none; cursor: grab; color: var(--text-3); }
+.ui-mempty {
+  display: grid; place-items: center; min-height: var(--tap); padding: var(--sp-2) var(--sp-4);
+  border: 1px dashed var(--border-strong); border-radius: var(--r-md); color: var(--text-3); font-size: var(--text-sm);
+}
+.ui-madd { display: grid; gap: var(--sp-2); }
+.ui-madd > .ui-actions { align-items: flex-end; }
+.ui-madd > .ui-actions > .ui-field { flex: 1 1 12em; min-width: 0; }
+.ui-mmatches { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
+.ui-mmatches:empty { display: none; }
+.ui-mmatches > [aria-disabled='true'] { cursor: default; opacity: 0.7; }
+.ui-mhidden { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
+/* While dragging: the row being moved fades, a line shows where it lands, a group it would join lights up. */
+.ui-mdragfrom { opacity: 0.35; }
+.ui-mrow.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.ui-mrow.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.ui-mgroup.drop-before::before, .ui-mgroup.drop-after::after {
+  content: ''; position: absolute; inset-inline: 0; block-size: 2px; background: var(--accent); border-radius: var(--r-full);
+}
+.ui-mgroup.drop-before::before { inset-block-start: calc(var(--sp-3) * -1); }
+.ui-mgroup.drop-after::after { inset-block-end: calc(var(--sp-3) * -1); }
+.ui-mgroup.drop-into > .ui-card, .ui-mgroup.drop-into > .ui-mempty, .ui-manage > .ui-mgroup.drop-into:not(:has(> .ui-card, > .ui-mempty)) {
+  outline: 2px solid var(--accent); outline-offset: 2px; background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.ui-mghost {
+  position: fixed; inset-block-start: 0; inset-inline-start: 0; z-index: 90; margin: 0; padding: 0 var(--sp-2);
+  inline-size: var(--w); transform: translate(var(--x), var(--y)); pointer-events: none; list-style: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-lg); opacity: 0.96;
+}
+.ui-mghost .ui-row { border-top: 0; }
+body.ui-mdragging { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+@keyframes ui-mflash { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } }
+.ui-mflash { animation: ui-mflash 1.2s var(--ease); }
 
 /* ── Colour picker ───────────────────────────────────────────────────────────── */
 /* <div class="ui-swatches" role="radiogroup" aria-label="Colour">

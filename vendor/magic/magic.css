@@ -46,7 +46,7 @@ magic-mark { display: inline-flex; }
   background: color-mix(in srgb, var(--mg-accent) 14%, transparent); }
 .mg-badge .mg-mark { width: 19px; height: 19px; }
 .mg-x { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--mg-surface-2); color: var(--mg-text-2);
-  font-size: 15px; cursor: pointer; flex: none; }
+  font-size: 15px; cursor: pointer; flex: none; display: grid; place-items: center; padding: 0; }
 .mg-using { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .85rem; color: var(--mg-text-2); }
 .mg-using[hidden] { display: none; }
 .mg-chip { display: inline-flex; padding: 4px 10px; border-radius: 999px; background: var(--mg-surface-2); color: var(--mg-text);
