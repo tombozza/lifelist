@@ -109,6 +109,8 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 
 /* ---- Spotlight ---- */
 .spotlight-star { color: var(--spot); }
+.spotlight-star > .ui-icon { fill: currentColor; margin-inline-end: var(--sp-1); }
+#sync-status .ui-badge > .ui-icon { fill: currentColor; }
 .list-item.spotlight {
     box-shadow: inset 3px 0 0 var(--spot);
     background: linear-gradient(90deg, color-mix(in srgb, var(--spot) 12%, transparent), transparent 60%);
@@ -260,7 +262,8 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 
 /* ---- Theme and tag-category sheets ---- */
 .setting { gap: var(--sp-1); }
-.settings-admin { display:grid; grid-template-columns:repeat(4, 1fr); gap: var(--sp-2); }
+/* Settings › Remind from: the time box sits at the end of its row at its own width */
+.settings-time { inline-size: auto; flex: none; }
 
 /* ---- Notes ---- */
 .notes-head { margin-bottom: var(--sp-3); display:grid; gap: var(--sp-1); }
@@ -343,7 +346,6 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
     .field-toggle { flex-direction:row; align-items:center; justify-content:space-between; }
     .recurring-config { margin-left:0; }
     .tag-cat-label { min-width:0; width:100%; }
-    .settings-admin { grid-template-columns:repeat(2, 1fr); }
     /* Long-pressing a card starts a drag, so suppress the OS's own
        long-press behaviour: the callout menu and the text selection it
        drags out underneath. */

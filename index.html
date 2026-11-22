@@ -32,9 +32,9 @@
         <button class="tab" role="tab" aria-selected="false" data-view="lists">Lists</button>
         <button class="tab" role="tab" aria-selected="false" data-view="notes" id="tab-notes">Notes</button>
     </nav>
-    <button class="ui-btn quiet small" id="sync-status" type="button" title="Connecting to sync" aria-label="Sync status"><span class="ui-badge">&#9679;</span></button>
+    <button class="ui-btn quiet small" id="sync-status" type="button" title="Connecting to sync" aria-label="Sync status"><span class="ui-badge"><svg class="ui-icon sm" aria-hidden="true"><use href="vendor/chassis/icons.svg#circle"/></svg></span></button>
     <button class="ui-btn quiet icon" id="settings-btn" title="Settings" aria-label="Settings">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#settings"/></svg>
     </button>
 </header>
 
@@ -71,7 +71,7 @@
                     <input type="search" id="list-search" class="ui-input search" placeholder="Search…">
                 </div>
                 <button class="ui-btn filters-btn" id="open-filters">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#adjustments-horizontal"/></svg>
                     <span id="filters-btn-label">Filters &amp; sort</span>
                 </button>
                 <div id="filter-controls" class="filter-controls">
@@ -174,7 +174,7 @@
 
 <!-- The shared floating button (.ui-fab) -->
 <button id="fab" class="ui-fab" title="Add task" aria-label="Add task">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    <svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#plus"/></svg>
 </button>
 
 <!-- Every pop-up is the shared sheet: <dialog class="ui-sheet">, opened with showModal()
@@ -217,7 +217,7 @@
                     <select id="task-subtheme" class="ui-input" aria-label="Sub-theme">
                         <option value="">None</option>
                     </select>
-                    <button type="button" class="ui-btn" id="subtheme-add-btn">+ New</button>
+                    <button type="button" class="ui-btn" id="subtheme-add-btn"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#plus"/></svg>New</button>
                 </div>
                 <div class="subtheme-new" id="subtheme-new" style="display:none;">
                     <select id="subtheme-new-theme" class="ui-input" aria-label="Theme" style="display:none;"></select>
@@ -377,7 +377,7 @@
         <div class="field field-notes" data-section="notes">
             <span class="field-label">Notes</span>
             <div class="field-control">
-                <button type="button" class="ui-btn small" id="task-notes-add">+ Add notes</button>
+                <button type="button" class="ui-btn small" id="task-notes-add"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#plus"/></svg>Add notes</button>
                 <textarea id="task-notes" class="ui-input" rows="3" aria-label="Notes" style="display:none;"></textarea>
             </div>
         </div>
@@ -477,8 +477,8 @@
      (prepareContextMenu) picks the task and the rows before it opens. -->
 <div id="context-menu" class="ui-menu" popover>
     <button type="button" data-action="edit">Edit</button>
-    <button type="button" data-action="spotlight" class="ctx-spotlight">★ Spotlight</button>
-    <button type="button" data-action="unspotlight" class="ctx-spotlight" hidden>★ Remove spotlight</button>
+    <button type="button" data-action="spotlight" class="ctx-spotlight"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#star"/></svg>Spotlight</button>
+    <button type="button" data-action="unspotlight" class="ctx-spotlight" hidden><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#star"/></svg>Remove spotlight</button>
     <button type="button" data-action="plan-today">Do today</button>
     <button type="button" data-action="to-kanban">Add to Kanban</button>
     <button type="button" data-action="move-to" hidden>Move to…</button>
@@ -506,65 +506,71 @@
             <span class="ui-spacer size-note-text"></span>
             <div class="ui-actions"><button class="ui-btn small" type="button" data-trim-open>Trim archive</button></div>
         </div>
-        <div class="ui-stack">
-            <span class="ui-label">Manage</span>
-            <div class="settings-admin">
-                <button type="button" class="ui-btn small" data-admin-open="themes">Themes</button>
-                <button type="button" class="ui-btn small" data-admin-open="tags">Tags</button>
-                <button type="button" class="ui-btn small" data-admin-open="archive">Archive</button>
-                <button type="button" class="ui-btn small" data-admin-open="data">Data</button>
-            </div>
-        </div>
-        <div class="ui-stack setting">
-            <span class="ui-label">AI</span>
-            <div class="settings-admin">
-                <button type="button" class="ui-btn small" id="settings-ai-updates"><magic-mark></magic-mark> AI Updates</button>
-            </div>
-        </div>
-        <div class="ui-stack setting">
-            <span class="ui-label">Appearance</span>
+        <!-- Settings (22 Nov 2026): labelled groups, each a card of rows, in one order across the apps:
+             Your board, Appearance, Password, AI, Your data, Help, then Testing for the layout trial. -->
+        <section class="ui-stack">
+            <h2 class="ui-label">Your board</h2>
+            <div class="ui-card"><ul class="ui-list">
+                <li><button type="button" class="ui-row" data-admin-open="themes"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#palette"/></svg></span><span class="main"><span>Themes</span></span></button></li>
+                <li><button type="button" class="ui-row" data-admin-open="tags"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#tag"/></svg></span><span class="main"><span>Tags</span></span></button></li>
+                <li><button type="button" class="ui-row" data-admin-open="archive"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#archive"/></svg></span><span class="main"><span>Archive</span></span></button></li>
+                <li><label class="ui-row"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#eye"/></svg></span><span class="main"><span>Show hidden themes</span></span><input type="checkbox" role="switch" id="settings-show-hidden"></label></li>
+                <li><label class="ui-row"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#alarm"/></svg></span><span class="main"><span>Daily list review reminder</span></span><input type="checkbox" role="switch" id="settings-reminder"></label></li>
+                <li id="reminder-time-row" style="display:none;"><label class="ui-row"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#clock"/></svg></span><span class="main"><span>Remind from</span></span><input type="time" id="settings-reminder-time" class="ui-input settings-time" value="09:00"></label></li>
+            </ul></div>
+        </section>
+        <section class="ui-stack">
+            <h2 class="ui-label">Appearance</h2>
             <theme-switch></theme-switch>
-        </div>
-        <div class="ui-stack setting">
-            <label class="ui-field">
-                <span>Task window layout (test)</span>
-                <select id="settings-task-layout" class="ui-input">
-                    <option value="e">Sections (default)</option>
-                    <option value="old">Old window</option>
-                    <option value="a">A · Property list</option>
-                    <option value="b">B · Composer bar</option>
-                </select>
-            </label>
-        </div>
-        <div class="ui-stack setting">
-            <label class="check"><input type="checkbox" role="switch" id="settings-show-hidden"> Show hidden themes</label>
-        </div>
-        <div class="ui-stack setting">
-            <label class="check"><input type="checkbox" role="switch" id="settings-reminder"> Daily list review reminder</label>
-        </div>
-        <label class="ui-field" id="reminder-time-row" style="display:none;">
-            <span>Remind from</span>
-            <input type="time" id="settings-reminder-time" class="ui-input" value="09:00">
-        </label>
-        <div class="ui-stack setting">
-            <label class="check"><input type="checkbox" role="switch" id="settings-password"> Require a password</label>
-            <div id="password-set-row" class="ui-stack" style="display:none;">
-                <input type="password" id="settings-password-input" class="ui-input" placeholder="Password" aria-label="New password" autocomplete="new-password">
-                <div class="ui-actions end">
-                    <button class="ui-btn primary" id="settings-password-save">Enable lock</button>
-                </div>
-            </div>
-            <p id="password-status" class="ui-hint" style="display:none;"></p>
-            <ul class="ui-list" id="recovery-row" hidden>
-                <li class="ui-row compact">
-                    <div class="main"><span>Recovery code</span><span class="sub" id="recovery-sub"></span></div>
+        </section>
+        <section class="ui-stack">
+            <h2 class="ui-label">Password</h2>
+            <div class="ui-card"><ul class="ui-list">
+                <li><label class="ui-row"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#lock"/></svg></span><span class="main"><span>Require a password</span><span class="sub" id="password-status" data-state style="display:none;"></span></span><input type="checkbox" role="switch" id="settings-password"></label></li>
+                <li class="ui-row" id="password-set-row" style="display:none;">
+                    <label class="ui-field main"><span>New password</span><input type="password" id="settings-password-input" class="ui-input" autocomplete="new-password"></label>
+                    <button class="ui-btn primary small" id="settings-password-save">Enable lock</button>
+                </li>
+                <li class="ui-row" id="recovery-row" hidden>
+                    <span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#key"/></svg></span>
+                    <div class="main"><span>Recovery code</span><span class="sub" id="recovery-sub" data-state></span></div>
                     <button class="ui-btn small" id="recovery-btn">Make one</button>
                 </li>
-            </ul>
-            <div id="password-logout-row" style="display:none;">
-                <button class="ui-btn" id="settings-password-logout">Log out this device</button>
+                <li id="password-logout-row" style="display:none;"><button type="button" class="ui-row" id="settings-password-logout"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#lock-open"/></svg></span><span class="main"><span>Log out this device</span></span></button></li>
+            </ul></div>
+        </section>
+        <section class="ui-stack">
+            <h2 class="ui-label">AI</h2>
+            <div class="ui-card"><ul class="ui-list">
+                <li><button type="button" class="ui-row" id="settings-ai-updates"><span class="lead"><magic-mark></magic-mark></span><span class="main"><span>AI Updates</span></span></button></li>
+            </ul></div>
+        </section>
+        <section class="ui-stack">
+            <h2 class="ui-label">Your data</h2>
+            <div class="ui-card"><ul class="ui-list">
+                <li><button type="button" class="ui-row" data-admin-open="data"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#database"/></svg></span><span class="main"><span>Data</span></span></button></li>
+            </ul></div>
+        </section>
+        <section class="ui-stack">
+            <h2 class="ui-label">Help</h2>
+            <div class="ui-card"><ul class="ui-list">
+                <li><button type="button" class="ui-row" id="settings-help"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#help-circle"/></svg></span><span class="main"><span>How to…</span></span></button></li>
+            </ul></div>
+        </section>
+        <section class="ui-stack">
+            <h2 class="ui-label">Testing</h2>
+            <div class="ui-card">
+                <label class="ui-field">
+                    <span>Task window layout</span>
+                    <select id="settings-task-layout" class="ui-input" data-fixed>
+                        <option value="e">Sections (default)</option>
+                        <option value="old">Old window</option>
+                        <option value="a">A · Property list</option>
+                        <option value="b">B · Composer bar</option>
+                    </select>
+                </label>
             </div>
-        </div>
+        </section>
     </div>
 </dialog>
 
@@ -654,6 +660,9 @@
 <script src="vendor/chassis/icons.js"></script>
 <script src="vendor/fuzzy.js"></script>
 <script src="app.js"></script>
+<script src="vendor/chassis/fuzzy.js"></script>
+<script src="vendor/chassis/help.js"></script>
+<script src="help/help.js"></script>
 <script type="module" src="ai/updates.js"></script>
 </body>
 </html>

@@ -547,7 +547,7 @@ function syncUrlOpen() {
 function urlHost(url) {
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
 }
-const LINK_SVG = '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9"/><path d="M9.5 6.5a3 3 0 0 0-4.2 0L3 8.8a3 3 0 0 0 4.2 4.2l.9-.9"/></svg>';
+const LINK_SVG = uiIcon('link', { cls: 'sm' });
 // The chip is the link: a tap opens it in a new tab without opening the task.
 function linkChipEl(task) {
     if (!task.url) return null;
@@ -1268,7 +1268,7 @@ function renderTagFilter(hostId) {
     toggle.type = 'button';
     toggle.className = 'ui-chip';
     toggle.setAttribute('aria-expanded', tagFilterOpen ? 'true' : 'false');
-    toggle.innerHTML = `Tags <span class="n">${tagFilterOpen ? '\u25be' : '\u25b8'}</span>`;
+    toggle.innerHTML = `Tags${uiIcon(tagFilterOpen ? 'chevron-down' : 'chevron-right')}`;
     toggle.addEventListener('click', () => { tagFilterOpen = !tagFilterOpen; render(); });
     head.appendChild(toggle);
 
@@ -1558,7 +1558,7 @@ function renderNoteBar() {
     add.type = 'button';
     add.className = 'ui-chip';
     add.setAttribute('aria-pressed', noteDraft && !noteDraft.id ? 'true' : 'false');
-    add.textContent = '+ Filter';
+    add.innerHTML = uiIcon('plus') + 'Filter';
     add.title = 'New note';
     add.addEventListener('click', () => {
         noteDraft = { id: null, name: '', inc: emptyRules(), exc: emptyRules() };
@@ -1786,7 +1786,7 @@ function renderListContent() {
             toggle.className = 'ui-row no-chevron snoozed-toggle';
             toggle.innerHTML = open
                 ? 'Hide snoozed'
-                : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> Show ${snoozed.length} snoozed`;
+                : `${uiIcon('clock', { cls: 'sm' })}Show ${snoozed.length} snoozed`;
             toggle.addEventListener('click', () => {
                 if (open) snoozedExpanded.delete(groupKey); else snoozedExpanded.add(groupKey);
                 renderLists();
@@ -1803,7 +1803,7 @@ function renderListContent() {
         const aged = all.filter(t => !t.kanbanColumn && !isSnoozed(t))
             .sort((a, b) => (a.createdDate || '').localeCompare(b.createdDate || ''));
         if (!aged.length) {
-            container.appendChild(emptyState('Nothing sitting that long 🎉'));
+            container.appendChild(emptyState('Nothing sitting that long'));
             return;
         }
         const box = listBox(container);
@@ -1879,7 +1879,7 @@ function createListItem(task, opts = {}) {
     if (task.spotlight) {
         const star = document.createElement('span');
         star.className = 'spotlight-star';
-        star.textContent = '★ ';
+        star.innerHTML = uiIcon('star', { cls: 'sm' });
         title.appendChild(star);
     }
     title.appendChild(document.createTextNode(task.title));
@@ -1925,7 +1925,8 @@ function createListItem(task, opts = {}) {
     if (task.recurring) {
         const rc = document.createElement('span');
         rc.className = 'ui-badge';
-        rc.textContent = '↻' + (task.runCount > 0 ? ' #'+task.runCount : '');
+        rc.innerHTML = uiIcon('repeat') + (task.runCount > 0 ? '#' + task.runCount : '');
+        rc.title = 'Repeats';
         chips.appendChild(rc);
     }
     const today = todayStr();
@@ -1979,9 +1980,9 @@ function createListItem(task, opts = {}) {
     kanbanBtn.title = task.kanbanColumn ? 'Remove from Kanban' : 'Add to Kanban';
     kanbanBtn.setAttribute('aria-label', kanbanBtn.title);
     if (task.kanbanColumn) {
-        kanbanBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+        kanbanBtn.innerHTML = uiIcon('x');
     } else {
-        kanbanBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+        kanbanBtn.innerHTML = uiIcon('arrow-right');
     }
     kanbanBtn.addEventListener('click', e => {
         e.stopPropagation();
@@ -2001,7 +2002,7 @@ function createListItem(task, opts = {}) {
         del.className = 'ui-btn quiet icon small danger list-item-delete';
         del.title = 'Delete';
         del.setAttribute('aria-label', 'Delete');
-        del.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
+        del.innerHTML = uiIcon('trash');
         del.addEventListener('click', e => { e.stopPropagation(); deleteTask(task.id); });
         right.appendChild(del);
     } else {
@@ -2009,7 +2010,7 @@ function createListItem(task, opts = {}) {
         menu.type = 'button';
         menu.className = 'ui-btn quiet icon small list-item-menu';
         menu.setAttribute('aria-label', 'More');
-        menu.innerHTML = '⋯';
+        menu.innerHTML = uiIcon('dots');
         menuButtonFor(menu, task.id);
         right.appendChild(menu);
     }
@@ -2158,7 +2159,7 @@ function renderBoard() {
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'ui-btn quiet small board-col-add';
-        addBtn.textContent = '+ Add task';
+        addBtn.innerHTML = uiIcon('plus') + 'Add task';
         addBtn.addEventListener('click', () => openTaskModal(null, col.id));
         colEl.appendChild(addBtn);
         container.appendChild(colEl);
@@ -2172,11 +2173,11 @@ function renderBoardWeekStat() {
     host.innerHTML = '';
     const w = getWeekStats();
     if (!w.count && !w.lastCount) return;
-    const arrow = w.delta === null ? '' : w.delta > 0 ? ` ↑${Math.abs(w.delta)}%` : w.delta < 0 ? ` ↓${Math.abs(w.delta)}%` : '';
+    const arrow = w.delta === null ? '' : w.delta > 0 ? `${uiIcon('arrow-up')}${Math.abs(w.delta)}%` : w.delta < 0 ? `${uiIcon('arrow-down')}${Math.abs(w.delta)}%` : '';
     const cls = w.delta === null ? '' : w.delta > 0 ? ' good' : w.delta < 0 ? ' bad' : '';
     const pill = document.createElement('div');
     pill.className = 'board-week-stat';
-    pill.innerHTML = `<strong>${w.count}</strong> done this week${arrow ? `<span class="ui-badge${cls}">${arrow.trim()}</span>` : ''}`;
+    pill.innerHTML = `<strong>${w.count}</strong> done this week${arrow ? `<span class="ui-badge${cls}">${arrow}</span>` : ''}`;
     host.appendChild(pill);
 }
 
@@ -2205,7 +2206,7 @@ function createBoardCard(task) {
     if (task.spotlight) {
         const star = document.createElement('span');
         star.className = 'spotlight-star';
-        star.textContent = '★ ';
+        star.innerHTML = uiIcon('star', { cls: 'sm' });
         title.appendChild(star);
     }
     title.appendChild(document.createTextNode(task.title));
@@ -2215,7 +2216,7 @@ function createBoardCard(task) {
     const menuBtn = document.createElement('button');
     menuBtn.type = 'button';
     menuBtn.className = 'ui-btn quiet icon tiny board-card-menu';
-    menuBtn.innerHTML = '⋯';
+    menuBtn.innerHTML = uiIcon('dots');
     menuBtn.setAttribute('aria-label', 'Card options');
     menuButtonFor(menuBtn, task.id);
     head.appendChild(menuBtn);
@@ -2236,7 +2237,8 @@ function createBoardCard(task) {
     if (task.recurring) {
         const rc = document.createElement('span');
         rc.className = 'ui-badge';
-        rc.textContent = '↻' + (task.runCount > 0 ? ' #'+task.runCount : '');
+        rc.innerHTML = uiIcon('repeat') + (task.runCount > 0 ? '#' + task.runCount : '');
+        rc.title = 'Repeats';
         footer.appendChild(rc);
     }
     const cd = countdownChip(task);
@@ -2248,7 +2250,7 @@ function createBoardCard(task) {
         const day = document.createElement('span');
         day.className = 'card-day' + (isToday ? ' card-day-today' : '');
         day.title = 'Planned for ' + longDay(task.planDay);
-        day.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>';
+        day.innerHTML = uiIcon('calendar', { cls: 'sm' });
         if (!isToday) day.appendChild(document.createTextNode(shortDay(task.planDay)));
         footer.appendChild(day);
     }
@@ -2464,11 +2466,12 @@ function todoChip(text, cls) {
     return c;
 }
 
-function todoBtn(label, cls, fn, title) {
+function todoBtn(label, cls, fn, title, icon) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = cls;
     b.textContent = label;
+    if (icon) b.insertAdjacentHTML('afterbegin', uiIcon(icon));
     if (title) { b.title = title; b.setAttribute('aria-label', title); }
     b.addEventListener('click', e => { e.stopPropagation(); fn(); });
     return b;
@@ -2535,12 +2538,12 @@ function todoRow(task, where, list) {
         side.className = 'todo-side';
         if (where === 'day' && todayOrderEdit && list) {
             const i = list.indexOf(task);
-            const up = todoBtn('▲', 'ui-btn icon small', () => nudgePlanOrder(task.id, -1, list), 'Move up');
-            const down = todoBtn('▼', 'ui-btn icon small', () => nudgePlanOrder(task.id, 1, list), 'Move down');
+            const up = todoBtn('', 'ui-btn icon small', () => nudgePlanOrder(task.id, -1, list), 'Move up', 'chevron-up');
+            const down = todoBtn('', 'ui-btn icon small', () => nudgePlanOrder(task.id, 1, list), 'Move down', 'chevron-down');
             up.disabled = i <= 0; down.disabled = i >= list.length - 1;
             side.append(up, down);
         } else if (where === 'ready' || where === 'backlog') {
-            side.appendChild(todoBtn('+ ' + shortDay(todayDay), 'ui-btn small primary', () => planFor(task.id, todayDay), 'Add to ' + longDay(todayDay)));
+            side.appendChild(todoBtn(shortDay(todayDay), 'ui-btn small primary', () => planFor(task.id, todayDay), 'Add to ' + longDay(todayDay), 'plus'));
         }
         if (side.childNodes.length) main.appendChild(side);
     }
@@ -2663,7 +2666,7 @@ function todoList(host) {
 
 function todoSection(host, label, items, isOpen, toggle, where) {
     if (!items.length) return;
-    const head = todoBtn((isOpen ? '▾ ' : '▸ ') + label, 'ui-btn quiet small todo-section-toggle', toggle);
+    const head = todoBtn(label, 'ui-btn quiet small todo-section-toggle', toggle, null, isOpen ? 'chevron-down' : 'chevron-right');
     const count = document.createElement('span');
     count.className = 'ui-badge';
     count.textContent = items.length;
@@ -2703,8 +2706,8 @@ function renderToday() {
     const arrows = document.createElement('div');
     arrows.className = 'today-arrows';
     arrows.append(
-        todoBtn('‹', 'ui-btn icon today-arrow', () => goTo(addDays(day, -1)), 'Previous day'),
-        todoBtn('›', 'ui-btn icon today-arrow', () => goTo(addDays(day, 1)), 'Next day'));
+        todoBtn('', 'ui-btn icon today-arrow', () => goTo(addDays(day, -1)), 'Previous day', 'chevron-left'),
+        todoBtn('', 'ui-btn icon today-arrow', () => goTo(addDays(day, 1)), 'Next day', 'chevron-right'));
     // Drop a task on an arrow to move it to that day (never into the past)
     [[arrows.firstChild, -1], [arrows.lastChild, 1]].forEach(([btn, dir]) => {
         const target = addDays(day, dir);
@@ -2725,7 +2728,7 @@ function renderToday() {
         }, todayOrderEdit ? 'Done reordering' : 'Reorder');
         b.innerHTML = todayOrderEdit
             ? 'Done'
-            : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg>';
+            : uiIcon('arrows-sort');
         top.appendChild(b);
     }
     top.appendChild(arrows);
@@ -2818,7 +2821,7 @@ function renderAdminThemes(container) {
     hdr.innerHTML = '<h3 class="ui-h2">Themes & Sub-themes</h3>';
     const addBtn = document.createElement('button');
     addBtn.className = 'ui-btn primary small';
-    addBtn.textContent = '+ Add Theme';
+    addBtn.innerHTML = uiIcon('plus') + 'Add Theme';
     addBtn.addEventListener('click', () => openThemeModal(null));
     hdr.appendChild(addBtn);
     container.appendChild(hdr);
@@ -2868,7 +2871,7 @@ function renderAdminTags(container) {
     hdr.innerHTML = '<h3 class="ui-h2">Tags</h3>';
     const addBtn = document.createElement('button');
     addBtn.className = 'ui-btn primary small';
-    addBtn.textContent = '+ Add Category';
+    addBtn.innerHTML = uiIcon('plus') + 'Add Category';
     addBtn.addEventListener('click', () => openTagCatModal(null));
     hdr.appendChild(addBtn);
     container.appendChild(hdr);
@@ -2909,7 +2912,7 @@ function renderAdminTags(container) {
         const tagWrap = document.createElement('div');
         tagWrap.className = 'ui-chips';
         [...(cat.tags || [])].sort((a,b) => a.name.localeCompare(b.name)).forEach(tag => {
-            // The shared removable chip: <span class="ui-chip small">Name <button class="x">×</button></span>
+            // The shared removable chip: <span class="ui-chip small">Name <button class="x">(x icon)</button></span>
             const chip = document.createElement('span');
             chip.className = 'ui-chip small' + (tag.recovered ? ' tag-admin-recovered' : '');
             chip.textContent = tag.name;
@@ -2917,7 +2920,7 @@ function renderAdminTags(container) {
             del.type = 'button';
             del.className = 'x';
             del.setAttribute('aria-label', 'Remove ' + tag.name);
-            del.innerHTML = '&times;';
+            del.innerHTML = uiIcon('x', { cls: 'sm' });
             del.title = 'Delete "' + tag.name + '"';
             del.addEventListener('click', () => deleteTag(cat.id, tag.id));
             chip.appendChild(del);
@@ -4212,19 +4215,13 @@ const LAY_KEYS = [
     ['theme', 'Theme & tags'], ['priority', 'Priority'], ['dates', 'Dates'],
     ['repeat', 'Repeat'], ['subtasks', 'Sub-tasks'], ['link', 'Link'], ['notes', 'Notes'],
 ];
+// The task window's section icons (the shared set; the sub-theme arrow is the nearest one there)
 const LAY_ICONS = {
-    tags: '<path d="M3 8.5V3h5.5L14 8.5 8.5 14z"/><circle cx="6" cy="6" r="1"/>',
-    theme: '<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/>',
-    sub: '<path d="M4 2.5v6a2 2 0 0 0 2 2h6M9.5 8l2.5 2.5L9.5 13"/>',
-    priority: '<path d="M4 14V2.5M4 3h8l-1.5 3L12 9H4"/>',
-    dates: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 7h11M5.5 2v3M10.5 2v3"/>',
-    repeat: '<path d="M3 7a5 5 0 0 1 9-2.5M13 9a5 5 0 0 1-9 2.5M12 2v2.5H9.5M4 14v-2.5h2.5"/>',
-    subtasks: '<path d="M2.5 4l1.2 1.2L6 3M2.5 10l1.2 1.2L6 9M8 4.5h5.5M8 10.5h5.5"/>',
-    link: '<path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9M9.5 6.5a3 3 0 0 0-4.2 0L3 8.8a3 3 0 0 0 4.2 4.2l.9-.9"/>',
-    notes: '<path d="M3 2.5h10v8l-3 3H3z"/><path d="M5.5 6h5M5.5 9h3"/>',
+    tags: 'tag', theme: 'palette', sub: 'arrow-right', priority: 'flag', dates: 'calendar',
+    repeat: 'repeat', subtasks: 'checklist', link: 'link', notes: 'note',
 };
 function layIcon(k) {
-    return `<svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${LAY_ICONS[k] || ''}</svg>`;
+    return uiIcon(LAY_ICONS[k]);
 }
 
 // 'e' (plain sections) is the default since 11 Nov 2026; 'old' is the
@@ -4367,7 +4364,7 @@ function applyTaskLayout() {
         if (!editingTaskId) layOpen.add('theme');
         let after = title;
         LAY_KEYS.forEach(([k, label]) => {
-            const row = layGen('button', 'ui-row lay-prop', `<span class="lay-ico">${k === 'theme' ? '<svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/></svg>' : layIcon(k)}</span><span class="main"><span>${label}</span><span class="sub"></span></span>`);
+            const row = layGen('button', 'ui-row lay-prop', `<span class="lay-ico">${layIcon(k)}</span><span class="main"><span>${label}</span><span class="sub"></span></span>`);
             row.dataset.key = k;
             row.addEventListener('click', () => {
                 if (layOpen.has(k)) layOpen.delete(k); else { layOpen.add(k); if (k === 'notes') setNotesOpen(true); }
@@ -4506,7 +4503,8 @@ function renderTaskSections() {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'ui-chip';
-        b.textContent = '+ ' + label;
+        b.innerHTML = uiIcon('plus');
+        b.append(label);
         b.addEventListener('click', () => openTaskSection(key));
         bar.appendChild(b);
     });
@@ -4569,7 +4567,7 @@ function renderTagPicker() {
 
 // ---- Sub-task editor ----
 
-const CARD_OUT_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="9" height="9" rx="1.5"/><path d="M8 2h6v6M14 2 8.5 7.5"/></svg>';
+const CARD_OUT_SVG = uiIcon('external-link', { cls: 'sm' });
 
 function renderSubtaskEditor() {
     const list = document.getElementById('subtask-list');
@@ -4671,7 +4669,8 @@ function renderThemePicker() {
     // Only this side's themes (plus any already chosen), so the row is shorter
     [...state.themes].filter(th => themeFocus(th) === modalArea || modalThemeIds.includes(th.id))
         .sort((a,b) => a.name.localeCompare(b.name)).forEach(theme => {
-        const btn = tintChip(chipBtn(theme.name + (theme.hidden ? ' 🕶' : ''), modalThemeIds.includes(theme.id)), theme.color);
+        const btn = tintChip(chipBtn(theme.name, modalThemeIds.includes(theme.id)), theme.color);
+        if (theme.hidden) { btn.insertAdjacentHTML('beforeend', uiIcon('eye-off', { label: 'Hidden' })); }
         btn.dataset.themeId = theme.id;
         btn.addEventListener('click', () => {
             // Each chip is an independent toggle, so Work + Jim is just two taps
@@ -4686,7 +4685,7 @@ function renderThemePicker() {
     const add = document.createElement('button');
     add.type = 'button';
     add.className = 'ui-chip';
-    add.textContent = '+ New theme';
+    add.innerHTML = uiIcon('plus') + 'New theme';
     add.title = 'New theme';
     add.addEventListener('click', () => openThemeModal(null, { fromTask: true }));
     container.appendChild(add);
@@ -4817,7 +4816,7 @@ function renderSubThemeChips(withSubs) {
     const add = document.createElement('button');
     add.type = 'button';
     add.className = 'ui-chip';
-    add.textContent = '+ New';
+    add.innerHTML = uiIcon('plus') + 'New';
     add.addEventListener('click', showNewSubTheme);
     host.appendChild(add);
 }
@@ -5999,8 +5998,8 @@ function refreshPasswordUI(enabled, hasCode = false) {
     if (rec) {
         rec.hidden = !enabled;
         document.getElementById('recovery-sub').textContent = passwordHasCode
-            ? 'Works in place of the password if you forget it.'
-            : 'None yet. Make one in case you forget the password.';
+            ? 'Made'
+            : 'None yet';
         document.getElementById('recovery-btn').textContent = passwordHasCode ? 'New code' : 'Make one';
     }
     const toggle = document.getElementById('settings-password');
@@ -6131,7 +6130,7 @@ function renderSyncStatus() {
     const narrow = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
     const dotOnly = st.kind === 'good' || st.kind === '' || narrow;
     badge.className = 'ui-badge' + (st.kind ? ' ' + st.kind : '');
-    badge.textContent = dotOnly ? '●' : st.text;
+    if (dotOnly) badge.innerHTML = uiIcon('circle', { cls: 'sm' }); else badge.textContent = st.text;
     btn.title = st.tip + (st.detail ? ' (' + st.detail + ')' : '');
     btn.setAttribute('aria-label', (st.kind === 'good' ? 'Synced' : st.text) + '. ' + st.tip);
 }
