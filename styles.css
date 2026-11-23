@@ -330,7 +330,7 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
     /* The status badge goes under the title and tags, so they get the width the badge took
        (at 375px they had 125px and wrapped onto three or four lines; 16 Nov 2026 UI sweep) */
     .list-item { display:grid; grid-template-columns: auto minmax(0, 1fr) auto auto; column-gap: var(--sp-2); row-gap:0; align-items:center; }
-    .list-item > .list-check, .list-item > .list-select-cb { grid-row: 1 / 3; }
+    .list-item > .check.zone, .list-item > .list-select-cb { grid-row: 1 / 3; }
     .list-item > .list-item-body { grid-column: 2; grid-row: 1; }
     .list-item-right { display:contents; }
     .list-item-right > .ui-badge { grid-column: 2; grid-row: 2; justify-self:start; margin-top: var(--sp-1); }

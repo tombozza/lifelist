@@ -42,7 +42,7 @@
 
     <!-- Quick capture: one field, straight onto the review pile -->
     <div class="quick-add" id="quick-add">
-        <input type="text" id="quick-add-input" class="ui-input" placeholder="Quick add">
+        <input type="text" id="quick-add-input" class="ui-input" aria-label="Quick add">
         <button class="ui-btn primary" id="quick-add-btn">Add</button>
         <span class="ui-hint quick-add-flash" id="quick-add-flash"></span>
     </div>
@@ -68,7 +68,7 @@
         <div class="lists-toolbar">
             <div class="lists-toolbar-left">
                 <div class="search-wrap">
-                    <input type="search" id="list-search" class="ui-input search" placeholder="Search…">
+                    <input type="search" id="list-search" class="ui-input search" placeholder="Search" aria-label="Search">
                 </div>
                 <button class="ui-btn filters-btn" id="open-filters">
                     <svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#adjustments-horizontal"/></svg>
@@ -189,7 +189,7 @@
     <div class="body">
 
         <div class="ui-stack">
-            <input type="text" id="task-title" class="ui-input task-title-input" placeholder="Task" aria-label="Title">
+            <input type="text" id="task-title" class="ui-input task-title-input" aria-label="Title">
             <textarea id="task-title-multi" class="ui-input" rows="4" aria-label="Titles, one per line" style="display:none;"></textarea>
             <label class="check" id="multi-add-row">
                 <input type="checkbox" id="task-multi-toggle">
@@ -221,7 +221,7 @@
                 </div>
                 <div class="subtheme-new" id="subtheme-new" style="display:none;">
                     <select id="subtheme-new-theme" class="ui-input" aria-label="Theme" style="display:none;"></select>
-                    <input type="text" id="subtheme-new-name" class="ui-input" placeholder="New sub-theme&hellip;" aria-label="New sub-theme">
+                    <input type="text" id="subtheme-new-name" class="ui-input" aria-label="New sub-theme">
                     <button type="button" class="ui-btn" id="subtheme-new-cancel">Cancel</button>
                     <button type="button" class="ui-btn primary" id="subtheme-new-save">Add</button>
                 </div>
@@ -360,7 +360,7 @@
                 <div class="subtask-progress" id="subtask-progress" style="display:none;"></div>
                 <div id="subtask-list" class="subtask-list"></div>
                 <div class="subtask-add">
-                    <input type="text" id="subtask-new-name" class="ui-input" placeholder="Add a step&hellip;" aria-label="New step">
+                    <input type="text" id="subtask-new-name" class="ui-input" aria-label="New step">
                     <button type="button" class="ui-btn primary" id="subtask-add-btn">Add</button>
                 </div>
             </div>
@@ -407,7 +407,7 @@
     <div class="body">
         <label class="ui-field">
             <span>Name</span>
-            <input type="text" id="theme-edit-name" class="ui-input" placeholder="Theme name">
+            <input type="text" id="theme-edit-name" class="ui-input">
         </label>
         <div class="ui-field">
             <span>Colour</span>
@@ -581,7 +581,7 @@
     </header>
     <div class="body">
         <label class="ui-field" id="gate-field">
-            <input type="password" id="gate-password" class="ui-input" placeholder="Password" aria-label="Password" autocomplete="current-password">
+            <input type="password" id="gate-password" class="ui-input" aria-label="Password" autocomplete="current-password">
             <small id="gate-error" style="display:none;"></small>
         </label>
         <p class="ui-hint" id="gate-hint"></p>

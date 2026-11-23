@@ -31,6 +31,16 @@ const KANBAN_COLS = [
 // Where a task lands when it goes on the board. themeIds is no longer used
 // (work used to go to a Day column, the rest to Evening) but callers still
 // pass it, so the signature stays.
+
+// A tick at the start of a row that opens on tap gets its own 44px tap square (RULES C2, controls.css label.check.zone).
+function tickZone(check) {
+    const zone = document.createElement('label');
+    zone.className = 'check zone';
+    zone.addEventListener('click', e => e.stopPropagation());
+    zone.appendChild(check);
+    return zone;
+}
+
 function defaultBacklogCol(themeIds) { return 'backlog'; }
 
 function boardColumns() { return KANBAN_COLS.filter(c => !c.offBoard); }
@@ -1019,9 +1029,9 @@ function syncQuickAddVisibility() {
     // On Today it lines up with the centred list beneath it
     document.getElementById('quick-add').classList.toggle('quick-add-narrow', currentView === 'today');
     const target = quickAddPlanTarget();
-    document.getElementById('quick-add-input').placeholder = target === undefined
+    document.getElementById('quick-add-input').setAttribute('aria-label', target === undefined
         ? 'Quick add'
-        : 'Add to ' + (target === todayStr() ? 'today' : longDay(target)) + '\u2026';
+        : 'Add to ' + (target === todayStr() ? 'today' : longDay(target)));
 }
 
 // On Today, quick add plans straight onto today. undefined = not on Today,
@@ -1599,7 +1609,7 @@ function renderSmartNote(note) {
     form.className = 'note-add';
     form.innerHTML = '<input type="text" class="ui-input" autocomplete="off"><button type="submit" class="ui-btn primary">Add</button>';
     const input = form.querySelector('input');
-    input.placeholder = 'Add to ' + note.name + '\u2026';
+    input.setAttribute('aria-label', 'Add to ' + note.name);
     form.addEventListener('submit', e => {
         e.preventDefault();
         const title = input.value.trim();
@@ -1709,7 +1719,7 @@ function renderNoteBuilder() {
     const name = document.createElement('input');
     name.type = 'text';
     name.className = 'ui-input';
-    name.placeholder = 'Name';
+    name.setAttribute('aria-label', 'Name');
     name.value = d.name;
     name.addEventListener('input', () => { d.name = name.value; });
     const ok = document.createElement('button');
@@ -1864,7 +1874,7 @@ function createListItem(task, opts = {}) {
     check.setAttribute('aria-label', 'Done');
     check.addEventListener('click', e => e.stopPropagation());
     check.addEventListener('change', () => completeTask(task.id));
-    row.appendChild(check);
+    row.appendChild(tickZone(check));
 
     // Body
     const body = document.createElement('div');
@@ -2507,7 +2517,7 @@ function todoRow(task, where, list) {
         check.setAttribute('aria-label', done ? 'Mark not done' : 'Mark complete');
         check.addEventListener('click', e => e.stopPropagation());
         check.addEventListener('change', () => { todayOpenId = null; completeTask(task.id); });
-        main.appendChild(check);
+        main.appendChild(tickZone(check));
     }
 
     const body = document.createElement('div');
@@ -2936,7 +2946,7 @@ function renderAdminTags(container) {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'ui-input';
-        input.placeholder = 'Add tag';
+        input.setAttribute('aria-label', 'Add tag');
         input.dataset.tagAddFor = cat.id;
         // Adding redraws the whole page, so the box typed into is gone: put the
         // cursor in its replacement and hold the scroll, so Enter, name, Enter…
@@ -3042,7 +3052,7 @@ function recoveredTagFixer(cat, tags) {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'ui-input';
-        input.placeholder = 'Name it\u2026';
+        input.setAttribute('aria-label', 'Name');
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter') { e.preventDefault(); renameTag(cat.id, tag.id, input.value); }
         });
@@ -3288,7 +3298,6 @@ function trimArchiveCard() {
     card.id = 'trim-archive';
     card.innerHTML = `<div class="ui-stack">
         <h3 class="ui-h2">Trim archive</h3>
-        <p class="ui-hint">Removes old archived tasks from every device to make room. Download a backup first: Restore from a backup brings them back.</p>
         <label class="ui-field"><span>Remove tasks finished more than</span>
             <select class="ui-input" id="trim-months">
                 <option value="12">12 months ago</option>
@@ -4585,7 +4594,7 @@ function renderSubtaskEditor() {
             modalSubtasks[idx].done = check.checked;
             renderSubtaskEditor();
         });
-        row.appendChild(check);
+        row.appendChild(tickZone(check));
 
         const input = document.createElement('input');
         input.type = 'text';
