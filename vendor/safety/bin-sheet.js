@@ -80,7 +80,14 @@ export async function openBin({ title = 'Recently deleted', load, restore, forge
     if (!id || st.busy) return;
     const e = st.list.find((x) => String(x.id) === id);
     if (!e) return;
-    if (f && !confirm(`Delete "${e.label || e.kind}" for good? This can't be undone.`)) return;
+    if (f) {
+      const name = e.label || e.kind;
+      // The shared sheet when the app loads chassis ui.js (RULES K5); the browser's box only where it doesn't.
+      const sure = typeof globalThis.uiConfirm === 'function'
+        ? await globalThis.uiConfirm({ title: `Delete "${name}" for good?`, body: 'It can\'t be brought back.', ok: 'Delete for good', cancel: 'Keep it', danger: true })
+        : confirm(`Delete "${name}" for good? It can't be brought back.`);
+      if (!sure) return;
+    }
     st.busy = id; st.error = ''; st.note = ''; draw();
     try {
       const res = await (r ? restore(e) : forget(e));

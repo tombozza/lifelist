@@ -15,7 +15,7 @@
   --font-display: var(--font-sans);
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  /* type: the only sizes an app uses (rules: _shared/README.md, "The rules").
+  /* type: the only sizes an app uses (rules: _shared/RULES.md, L1).
      2xs tab-bar labels and count bubbles · xs labels, badges, captions · sm hints and meta lines ·
      md body, buttons, list rows · lg card and section titles · xl big numbers · 2xl page titles.
      Text boxes are 16px (iOS zooms into anything smaller): --text-input. */

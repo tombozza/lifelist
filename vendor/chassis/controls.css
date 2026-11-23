@@ -125,6 +125,16 @@ label.check {
   cursor: pointer;
   line-height: 1.3;
 }
+/* A tick at the start of a row whose own tap opens the thing (a task row that opens its card): the row can't
+   also be the tick, so the box gets a tap area of its own, a --tap square that overlaps the row's padding
+   without moving anything. <label class="check zone"><input type="checkbox" aria-label="Done"></label> */
+label.check.zone {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--tap, 44px);
+  block-size: var(--tap, 44px);
+  margin: calc((var(--tap, 44px) - 1lh) / -2) calc((var(--tap, 44px) - max(16px, 1.1em)) / -2);
+}
 /* Words that run to two lines or more (a title with a note under it): the control sits on the
    first line, not halfway down. <label class="check top">, or class="check top" on any flex row
    (a list item) whose font-size and line-height are the words'. */
