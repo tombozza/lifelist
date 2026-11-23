@@ -37,9 +37,8 @@ deploy.sh           ← use this, not a bare wrangler command
 Two reasons it exists, both of which will bite you if you bypass it:
 
 1. **The Pages project is direct-upload, not git-connected.** Pushing to GitHub does
-   *not* update https://life-kanban.pages.dev. But GitHub Pages
-   (`tombozza.github.io/lifelist`) *does* auto-deploy on push — so the two silently
-   drift apart if you only push.
+   *not* update https://life-kanban.pages.dev. (GitHub Pages was turned off on 23 Nov 2026;
+   Cloudflare Pages is the only host.)
 2. **It stages the files first.** Deploying the repo root would upload `.claude/` too:
    wrangler ignores `.gitignore`, and Pages direct-upload ignores `.assetsignore`.
    The script copies only the site files plus `functions/` into a temp dir.

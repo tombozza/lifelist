@@ -2,9 +2,8 @@
 # Deploy Life Kanban to Cloudflare Pages (https://life-kanban.pages.dev).
 #
 # The Pages project is a DIRECT UPLOAD project (not git-connected), so pushing
-# to GitHub does NOT update it — you must run this script. GitHub Pages
-# (tombozza.github.io/lifelist) does auto-deploy on push, so the two can drift
-# apart if you forget.
+# to GitHub does NOT update it — you must run this script. (GitHub Pages was
+# turned off on 23 Nov 2026; Cloudflare Pages is the only host.)
 #
 # Usage:  ./deploy.sh
 set -euo pipefail

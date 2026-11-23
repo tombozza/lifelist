@@ -93,6 +93,7 @@ the sync code can read and write the blob.
 
 ## Decisions
 
+- 2026-11-23: **GitHub Pages turned off.** It was still serving the whole repo publicly at tombozza.github.io/lifelist (handover and app code, including the sync code) while the board has no password. Cloudflare Pages is the only host. The stale status lines (settings fix, sync blob fix, AI Updates "not deployed") were corrected: all three are live. The unused `Recovered 1` People tag was deleted from the live data.
 - 2026-11-23: **No grey example text; ticks get their own tap square** (rules sweep, `_shared/RULES.md` W1, W2, C2). Every box lost its placeholder (the quick-add box's "Add to today" is now its aria-label, set in the same place); List search says only "Search". Trim archive's explaining line went (its own confirm still says what it removes). The Done ticks on list rows, Today rows and steps sit in `<label class="check zone">` via `tickZone()` in app.js (click doesn't open the task); the grid rule in styles.css follows the label. Service worker v105, live 23 Nov; after-deploy check passed, 36 views. Ticking wasn't tried on the live board (it would change real tasks).
 Newest first. Most have a longer explanation in `CLAUDE.md`.
 
@@ -203,20 +204,11 @@ it. Use the app (Archive, or Settings › Data › Restore from a backup) instea
 - **Works:** Today, Board, Lists, Notes and saved notes, recurring tasks (incl. onto Today),
   sub-tasks and split-out cards, tags, links, undo, JSON backup and restore-only-adds, optional password lock,
   multi-device sync. Fresh-clone setup works (see Setup check).
-- **In progress (uncommitted, 10 Nov 2026):** `functions/api/settings.js` has a local change so
-  that turning the lock on with a blank password keeps the existing one, instead of being
-  refused. This fixes the "leave blank to keep the current password" bug noted in
-  `../../CLAUDE.md`. Not committed or deployed; golf-tracker has the same file and would drift.
-- **Known loose ends:** from the tag repair, Jim, Laura and Jack each exist in both the People
-  and People work categories, so some cards show them twice; People also has a spare unused Dad
-  and James. Tom to decide whether People work keeps its own copies.
-- **Stale docs:** `CLAUDE.md` and `deploy.sh` comments still say GitHub Pages
-  (`tombozza.github.io/lifelist`) auto-deploys on push. Tom unpublished it on 15 Jul 2026 and the
-  repo is now private, so this is out of date (unconfirmed whether the Pages setting is fully off).
+- **Known loose ends:** none from the tag repair. The People / People work duplicates are gone, and the last spare (`Recovered 1`, unused) was deleted on 23 Nov 2026.
+- **Hosting:** Cloudflare Pages only. GitHub Pages was turned off on 23 Nov 2026, and a push publishes nothing.
 - **Testing (11 Nov 2026):** task window defaults to Sections (E); A, B and the old window still in Settings. Waiting for Tom to confirm E, then delete the rest.
-- **Sync blob fix (11 Nov 2026, uncommitted, not deployed):** see Decisions. Needs deploying before late December, when the old growth would have hit the D1 row limit. After deploy, open the app on each device once so all three run the new code.
 - Waiting on Tom to live in Today for a while and say what's missing.
-- **AI Updates (12 Nov 2026, uncommitted, not deployed):** built and checked in a local browser (phone width, light and dark) against a test board, not against real data. The ChatGPT contract is `ai/` (schema, guide, logic); run `node --test tests/*.test.mjs` from this folder.
+- **AI Updates:** live (Settings › AI Updates). The ChatGPT contract is `ai/` (schema, guide, logic); run `node --test tests/*.test.mjs` from this folder.
 
 ## Parked ideas
 
