@@ -53,11 +53,10 @@ export async function openBin({ title = 'Recently deleted', load, restore, forge
   const { body, done } = sheet(title);
   const st = { list: null, error: '', busy: null, restored: 0, note: '' };
   const draw = () => {
-    if (st.list === null && !st.error) { body.innerHTML = `<p class="ui-hint">Loading…</p>`; return; }
-    const top = `<p class="ui-hint">Things you delete are kept here for 30 days, then they go for good.</p>
-      ${st.note ? `<p class="ui-note good">${esc(st.note)}</p>` : ''}${st.error ? `<p class="ui-note bad">${esc(st.error)}</p>` : ''}`;
+    if (st.list === null && !st.error) { body.innerHTML = `<div class="ui-empty"><span class="ui-spinner" role="status" aria-label="Loading"></span></div>`; return; }
+    const top = `${st.note ? `<p class="ui-note good">${esc(st.note)}</p>` : ''}${st.error ? `<p class="ui-note bad">${esc(st.error)}</p>` : ''}`;
     if (!st.list?.length) {
-      body.innerHTML = `${top}<div class="ui-empty"><span class="icon">${icon('trash')}</span><strong>Nothing deleted lately</strong><span>Anything deleted in the last 30 days shows here.</span></div>`;
+      body.innerHTML = `${top}<div class="ui-empty"><span class="icon">${icon('trash')}</span><strong>Nothing deleted lately</strong></div>`;
       return;
     }
     body.innerHTML = `${top}<ul class="ui-list">${st.list.map((e) => {
