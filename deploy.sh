@@ -19,7 +19,7 @@ export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-a5ff0413b8715c423a0aef743
 # (wrangler ignores .gitignore, and Pages direct upload ignores .assetsignore).
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
-cp index.html app.js styles.css sw.js manifest.json "$STAGE"/
+cp index.html app.js styles.css sw.js manifest.json _routes.json "$STAGE"/   # _routes.json: only /api/* runs Functions (free daily request limit, 24 Nov 2026)
 cp -R icons "$STAGE"/icons
 cp -R vendor "$STAGE"/vendor
 cp -R help "$STAGE"/help
