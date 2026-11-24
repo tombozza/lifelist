@@ -13,7 +13,7 @@ can have a theme (House, Work, Garden…), maybe a sub-theme, and tags from tag 
 
 ## Context
 
-Its block in the daily update (or ✨ AI › **Copy just Life List**) is the context. `data` holds:
+Its app update (Life List › Copy on the App Hub’s AI tab, or ✨ AI in the app) is the context. `data` holds:
 - `today`: the date on Tom's device. Work out "tomorrow", "Friday" and so on from it.
 - `themes`: `id`, `name`, `area` (work or home), `sub_themes` (names). `hidden: true` themes
   still exist and can be used.

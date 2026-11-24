@@ -402,10 +402,10 @@ export async function shareContext(schema, context, { store = defaultStore(), fe
 // and the inbox of parts pasted into another app. All through the App Hub, with the hub key.
 
 /** Call the App Hub with this device's key. Resolves to the parsed JSON; throws a plain message. */
-export async function hubCall(path, { method = 'GET', body, store = defaultStore(), fetch: f = globalThis.fetch } = {}) {
+export async function hubCall(path, { method = 'GET', body, store = defaultStore(), fetch: f = globalThis.fetch, base = HUB_URL } = {}) {
   const key = hubKey(store);
   if (!key) throw new Error('This device isn’t linked to the App Hub yet.');
-  const res = await f(`${HUB_URL}${path}`, {
+  const res = await f(`${base}${path}`, {
     method, cache: 'no-store',
     headers: { 'x-hub-key': key, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -416,8 +416,15 @@ export async function hubCall(path, { method = 'GET', body, store = defaultStore
   return data;
 }
 
-/** The reference document's {version, since, apps} (part 'meta'), or with its text ('reference'), or the daily update ('daily'). */
-export const fetchPack = (part = 'meta', o) => hubCall(`/api/ai-pack?part=${part}`, o);
+/**
+ * From the App Hub: 'meta' (the reference document's version, and whether ChatGPT has it: needed,
+ * uploaded, instructionsChanged), 'reference' (with its text), 'app' (one app's update as paste-sized
+ * parts; pass { app }), 'apps' (meta plus every app's) or 'daily' (every app in one: too big to paste).
+ */
+export const fetchPack = (part = 'meta', o = {}) => hubCall(`/api/ai-pack?part=${part}${o.app ? `&app=${encodeURIComponent(o.app)}` : ''}`, o);
+
+/** Tell the App Hub this reference version is now in ChatGPT. Kept there, so every device agrees. */
+export const markUploaded = (version, o = {}) => hubCall('/api/ai-pack', { ...o, method: 'POST', body: { uploaded: version } });
 
 /** Parts of this app's AI Updates pasted elsewhere, waiting here: [{id, summary, from, section, received_at}]. */
 export const fetchInbox = async (app, o) => (await hubCall(`/api/ai-inbox/${app}`, o)).items ?? [];
@@ -480,6 +487,6 @@ export function downloadText(name, text, doc = globalThis.document) {
 }
 
 const REF_SEEN = 'ai-updates-reference-downloaded';
-/** The reference version this device last downloaded ('' if never). */
+/** The reference version this device last downloaded ('' if never). Old: the page now asks the App Hub (fetchPack 'meta'). */
 export const referenceSeen = (store = defaultStore()) => { try { return store.getItem(REF_SEEN) || ''; } catch { return ''; } };
 export const markReferenceSeen = (version, store = defaultStore()) => { try { store.setItem(REF_SEEN, version); } catch { /* blocked */ } };

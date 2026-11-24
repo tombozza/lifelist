@@ -30,6 +30,10 @@ export function aiHome(o: {
   beforeDaily?: () => Promise<unknown>;
   /** Whether this app takes changes itself (default: not contextOnly). */
   takes?: boolean;
+  /** The App Hub: list every app's update (Food Planner and Life List first), not just this one. */
+  allApps?: boolean;
+  /** Where the App Hub is, when it isn't HUB_URL: the App Hub's own page passes location.origin. */
+  hubBase?: string;
   /** Redraw the page: call html() again. */
   render?: () => void;
   onReview?: (item: WaitingItem) => unknown;

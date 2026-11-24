@@ -58,10 +58,36 @@
 .au-foot-btns { display: inline-flex; gap: var(--sp-3, 12px); flex-wrap: wrap; }
 /* the links are text, but still a thumb's worth tall to hit (the live check's small-target, 18 Nov 2026) */
 .au-foot-btns .mg-link { min-block-size: var(--tap-xs, 28px); display: inline-flex; align-items: center; }
+/* Overall document update and the per-app updates (24 Nov 2026). */
+.au-overall.au-need { border-color: color-mix(in srgb, var(--warning, #b45309) 55%, var(--mg-border)); border-width: 2px; }
+.au-status-need, .au-status-ok { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; font-size: var(--text-sm, 13px) !important; }
+.au-status-need { color: var(--warning, #b45309) !important; }
+.au-status-ok { color: var(--success, #15803d) !important; }
+.au-status-ok svg { width: 16px; height: 16px; }
+.au-steps, .au-apps { list-style: none; margin: 4px 0 0; padding: 0; display: grid; }
+.au-step, .au-arow { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 0; }
+.au-arow + .au-arow, .au-step + .au-step { border-top: 1px solid var(--mg-border); }
+.au-step-n { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--mg-surface-2); color: var(--mg-text-2); font-size: var(--text-xs, 12px); font-weight: 650; }
+.au-step-t, .au-arow-name { flex: 1; min-width: 0; font-size: var(--text-md, 15px); }
+.au-arow-name { display: grid; font-weight: 600; }
+.au-arow-name small { font-weight: 400; font-size: var(--text-xs, 12px); color: var(--mg-text-2); }
+.au-arow-btns { display: inline-flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.au-step button, .au-arow-btns button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.au-step svg, .au-arow-btns svg { width: 18px; height: 18px; }
+.au-more { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; margin-top: 4px; padding: 0;
+  border: 0; border-top: 1px solid var(--mg-border); background: none; color: var(--mg-text); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.au-more small { flex: 1; color: var(--mg-text-2); font-weight: 400; font-size: var(--text-sm, 13px); }
+.au-more svg { width: 18px; height: 18px; color: var(--mg-text-2); transition: transform .15s; }
+.au-more[aria-expanded="true"] svg { transform: rotate(180deg); }
+.au-overall, .au-updates { grid-template-columns: auto minmax(0, 1fr); }
 .au-sent { padding: 10px 12px; border-radius: var(--mg-r-sm, 12px); background: var(--mg-surface-2); }
 @media (max-width: 480px) {
   .au-card { grid-template-columns: auto minmax(0, 1fr); }
   .au-card-act { grid-column: 1 / -1; justify-self: end; }
+  /* the two big cards give the phone's width to their rows, not the icon */
+  .au-overall, .au-updates { grid-template-columns: minmax(0, 1fr); }
+  .au-overall .au-card-ic, .au-updates .au-card-ic { display: none; }
 }
 
 /* The ✨ AI button in every app's top bar. */

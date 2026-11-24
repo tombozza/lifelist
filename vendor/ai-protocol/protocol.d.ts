@@ -64,9 +64,11 @@ export function shareContext(schema: AppSchema, context: () => { data: unknown; 
 // The shared page (ARCHITECTURE §8c)
 export const CONTEXT_ONLY: Set<string>;
 export interface InboxItem { id: string; summary: string; from: string; section: { v: number; actions: unknown[] }; received_at: string }
-type HubOpts = { store?: KVStore; fetch?: typeof fetch };
+type HubOpts = { store?: KVStore; fetch?: typeof fetch; base?: string };
 export function hubCall(path: string, o?: HubOpts & { method?: string; body?: unknown }): Promise<any>;
-export function fetchPack(part?: 'meta' | 'reference' | 'daily', o?: HubOpts): Promise<{ version: string; since?: string; apps?: string[]; text?: string }>;
+export interface AppUpdate { id: string; name: string; url?: string | null; contextOnly?: boolean; as_of: string | null; parts: string[] }
+export function fetchPack(part?: 'meta' | 'reference' | 'app' | 'apps' | 'daily', o?: HubOpts & { app?: string }): Promise<{ version: string; since?: string; apps?: any[]; app?: AppUpdate; text?: string; needed?: boolean; uploaded?: { version: string; at: string } | null; instructionsChanged?: boolean; instructions?: string }>;
+export function markUploaded(version: string, o?: HubOpts): Promise<{ ok: boolean; needed: boolean }>;
 export function fetchInbox(app: string, o?: HubOpts): Promise<InboxItem[]>;
 export function clearInbox(app: string, id: string, o?: HubOpts): Promise<unknown>;
 export function shareReference(app: string, ref: { title: string; text: string }, o?: HubOpts & { force?: boolean }): Promise<{ shared: boolean; reason?: string }>;

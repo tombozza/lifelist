@@ -14,11 +14,13 @@
 //   });
 //   mountAiButton(topBarElement, { app: schema.app, open });   // the ✨ AI button, with a badge
 //
-// The page, top to bottom:
+// The page, top to bottom (24 Nov 2026):
 //   Waiting      parts of a reply pasted into another app, for this one (from the App Hub inbox)
-//   1 Reference  the reference document for the ChatGPT project: version, date, Download
-//   2 Daily      the daily update for every app: Copy
-//   3 Paste      any reply: this app's part is checked here; every other app's part is sent on
+//   Overall document update   "Update needed" (first, with Download, then Uploaded) or "Up to date"
+//                             (after the app's card). Kept on the App Hub, so every device agrees.
+//   <App> update this app's state, paste-sized (Copy, or Part 1, Part 2 …). With allApps (the App
+//                Hub), every app, Food Planner and Life List first.
+//   Paste        any reply: this app's part is checked here; every other app's part is sent on
 // Linked to the App Hub (a hub key on this device) for 1, 2 and sending on; without it, the page
 // offers this app's own state to copy, and the set-up.
 //
@@ -27,7 +29,7 @@
 // remembered on this device, so a second paste shows it as already applied (unticked).
 
 import { processReply, appliedLog, contextBlock, APP_NAMES, shareContext, hubKey, setHubKey, lastShared,
-  fetchPack, fetchInbox, clearInbox, forwardParts, inboxReply, downloadText, referenceSeen, markReferenceSeen } from './protocol.js';
+  fetchPack, fetchInbox, clearInbox, forwardParts, inboxReply, downloadText, markUploaded } from './protocol.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const svg = d => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -38,6 +40,8 @@ const IC = {
   day: svg('<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/><path d="M9 15h3v3"/>'),
   paste: svg('<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/><path d="M9 12h6M9 16h4"/>'),
   down: svg('<path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/>'),
+  check: svg('<path d="m5 12 5 5 9-10"/>'),
+  chev: svg('<path d="m6 9 6 6 6-6"/>'),
   copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
 };
 /** "today", "yesterday" or "on Tue 11 Nov", by the device's own calendar. */
@@ -63,8 +67,9 @@ export function aiHome(o) {
   const app = o.schema.app;
   const takes = o.takes ?? !o.schema.contextOnly;
   const canShare = !!o.context && o.share !== false;
-  const st = { linked: !!hubKey(), loading: true, meta: null, daily: '', waiting: [], packError: '', copied: '', downloaded: false, keyOpen: false, error: '', flash: '' };
+  const st = { linked: !!hubKey(), loading: true, meta: null, apps: [], waiting: [], packError: '', copied: '', downloaded: false, othersOpen: false, keyOpen: false, error: '', flash: '' };
   const render = () => o.render?.();
+  const hub = o.hubBase ? { base: o.hubBase } : {};   // the App Hub's own page calls itself
 
   async function load() {
     st.linked = !!hubKey();
@@ -73,8 +78,13 @@ export function aiHome(o) {
     if (canShare) await shareContext(o.schema, o.context, { force: true, notify: () => {} });
     try { await o.beforeDaily?.(); } catch { /* reference data is a nice-to-have */ }
     try {
-      const [meta, daily, waiting] = await Promise.all([fetchPack('meta'), fetchPack('daily'), takes ? fetchInbox(app) : []]);
-      st.meta = meta; st.daily = daily.text; st.waiting = waiting;
+      if (o.allApps) {
+        const [all, waiting] = await Promise.all([fetchPack('apps', hub), takes ? fetchInbox(app, hub) : []]);
+        st.meta = all; st.apps = all.apps ?? []; st.waiting = waiting;
+      } else {
+        const [meta, one, waiting] = await Promise.all([fetchPack('meta', hub), fetchPack('app', { ...hub, app }), takes ? fetchInbox(app, hub) : []]);
+        st.meta = meta; st.apps = one.app ? [one.app] : []; st.waiting = waiting;
+      }
     } catch (err) { st.packError = err?.message ?? String(err); }
     st.loading = false;
     render();
@@ -89,28 +99,58 @@ export function aiHome(o) {
     `${esc(w.summary || `${w.section?.actions?.length ?? 0} changes`)} · pasted in ${esc(APP_NAMES[w.from] ?? 'another app')} ${esc(day(w.received_at))}`,
     `<button type="button" class="mg-go" data-au="review" data-id="${esc(w.id)}">Review</button>`, '', 'au-wait')).join('');
 
-  function referenceView() {
-    if (!st.linked) return card(IC.book, '1 · Reference document', 'Not linked', '');
+  const needed = () => !!st.meta?.needed;
+
+  /** "Overall document update": whether ChatGPT's file is current, and the steps when it isn't. */
+  function overallView() {
+    const title = 'Overall document update';
+    if (!st.linked) return card(IC.book, title, 'Not linked', '');
     const m = st.meta;
-    const seen = referenceSeen();
-    const fresh = m && seen && seen !== m.version;
-    const meta = st.loading && !m ? 'Checking…' : m ? `Version ${esc(m.version)} · updated ${esc(day(m.since))}${fresh ? ' · <b>new since you last downloaded it</b>' : seen === m.version ? ' · the one you have' : ''}` : '';
-    return card(IC.book, '1 · Reference document', '',
-      `<button type="button" class="mg-ghost" data-au="download" ${m ? '' : 'disabled'}>${IC.down}<span>${st.downloaded ? 'Downloaded ✓' : 'Download'}</span></button>`,
-      meta ? `<p class="au-meta ${fresh ? 'au-new' : ''}">${meta}</p>` : '');
+    if (!m) return card(IC.book, title, st.loading ? 'Checking…' : '', '');
+    if (!m.needed) {
+      return card(IC.book, title, '', '', `<p class="au-status-ok">${IC.check}<span>Up to date</span></p>
+        <p class="au-meta">Version ${esc(m.version)} · uploaded ${esc(day(m.uploaded?.at))}</p>`, 'au-overall');
+    }
+    const step = (n, text, btn = '') => `<li class="au-step"><span class="au-step-n">${n}</span><span class="au-step-t">${text}</span>${btn}</li>`;
+    const steps = [
+      step(1, 'Download the file', `<button type="button" class="${st.downloaded ? 'mg-ghost' : 'mg-go'}" data-au="download">${st.downloaded ? IC.check : IC.down}<span>${st.downloaded ? 'Downloaded' : 'Download'}</span></button>`),
+      step(2, 'Replace it in ChatGPT’s AI Updates project'),
+      ...(m.instructionsChanged && m.instructions ? [step(3, 'Paste into the project’s Instructions',
+        `<button type="button" class="mg-ghost" data-au="instructions">${st.copied === 'instructions' ? IC.check : IC.copy}<span>${st.copied === 'instructions' ? 'Copied' : 'Copy'}</span></button>`)] : []),
+    ];
+    steps.push(step(steps.length + 1, 'Start a new chat', `<button type="button" class="${st.downloaded ? 'mg-go' : 'mg-ghost'}" data-au="uploaded">Done</button>`));
+    return card(IC.book, title, '', '', `<p class="au-status-need">Update needed</p><ol class="au-steps">${steps.join('')}</ol>`, 'au-overall au-need');
   }
 
-  function dailyView() {
+  /** One row per app: its name, when it last shared, and a Copy (or Part 1, Part 2 …). */
+  function appRow(a) {
+    const btn = (i, label) => {
+      const key = `${a.id}:${i}`;
+      return `<button type="button" class="mg-ghost" data-au="copy-part" data-app="${esc(a.id)}" data-i="${i}">${st.copied === key ? IC.check : IC.copy}<span>${st.copied === key ? 'Copied' : label}</span></button>`;
+    };
+    const btns = !a.parts.length ? '<span class="au-meta" data-state>Not shared yet</span>'
+      : a.parts.length === 1 ? btn(0, 'Copy') : a.parts.map((_, i) => btn(i, `Part ${i + 1}`)).join('');
+    const age = a.as_of ? day(a.as_of) : '';
+    return `<li class="au-arow"><span class="au-arow-name">${esc(a.name)}${age ? `<small>${esc(age)}</small>` : ''}</span><span class="au-arow-btns">${btns}</span></li>`;
+  }
+
+  /** "<App> update" (one app), or "Individual app updates" (every app, on the App Hub). */
+  function updatesView() {
+    const title = o.allApps ? 'Individual app updates' : `${esc(name)} update`;
     if (!st.linked) {
-      return card(IC.day, '2 · Daily update', '',
-        o.context ? `<button type="button" class="mg-go" data-au="copy-app">${IC.copy}<span>${st.copied === 'app' ? 'Copied ✓' : 'Copy'}</span></button>` : '');
+      return card(IC.day, title, '',
+        o.context ? `<button type="button" class="mg-go" data-au="copy-app">${IC.copy}<span>${st.copied === 'app' ? 'Copied' : 'Copy'}</span></button>` : '');
     }
-    return card(IC.day, '2 · Daily update', '',
-      `<button type="button" class="mg-go" data-au="copy-daily" ${st.daily ? '' : 'disabled'}>${IC.copy}<span>${st.copied === 'daily' ? 'Copied ✓' : st.loading ? 'Getting…' : 'Copy'}</span></button>`);
+    if (!st.apps.length) return card(IC.day, title, st.loading ? 'Getting…' : '', '');
+    const first = st.apps.slice(0, o.allApps ? 2 : 1), rest = o.allApps ? st.apps.slice(2) : [];
+    const list = `<ul class="au-apps">${first.map(appRow).join('')}</ul>${rest.length
+      ? `<button type="button" class="au-more" data-au="others" aria-expanded="${st.othersOpen ? 'true' : 'false'}"><span>Other apps</span><small>${rest.length}</small>${IC.chev}</button>${
+        st.othersOpen ? `<ul class="au-apps">${rest.map(appRow).join('')}</ul>` : ''}` : ''}`;
+    return card(IC.day, title, '', '', list, 'au-updates');
   }
 
   /** The paste card's frame, for a caller that keeps its own textarea and button inside it. */
-  const pasteCard = inner => card(IC.paste, '3 · Paste reply', '', '', inner, 'au-paste');
+  const pasteCard = inner => card(IC.paste, 'Paste reply', '', '', inner, 'au-paste');
 
   function footView() {
     const last = canShare ? lastShared(app) : null;
@@ -122,16 +162,16 @@ export function aiHome(o) {
         <label class="mg-stack" for="au-key">App Hub key<input id="au-key" type="password" autocomplete="off" spellcheck="false" value=""></label>
         <div class="mg-actions">${st.linked ? '<button type="button" class="mg-ghost" data-au="key-forget">Unlink</button>' : ''}<button type="button" class="mg-go" data-au="key-save">Save key</button></div></div>` : '';
     return `<div class="au-foot"><span>${esc(line)}</span><span class="au-foot-btns">
-        ${st.linked && o.context ? `<button type="button" class="mg-link" data-au="copy-app">${st.copied === 'app' ? 'Copied ✓' : `Copy just ${esc(name)}`}</button>` : ''}
         <button type="button" class="mg-link" data-au="key">${st.keyOpen ? 'Close' : st.linked ? 'Link settings' : 'Set up'}</button></span></div>${form}`;
   }
 
-  const html = (paste = '') => `<div class="au-home">${st.flash ? `<p class="mg-note au-flash" role="status">${esc(st.flash)}</p>` : ''}${waitingView()}${referenceView()}${dailyView()}${paste}
+  const html = (paste = '') => `<div class="au-home">${st.flash ? `<p class="mg-note au-flash" role="status">${esc(st.flash)}</p>` : ''}${waitingView()}${
+      needed() ? overallView() + updatesView() : updatesView() + overallView()}${paste}
       ${st.error ? `<p class="mg-error" role="alert">${esc(st.error)}</p>` : ''}${footView()}</div>`;
 
   async function drop(id) {
     st.waiting = st.waiting.filter(w => w.id !== id);
-    try { await clearInbox(app, id); } catch { /* it shows again next time; Dismiss clears it */ }
+    try { await clearInbox(app, id, hub); } catch { /* it shows again next time; Dismiss clears it */ }
   }
 
   /** Handle a tap on one of the cards' buttons. true when it was one of ours. */
@@ -139,22 +179,41 @@ export function aiHome(o) {
     if (!b || b.disabled) return false;
     const a = b.dataset.au;
     const root = b.closest('.au-home') ?? document;
-    if (a === 'copy-daily' || a === 'copy-app') {
-      let text = st.daily;
-      if (a === 'copy-app') {
-        try { const c = o.context(); text = contextBlock({ app, name, v: o.schema.v, data: c.data, note: c.note, contextOnly: !!o.schema.contextOnly }); }
-        catch (err) { st.error = err?.message ?? String(err); render(); return true; }
-      }
-      try { await navigator.clipboard.writeText(text); st.copied = a === 'copy-daily' ? 'daily' : 'app'; st.error = ''; }
+    const copy = async (text, what) => {
+      try { await navigator.clipboard.writeText(text); st.copied = what; st.error = ''; }
       catch { st.error = 'Couldn’t copy. Your browser blocked it; try again.'; }
-      render(); return true;
+      render();
+      setTimeout(() => { if (st.copied === what) { st.copied = ''; render(); } }, 2000);
+    };
+    if (a === 'copy-app') {
+      try { const c = o.context(); await copy(contextBlock({ app, name, v: o.schema.v, data: c.data, note: c.note, contextOnly: !!o.schema.contextOnly }), 'app'); }
+      catch (err) { st.error = err?.message ?? String(err); render(); }
+      return true;
     }
+    if (a === 'copy-part') {
+      const it = st.apps.find(x => x.id === b.dataset.app), i = Number(b.dataset.i);
+      if (it?.parts[i]) await copy(it.parts[i], `${it.id}:${i}`);
+      return true;
+    }
+    if (a === 'others') { st.othersOpen = !st.othersOpen; render(); return true; }
+    if (a === 'instructions') { if (st.meta?.instructions) await copy(st.meta.instructions, 'instructions'); return true; }
     if (a === 'download') {
       b.disabled = true;
       try {
-        const ref = await fetchPack('reference');
+        const ref = await fetchPack('reference', hub);
         downloadText(`AI-Updates-reference-${ref.version}.md`, ref.text);
-        markReferenceSeen(ref.version); st.meta = { version: ref.version, since: ref.since, apps: ref.apps }; st.downloaded = true; st.error = '';
+        st.downloaded = ref.version; st.error = '';
+        if (st.meta && st.meta.version !== ref.version) st.meta = { ...st.meta, version: ref.version };
+      } catch (err) { st.error = err?.message ?? String(err); }
+      render(); return true;
+    }
+    if (a === 'uploaded') {
+      b.disabled = true;
+      try {
+        const v = typeof st.downloaded === 'string' ? st.downloaded : st.meta?.version;
+        const r = await markUploaded(v, hub);
+        st.meta = { ...st.meta, version: v, needed: r.needed, uploaded: r.uploaded, instructionsChanged: r.instructionsChanged };
+        st.downloaded = false; st.error = '';
       } catch (err) { st.error = err?.message ?? String(err); }
       render(); return true;
     }
@@ -165,7 +224,7 @@ export function aiHome(o) {
       if (!/^[A-Za-z0-9_-]{16,128}$/.test(k.trim())) { st.error = 'That doesn’t look like the App Hub key. Copy it again from the App Hub.'; render(); return true; }
       setHubKey(k); st.keyOpen = false; st.error = ''; await load(); return true;
     }
-    if (a === 'key-forget') { setHubKey(''); st.keyOpen = false; st.meta = null; st.daily = ''; st.waiting = []; await load(); return true; }
+    if (a === 'key-forget') { setHubKey(''); st.keyOpen = false; st.meta = null; st.apps = []; st.waiting = []; await load(); return true; }
     return false;
   }
 
