@@ -370,19 +370,15 @@ name at the start (`renderTagPicker`). A tag tap is **one per category**: it rep
 that category's other tag, and tapping the chosen one clears it. Tags are not a
 section any more, and the old folded-category picker (`modalTagCatsOpen`) is unused.
 
-**Layouts** (Settings › Task window layout, per device, `lk-task-layout`). The default
-is **E, Sections** (Tom: "Can you not just have sections for themes, sub-themes, tags
-etc?", then "with the icons and collapsable sections from option A"): every part is its
-own section (`laySecParts`) under an A-style icon heading with a summary and a chevron that
-folds it: Theme, Sub-theme, Tags, Priority, Dates, Repeat, Sub-tasks, Link, Notes. A new task
-opens Theme and Sub-theme (Tom: "tags collapsed by default"); an edited task opens whatever
-already holds a value. On a phone the window is a full-screen page (`ui-sheet page`, added to
-the shared components) and the chips run the full width, with no indent under the icon.
-Sub-theme hides until a theme is picked.
-A (property list), B (composer bar) and "Old window" stay selectable for comparison. C and
-D were rejected ("a no go") and removed; a saved `c`/`d` falls back to E. All of them only
-rearrange this same modal (`applyTaskLayout` / `refreshTaskLayout`). Once Tom confirms E,
-build it into the HTML and delete the others plus the setting.
+**Sections** (layout E, the only task window since 25 Nov 2026; Tom: "Can you not just have
+sections for themes, sub-themes, tags etc?", then "with the icons and collapsable sections from
+option A"): every part is its own section (`laySecParts`) under an icon heading with a summary and
+a chevron that folds it: Theme, Sub-theme, Tags, Priority, Dates, Repeat, Sub-tasks, Link, Notes. A
+new task opens Theme and Sub-theme (Tom: "tags collapsed by default"); an edited task opens whatever
+already holds a value. On a phone the window is a full-screen page (`ui-sheet page`) and the chips
+run the full width, with no indent under the icon. Sub-theme hides until a theme is picked.
+`applyTaskLayout` / `refreshTaskLayout` only rearrange the same modal DOM, so every field keeps its
+listeners. The trial layouts A–D, the old window and the Settings switch were deleted on 25 Nov 2026.
 
 ## No theme chips on cards
 

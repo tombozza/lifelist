@@ -4213,17 +4213,14 @@ function openTaskModal(taskId, defaultKanbanCol) {
     setTimeout(() => document.getElementById('task-title').focus(), 50);
 }
 
-// ============ TASK WINDOW LAYOUTS (test, 11 Nov 2026) ============
-// Tom asked to try four layouts for the task window side by side. Each one
-// only REARRANGES the same modal DOM (moving nodes keeps their listeners), so
-// every field, the save path and sync are untouched. Picked per device in
-// Settings (localStorage lk-task-layout); '' is the current window. Once Tom
-// picks one, fold it in properly and delete the rest.
+// ============ THE TASK WINDOW'S SECTIONS ============
+// Tom (11 Nov 2026): "Can you not just have sections for themes, sub-themes,
+// tags etc?", then "with the icons and collapsable sections from option A".
+// Every part is its own section under an icon heading that folds it. This only
+// REARRANGES the modal DOM (moving nodes keeps their listeners), so every field,
+// the save path and sync are untouched. Four other trial layouts (A, B, C, D)
+// and the old window were deleted on 25 Nov 2026 once Tom kept this one.
 
-const LAY_KEYS = [
-    ['theme', 'Theme & tags'], ['priority', 'Priority'], ['dates', 'Dates'],
-    ['repeat', 'Repeat'], ['subtasks', 'Sub-tasks'], ['link', 'Link'], ['notes', 'Notes'],
-];
 // The task window's section icons (the shared set; the sub-theme arrow is the nearest one there)
 const LAY_ICONS = {
     tags: 'tag', theme: 'palette', sub: 'arrow-right', priority: 'flag', dates: 'calendar',
@@ -4233,15 +4230,6 @@ function layIcon(k) {
     return uiIcon(LAY_ICONS[k]);
 }
 
-// 'e' (plain sections) is the default since 11 Nov 2026; 'old' is the
-// progressive-disclosure window it replaced, kept for comparison.
-function taskLayout() {
-    let v = '';
-    try { v = localStorage.getItem('lk-task-layout') || ''; } catch {}
-    if (v === 'old') return '';
-    // C and D were tried and dropped (Tom, 11 Nov 2026)
-    return ['a', 'b', 'e'].includes(v) ? v : 'e';
-}
 let layOrig = null;        // the modal body's own children, in their own order
 let layThemeOrig = null;   // the theme block's rows (theme, sub-theme, tags)
 let layOpen = new Set();   // sections the person has opened in this layout
@@ -4353,134 +4341,61 @@ function restoreTaskLayout() {
     modal.querySelectorAll('.lay-gen').forEach(el => el.remove());
     modal.querySelectorAll('.lay-hide').forEach(el => el.classList.remove('lay-hide'));
     modal.querySelectorAll('.lay-sec-body').forEach(el => el.classList.remove('lay-sec-body'));
-    modal.classList.remove('lay-a', 'lay-b', 'lay-c', 'lay-d', 'lay-e', 'lay-full');
+    modal.classList.remove('lay-e');
 }
 
 function applyTaskLayout() {
     restoreTaskLayout();
-    const lay = taskLayout();
-    if (!lay) return;
     const modal = document.getElementById('task-modal');
-    const body = layBody();
-    const title = body.firstElementChild;
-    modal.classList.add('lay-' + lay);
+    const title = layBody().firstElementChild;
+    modal.classList.add('lay-e');
     layShow(document.getElementById('task-more'), false);
     layOpen = new Set();
-    // An edited task opens what already has something in it
-    if (editingTaskId) LAY_KEYS.forEach(([k]) => { if (k !== 'theme' && laySummary(k)) layOpen.add(k); });
-
-    if (lay === 'a') {
-        if (!editingTaskId) layOpen.add('theme');
-        let after = title;
-        LAY_KEYS.forEach(([k, label]) => {
-            const row = layGen('button', 'ui-row lay-prop', `<span class="lay-ico">${layIcon(k)}</span><span class="main"><span>${label}</span><span class="sub"></span></span>`);
-            row.dataset.key = k;
-            row.addEventListener('click', () => {
-                if (layOpen.has(k)) layOpen.delete(k); else { layOpen.add(k); if (k === 'notes') setNotesOpen(true); }
-                refreshTaskLayout();
-            });
-            after.after(row);
-            const block = layBlock(k);
-            row.after(block);
-            after = block;
-        });
+    // A new task opens Theme and Sub-theme; tags start folded (Tom: "tags
+    // collapsed by default"). An edited task opens whatever holds something.
+    if (!editingTaskId) ['theme', 'sub'].forEach(k => layOpen.add(k));
+    else {
+        ['theme', 'sub', 'tags'].forEach(k => { if (laySecSummary(k)) layOpen.add(k); });
+        ['priority', 'dates', 'repeat', 'subtasks', 'link', 'notes'].forEach(k => { if (laySummary(k)) layOpen.add(k); });
     }
-
-    if (lay === 'b') {
-        const sum = layGen('div', 'ui-chips lay-sum');
-        title.after(sum);
-        const bar = layGen('div', 'lay-bar');
-        LAY_KEYS.filter(([k]) => k !== 'theme').forEach(([k, label]) => {
-            const b = layGen('button', 'ui-btn quiet icon lay-bar-btn', layIcon(k));
-            b.dataset.key = k;
-            b.title = label;
-            b.setAttribute('aria-label', label);
-            b.addEventListener('click', () => {
-                if (layOpen.has(k)) layOpen.delete(k); else { layOpen.add(k); if (k === 'notes') setNotesOpen(true); }
-                refreshTaskLayout();
-                if (layOpen.has(k)) layBlock(k).scrollIntoView({ block: 'nearest' });
-            });
-            bar.appendChild(b);
+    if (layOpen.has('notes')) setNotesOpen(true);
+    let after = title;
+    laySecParts().forEach(([k, label, el]) => {
+        const sec = layGen('section', 'lay-sec');
+        sec.dataset.key = k;
+        if (k === 'sub') sec.classList.add('lay-sec-sub');
+        const head = layGen('button', 'ui-row lay-prop lay-sec-h', `<span class="lay-ico">${layIcon(k)}</span><span class="main"><span>${label}</span><span class="sub"></span></span>`);
+        head.setAttribute('aria-expanded', 'false');
+        head.addEventListener('click', () => {
+            if (layOpen.has(k)) layOpen.delete(k); else { layOpen.add(k); if (k === 'notes') setNotesOpen(true); }
+            refreshTaskLayout();
         });
-        body.appendChild(bar);
-    }
-
-    if (lay === 'e') {
-        // Tom (11 Nov 2026): "Can you not just have sections for themes,
-        // sub-themes, tags etc?", then "with the icons and collapsable sections
-        // from option A". Every field is its own section with an icon heading
-        // that folds it. Theme and sub-theme start open on a new task;
-        // the rest open when they hold something.
-        // Tags start folded (Tom: "tags collapsed by default")
-        if (!editingTaskId) ['theme', 'sub'].forEach(k => layOpen.add(k));
-        else ['theme', 'sub', 'tags'].forEach(k => { if (laySecSummary(k)) layOpen.add(k); });
-        if (layOpen.has('notes')) setNotesOpen(true);
-        let after = title;
-        laySecParts().forEach(([k, label, el]) => {
-            const sec = layGen('section', 'lay-sec');
-            sec.dataset.key = k;
-            if (k === 'sub') sec.classList.add('lay-sec-sub');
-            const head = layGen('button', 'ui-row lay-prop lay-sec-h', `<span class="lay-ico">${layIcon(k)}</span><span class="main"><span>${label}</span><span class="sub"></span></span>`);
-            head.setAttribute('aria-expanded', 'false');
-            head.addEventListener('click', () => {
-                if (layOpen.has(k)) layOpen.delete(k); else { layOpen.add(k); if (k === 'notes') setNotesOpen(true); }
-                refreshTaskLayout();
-            });
-            sec.appendChild(head);
-            el.classList.add('lay-sec-body');
-            sec.appendChild(el);
-            after.after(sec);
-            after = sec;
-        });
-    }
-
+        sec.appendChild(head);
+        el.classList.add('lay-sec-body');
+        sec.appendChild(el);
+        after.after(sec);
+        after = sec;
+    });
     refreshTaskLayout();
 }
 
 function refreshTaskLayout() {
-    const lay = taskLayout();
     const modal = document.getElementById('task-modal');
-    if (!lay || !modal.classList.contains('lay-' + lay)) return;
-    if (lay === 'a') {
-        modal.querySelectorAll('.lay-prop').forEach(row => {
-            const k = row.dataset.key;
-            row.querySelector('.sub').textContent = laySummary(k) || (k === 'theme' ? 'Choose' : 'Add');
-            row.classList.toggle('open', layOpen.has(k));
-            layShow(layBlock(k), layOpen.has(k));
-        });
-    }
-    if (lay === 'b') {
-        const sum = modal.querySelector('.lay-sum');
-        sum.innerHTML = '';
-        LAY_KEYS.filter(([k]) => k !== 'theme').forEach(([k]) => {
-            const v = laySummary(k);
-            if (!v) return;
-            const c = layGen('button', 'ui-chip lay-sum-chip', '');
-            c.innerHTML = layIcon(k);
-            c.appendChild(document.createTextNode(v));
-            c.addEventListener('click', () => { layOpen.add(k); refreshTaskLayout(); layBlock(k).scrollIntoView({ block: 'nearest' }); });
-            sum.appendChild(c);
-        });
-        layShow(sum, sum.childNodes.length > 0);
-        LAY_KEYS.forEach(([k]) => { if (k !== 'theme') layShow(layBlock(k), layOpen.has(k)); });
-        modal.querySelectorAll('.lay-bar-btn').forEach(b => b.setAttribute('aria-pressed', layOpen.has(b.dataset.key) ? 'true' : 'false'));
-    }
-    if (lay === 'e') {
-        laySecParts().forEach(([k, , el]) => {
-            const sec = el.closest('.lay-sec');
-            if (!sec) return;
-            const open = layOpen.has(k);
-            const head = sec.querySelector('.lay-sec-h');
-            head.querySelector('.sub').textContent = laySecSummary(k) || (['theme', 'sub', 'tags', 'priority'].includes(k) ? 'Choose' : 'Add');
-            head.classList.toggle('open', open);
-            head.setAttribute('aria-expanded', open ? 'true' : 'false');
-            el.style.display = '';
-            layShow(el, open);
-        });
-        // No theme yet means no sub-themes to show
-        const sub = modal.querySelector('.lay-sec-sub');
-        if (sub) layShow(sub, modalThemeIds.length > 0);
-    }
+    if (!modal.classList.contains('lay-e')) return;
+    laySecParts().forEach(([k, , el]) => {
+        const sec = el.closest('.lay-sec');
+        if (!sec) return;
+        const open = layOpen.has(k);
+        const head = sec.querySelector('.lay-sec-h');
+        head.querySelector('.sub').textContent = laySecSummary(k) || (['theme', 'sub', 'tags', 'priority'].includes(k) ? 'Choose' : 'Add');
+        head.classList.toggle('open', open);
+        head.setAttribute('aria-expanded', open ? 'true' : 'false');
+        el.style.display = '';
+        layShow(el, open);
+    });
+    // No theme yet means no sub-themes to show
+    const sub = modal.querySelector('.lay-sec-sub');
+    if (sub) layShow(sub, modalThemeIds.length > 0);
 }
 
 
@@ -5544,12 +5459,9 @@ function init() {
     });
     document.getElementById('settings-close').addEventListener('click', () => closeSheet('settings-modal'));
     document.getElementById('settings-modal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.close(); });
-    const layoutSel = document.getElementById('settings-task-layout');
-    layoutSel.value = taskLayout() || 'old';
-    layoutSel.addEventListener('change', () => {
-        try { localStorage.setItem('lk-task-layout', layoutSel.value); } catch {}
-    });
-    // Anything done inside the task window updates the layout's summaries
+    // The trial layouts' per-device setting is gone (25 Nov 2026)
+    try { localStorage.removeItem('lk-task-layout'); } catch {}
+    // Anything done inside the task window updates the sections' summaries
     ['click', 'input', 'change'].forEach(ev =>
         document.getElementById('task-modal').addEventListener(ev, () => setTimeout(refreshTaskLayout, 0)));
 

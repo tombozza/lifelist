@@ -93,6 +93,7 @@ the sync code can read and write the blob.
 
 ## Decisions
 
+- 2026-11-25: **The task window is Sections (layout E) for good** (Tom: "Go, as recommended"). Layouts A, B and the old window, their CSS, and Settings › Testing › Task window layout (`lk-task-layout`, now removed from each device on load) are deleted. E still only rearranges the same modal DOM (`applyTaskLayout`), so saving and sync are unchanged. Service worker v106.
 - 2026-11-23: **GitHub Pages turned off.** It was still serving the whole repo publicly at tombozza.github.io/lifelist (handover and app code, including the sync code) while the board has no password. Cloudflare Pages is the only host. The stale status lines (settings fix, sync blob fix, AI Updates "not deployed") were corrected: all three are live. The unused `Recovered 1` People tag was deleted from the live data.
 - 2026-11-23: **No grey example text; ticks get their own tap square** (rules sweep, `_shared/RULES.md` W1, W2, C2). Every box lost its placeholder (the quick-add box's "Add to today" is now its aria-label, set in the same place); List search says only "Search". Trim archive's explaining line went (its own confirm still says what it removes). The Done ticks on list rows, Today rows and steps sit in `<label class="check zone">` via `tickZone()` in app.js (click doesn't open the task); the grid rule in styles.css follows the label. Service worker v105, live 23 Nov; after-deploy check passed, 36 views. Ticking wasn't tried on the live board (it would change real tasks).
 Newest first. Most have a longer explanation in `CLAUDE.md`.
@@ -206,7 +207,6 @@ it. Use the app (Archive, or Settings › Data › Restore from a backup) instea
   multi-device sync. Fresh-clone setup works (see Setup check).
 - **Known loose ends:** none from the tag repair. The People / People work duplicates are gone, and the last spare (`Recovered 1`, unused) was deleted on 23 Nov 2026.
 - **Hosting:** Cloudflare Pages only. GitHub Pages was turned off on 23 Nov 2026, and a push publishes nothing.
-- **Testing (11 Nov 2026):** task window defaults to Sections (E); A, B and the old window still in Settings. Waiting for Tom to confirm E, then delete the rest.
 - Waiting on Tom to live in Today for a while and say what's missing.
 - **AI Updates:** live (Settings › AI Updates). The ChatGPT contract is `ai/` (schema, guide, logic); run `node --test tests/*.test.mjs` from this folder.
 

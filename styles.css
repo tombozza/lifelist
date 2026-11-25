@@ -364,17 +364,11 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
     .today-focus .focus-seg { inline-size:auto; flex:1; }
 }
 
-/* ---- Task window layouts (test) — app-only until one is picked, then it
-   moves into the shared components ---- */
+/* ---- The task window: every part in its own folding section (layout E,
+   Tom 11 Nov 2026; the A/B/old trial layouts were deleted 25 Nov 2026) ---- */
 #task-modal .lay-hide { display:none !important; }
-#task-modal:is(.lay-a,.lay-b,.lay-e) .field-label { display:none; }
-#task-modal:is(.lay-a,.lay-b) #subtheme-field .field-label { display:block; }
-#task-modal:is(.lay-a,.lay-b,.lay-e) .field { flex-direction:column; align-items:stretch; gap:var(--sp-2); }
-#task-modal:is(.lay-a,.lay-b) .field-label { flex:none; padding-top:0; }
-
-/* A · property list */
-#task-modal.lay-a > .body { gap:0; }
-#task-modal.lay-a > .body > .ui-stack:first-child { margin-bottom:var(--sp-2); }
+#task-modal.lay-e .field-label { display:none; }
+#task-modal.lay-e .field { flex-direction:column; align-items:stretch; gap:var(--sp-2); }
 .lay-prop { min-height:44px; padding:var(--sp-2) 2px; }
 .lay-prop .main { grid-template-columns:90px 1fr; align-items:center; }
 .lay-prop .main > :first-child { font-weight:500; }
@@ -382,23 +376,12 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 .lay-prop.open .main > .sub { color:var(--text); }
 .lay-prop.open::after { transform:rotate(135deg); }
 .lay-ico { flex:none; display:grid; place-items:center; color:var(--text-3); }
-#task-modal.lay-a [data-section], #task-modal.lay-a [data-block] { padding:0 0 var(--sp-3) 32px; }
-
-/* B · composer bar */
-.lay-sum { gap:6px; }
-.lay-sum-chip { min-height:28px; font-size:var(--text-sm); gap:5px; }
-.lay-sum-chip svg { width:14px; height:14px; }
-.lay-bar { position:sticky; bottom:calc(-1 * var(--sp-4)); display:flex; gap:2px; padding:var(--sp-2) 0; background:var(--surface); border-top:1px solid var(--border); margin-top:var(--sp-2); }
-.lay-bar-btn[aria-pressed="true"] { color:var(--accent); background:var(--surface-2); }
-
-/* B and D: the theme row is one line that scrolls */
-
-/* Smaller chips inside every test layout — the 36px pills were most of the clutter */
-#task-modal:is(.lay-a,.lay-b,.lay-e) .ui-chip { min-height:30px; padding:0 10px; font-size:var(--text-sm); }
-#task-modal:is(.lay-a,.lay-b,.lay-e) #multi-add-row { font-size:var(--text-sm); color:var(--text-2); }
+/* Smaller chips — the 36px pills were most of the clutter */
+#task-modal.lay-e .ui-chip { min-height:30px; padding:0 var(--sp-3); font-size:var(--text-sm); }
+#task-modal.lay-e #multi-add-row { font-size:var(--text-sm); color:var(--text-2); }
 /* A one-line scrolling row must not widen the sheet: let every column shrink */
-#task-modal:is(.lay-a,.lay-b,.lay-e) > .body { grid-template-columns:minmax(0,1fr); }
-#task-modal:is(.lay-a,.lay-b,.lay-e) :is(.field, .field-control, [data-block], [data-section]) { min-width:0; }
+#task-modal.lay-e > .body { grid-template-columns:minmax(0,1fr); }
+#task-modal.lay-e :is(.field, .field-control, [data-block], [data-section]) { min-width:0; }
 
 /* Theme, sub-theme and tags: one block, every row one line (11 Nov 2026) */
 #task-modal .subtheme-row { display:none; }
@@ -412,7 +395,7 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 #task-modal > .body { grid-template-columns:minmax(0,1fr); }
 #task-modal .tag-pick-name { text-transform:none; letter-spacing:0; font-size:var(--text-sm); flex-basis:84px; }
 
-/* E · sections (default): each field under its own heading */
+/* The sections: each part under its own heading */
 #task-modal.lay-e > .body { gap:0; }
 #task-modal.lay-e > .body > .ui-stack:first-child { padding-bottom:var(--sp-3); }
 .lay-sec { border-top:1px solid var(--border); min-width:0; }
