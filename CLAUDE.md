@@ -448,7 +448,18 @@ name (`lk_session`):
   lock off clears the hash. Same `settings.js` in golf-tracker, life-kanban, media-tracker and
   holiday-tracker (10 Nov 2026).
 
-`golf-tracker` has the same files. Fix a bug in one, fix it in both.
+**Draw a pattern** (25 Nov 2026, Tom: "Any apps that you think needs password can you add the shoebox style
+swipe to unlock option"). Copied from House Book's People lock. With the lock on, Settings › Draw a pattern sets
+one (`drawNewPattern`, the shared `vendor/chassis/pattern.js`); the lock screen then shows the grid
+(`showGateMode('pattern')`), and **Forgot pattern?** brings back the password box, which still takes the password
+or the recovery code. `functions/api/_pattern.js`: the browser sends only the dots (`POST /api/auth {dots}`,
+`PUT /api/settings {pattern: dots | null}`), the server keeps a PBKDF2 hash in `settings.pattern_hash` (column
+added on first use) and signs the same `lk_session` cookie. Wrong passwords and patterns share one count per IP in
+`auth_throttle` (table made on first use): 5, then a 15-minute wait (429). Turning the lock off clears the pattern.
+The lock and the pattern stay off until Tom sets them himself.
+
+`golf-tracker` has the same files (`_pattern.js`, `auth.js`, `settings.js` mirrored 25 Nov 2026; Golf shows no
+pattern option). Fix a bug in one, fix it in both.
 
 ## History
 

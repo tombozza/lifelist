@@ -360,13 +360,26 @@
         'Write down the recovery code it shows. It’s shown only once.',
       ],
       done: 'Other devices ask for the password. A new password signs every other device out.',
-      related: ['forgot'],
+      related: ['pattern', 'forgot'],
+    },
+    {
+      id: 'pattern', group: 'stuck', title: 'Unlock by drawing a pattern',
+      words: 'pattern draw swipe unlock dots lock screen password',
+      where: 'Settings › Draw a pattern', go: SETTINGS,
+      steps: [
+        'Turn on Require a password first. The password stays the way back in.',
+        'Open Settings and tap Set one beside Draw a pattern.',
+        'Join at least 4 dots, then draw the same shape again.',
+      ],
+      done: 'The lock screen shows the dots. Tap Forgot pattern? there to type the password instead.',
+      related: ['lock', 'forgot'],
     },
     {
       id: 'forgot', group: 'stuck', title: 'Get in when you’ve forgotten the password',
       words: 'forgot password locked out recovery code cant get in',
       where: 'The lock screen',
       steps: [
+        'If the lock screen shows dots, tap Forgot pattern? first.',
         'Type the recovery code where the password goes.',
         'Once in, open Settings and set a new password. It makes a new recovery code.',
         'Lost both? The way back in is in the Cloudflare dashboard. The app’s handover, under Break glass, has the exact steps.',

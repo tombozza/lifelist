@@ -536,6 +536,12 @@
                     <div class="main"><span>Recovery code</span><span class="sub" id="recovery-sub" data-state></span></div>
                     <button class="ui-btn small" id="recovery-btn">Make one</button>
                 </li>
+                <li class="ui-row" id="pattern-row" hidden>
+                    <span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#hand-finger"/></svg></span>
+                    <div class="main"><span>Draw a pattern</span><span class="sub" id="pattern-sub" data-state></span></div>
+                    <button class="ui-btn small quiet" id="pattern-remove" hidden>Remove</button>
+                    <button class="ui-btn small" id="pattern-btn">Set one</button>
+                </li>
                 <li id="password-logout-row" style="display:none;"><button type="button" class="ui-row" id="settings-password-logout"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#lock-open"/></svg></span><span class="main"><span>Log out this device</span></span></button></li>
             </ul></div>
         </section>
@@ -567,6 +573,11 @@
         <h2 id="gate-title">Life Kanban</h2>
     </header>
     <div class="body">
+        <div class="ui-stack gate-pattern" id="gate-pattern" hidden>
+            <p class="ui-sub" id="gate-say" aria-live="polite">Draw your pattern</p>
+            <div id="gate-grid"></div>
+            <button type="button" class="ui-btn quiet small" id="gate-forgot">Forgot pattern?</button>
+        </div>
         <label class="ui-field" id="gate-field">
             <input type="password" id="gate-password" class="ui-input" aria-label="Password" autocomplete="current-password">
             <small id="gate-error" style="display:none;"></small>
@@ -646,6 +657,7 @@
 
 <script src="vendor/chassis/icons.js"></script>
 <script src="vendor/chassis/ui.js"></script>
+<script src="vendor/chassis/pattern.js"></script>
 <script src="vendor/fuzzy.js"></script>
 <script src="app.js"></script>
 <script src="vendor/chassis/fuzzy.js"></script>

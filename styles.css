@@ -408,3 +408,6 @@ main { margin:0 auto; padding: var(--sp-5) var(--sp-5) 96px; }   /* room at the 
 }
 #task-modal.lay-e #subtheme-field .field-label, #task-modal.lay-e .field-toggle .field-label { display:none; }
 #task-modal.lay-e .tag-picker { gap:8px; }
+
+/* Draw-a-pattern on the lock screen (25 Nov 2026): the grid and Forgot pattern? sit centred. */
+.gate-pattern { align-items: center; text-align: center; }

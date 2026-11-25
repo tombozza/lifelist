@@ -5622,7 +5622,7 @@ function init() {
             document.getElementById('password-set-row').style.display = 'none';
             // Shown once: the only time the recovery code is ever on screen.
             if (res && res.recovery_code) await showRecovery(res.recovery_code);
-            refreshPasswordUI(true, !!(res && res.recovery_code));
+            refreshPasswordUI(true, !!(res && res.recovery_code), passwordHasPattern);
         } catch(err) { showToast("Couldn't turn the lock on: " + err.message, { bad: true }); }
     });
     // A new recovery code for a lock that's already on (the old one stops working).
@@ -5635,8 +5635,25 @@ function init() {
             const b = await res.json().catch(() => ({}));
             if (!res.ok || !b.recovery_code) throw new Error((b.error && b.error.message) || `HTTP ${res.status}`);
             await showRecovery(b.recovery_code);
-            refreshPasswordUI(true, true);
+            refreshPasswordUI(true, true, passwordHasPattern);
         } catch(err) { showToast("Couldn't make a recovery code: " + err.message, { bad: true }); }
+    });
+    // Draw-a-pattern unlock (25 Nov 2026): on top of the password, which stays the way back in.
+    document.getElementById('pattern-btn').addEventListener('click', async () => {
+        const dots = await drawNewPattern();
+        if (!dots) return;
+        try {
+            await putPattern(dots);
+            refreshPasswordUI(true, passwordHasCode, true);
+            showToast('Pattern set');
+        } catch(err) { showToast("Couldn't set the pattern: " + err.message, { bad: true }); }
+    });
+    document.getElementById('pattern-remove').addEventListener('click', async () => {
+        try {
+            await putPattern(null);
+            refreshPasswordUI(true, passwordHasCode, false);
+            showToast('Pattern removed. The password still unlocks.');
+        } catch(err) { showToast("Couldn't remove the pattern: " + err.message, { bad: true }); }
     });
     document.getElementById('settings-bin').addEventListener('click', openRecentlyDeleted);
     document.getElementById('settings-password-logout').addEventListener('click', async () => {
@@ -5650,6 +5667,7 @@ function init() {
         gateSubmit.addEventListener('click', unlockSite);
         document.getElementById('gate-password').addEventListener('keydown', e => { if (e.key === 'Enter') unlockSite(); });
         document.getElementById('gate-continue').addEventListener('click', () => location.reload());
+        document.getElementById('gate-forgot').addEventListener('click', () => showGateMode('password'));
     }
 
     // Reflect the current lock state when Settings opens.
@@ -5986,8 +6004,59 @@ async function showRecovery(code) {
 }
 function showPasswordGate() {
     const gate = document.getElementById('password-gate');
-    if (gate && !gate.open) gate.showModal();
+    if (!gate || gate.open) return;
+    gate.showModal();
     recoverySheet().then(m => { const h = document.getElementById('gate-hint'); if (h) h.textContent = m.RECOVERY_HINT; }).catch(() => {});
+    // With a pattern set, the grid comes first and the password sits behind "Forgot pattern?".
+    fetch('/api/settings', { headers:{'accept':'application/json'} }).then(r => r.json())
+        .then(b => { if (b.has_pattern && window.patternGrid) showGateMode('pattern'); })
+        .catch(() => {});
+}
+function showGateMode(mode) {
+    const pattern = mode === 'pattern';
+    document.getElementById('gate-pattern').hidden = !pattern;
+    document.getElementById('gate-field').hidden = pattern;
+    document.getElementById('gate-hint').hidden = pattern;
+    document.getElementById('gate-submit').hidden = pattern;
+    if (!pattern) { document.getElementById('gate-password').focus(); return; }
+    const say = document.getElementById('gate-say');
+    say.textContent = 'Draw your pattern';
+    const g = window.patternGrid(document.getElementById('gate-grid'), { size: 260, onDone: async dots => {
+        if (dots.length < 4) { say.textContent = 'Join at least 4 dots'; g.bad(); return; }
+        try {
+            const res = await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ dots }) });
+            if (res.ok) { location.reload(); return; }
+            const b = await res.json().catch(() => ({}));
+            say.textContent = (b.error && b.error.message) || 'That pattern isn’t right.';
+        } catch(_) { say.textContent = 'Could not reach the server.'; }
+        g.bad();
+    } });
+}
+// Draw a new pattern twice, in a sheet. Resolves the dots, or null if closed.
+function drawNewPattern() {
+    return new Promise(resolve => {
+        const dlg = document.createElement('dialog');
+        dlg.className = 'ui-sheet';
+        dlg.setAttribute('aria-labelledby', 'pattern-sheet-title');
+        dlg.innerHTML = `<header><h2 id="pattern-sheet-title">Draw a pattern</h2>
+            <button type="button" class="ui-btn quiet icon small" aria-label="Close" data-x>${uiIcon('x')}</button></header>
+            <div class="body ui-stack"><div id="pattern-new-grid"></div></div>`;
+        document.body.appendChild(dlg);
+        let settled = false;
+        const close = dots => { if (settled) return; settled = true; dlg.close(); dlg.remove(); resolve(dots); };
+        dlg.querySelector('[data-x]').onclick = () => close(null);
+        dlg.addEventListener('cancel', e => { e.preventDefault(); close(null); });
+        window.patternTwice(dlg.querySelector('#pattern-new-grid'), { size: 240, onReady: dots => { if (dots) close(dots); } });
+        dlg.showModal();
+    });
+}
+async function putPattern(dots) {
+    const res = await fetch('/api/settings', {
+        method:'PUT', headers:{'content-type':'application/json'}, body: JSON.stringify({ pattern: dots }),
+    });
+    const b = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((b.error && b.error.message) || `HTTP ${res.status}`);
+    return b;
 }
 async function unlockSite() {
     const input = document.getElementById('gate-password');
@@ -5996,7 +6065,8 @@ async function unlockSite() {
     try {
         const res = await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ password: pw }) });
         if (!res.ok) {
-            if (errEl) { errEl.textContent = 'Incorrect password.'; errEl.style.display = ''; errEl.parentElement.classList.add('error'); }
+            const b = await res.json().catch(() => ({}));
+            if (errEl) { errEl.textContent = (b.error && b.error.message) || 'Incorrect password.'; errEl.style.display = ''; errEl.parentElement.classList.add('error'); }
             return;
         }
         const body = await res.json().catch(() => ({}));
@@ -6006,6 +6076,7 @@ async function unlockSite() {
             document.getElementById('gate-field').hidden = true;
             document.getElementById('gate-hint').hidden = true;
             document.getElementById('gate-submit').hidden = true;
+            document.getElementById('gate-pattern').hidden = true;
             const note = document.getElementById('gate-recovered');
             note.textContent = RECOVERED_NOTE; note.hidden = false;
             const cont = document.getElementById('gate-continue');
@@ -6030,12 +6101,22 @@ async function loadPasswordSetting() {
     try {
         const res = await fetch('/api/settings', { headers:{'accept':'application/json'} });
         const body = await res.json();
-        refreshPasswordUI(!!body.password_enabled, !!body.has_recovery_code);
+        refreshPasswordUI(!!body.password_enabled, !!body.has_recovery_code, !!body.has_pattern);
     } catch(_) { refreshPasswordUI(false); }
 }
 let passwordHasCode = false;
-function refreshPasswordUI(enabled, hasCode = false) {
+let passwordHasPattern = false;
+function refreshPasswordUI(enabled, hasCode = false, hasPattern = false) {
     passwordHasCode = enabled && hasCode;
+    passwordHasPattern = enabled && hasPattern;
+    const pat = document.getElementById('pattern-row');
+    if (pat) {
+        const on = enabled && hasPattern;
+        pat.hidden = !enabled;
+        document.getElementById('pattern-sub').textContent = on ? 'Set' : 'None yet';
+        document.getElementById('pattern-btn').textContent = on ? 'Change' : 'Set one';
+        document.getElementById('pattern-remove').hidden = !on;
+    }
     const rec = document.getElementById('recovery-row');
     if (rec) {
         rec.hidden = !enabled;
