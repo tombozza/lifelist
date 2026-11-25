@@ -43,7 +43,7 @@
   }
   function wordMatches(q, w) {
     if (w.startsWith(q) || (q.length >= 3 && w.includes(q))) return true;
-    if (q.length < 3) return false;
+    if (q.length < 4) return false; // 3 letters: starts-with or contains only ("bat" must not find "Back", "balls", "Matt"; House Book, 25 Nov 2026)
     const max = q.length >= 7 ? 2 : 1;
     return distance(q, w, max) <= max || (w.length > q.length && distance(q, w.slice(0, q.length), max) <= max);
   }
