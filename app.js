@@ -6423,6 +6423,13 @@ let firstSync = Promise.resolve();
     window.addEventListener('online', () => pullFromCloud());
 })();
 
+// The lock screen's pattern view and the Draw a pattern sheet, for the saved screen checks
+// (_shared/qa/screens/life-kanban.json): the live lock is off, so nothing else shows them.
+window.lifeListLock = {
+    previewGate: () => { const g = document.getElementById('password-gate'); if (!g.open) g.showModal(); showGateMode('pattern'); },
+    drawNewPattern: () => drawNewPattern(),
+};
+
 // ---- AI UPDATES (12 Nov 2026) ----
 // Settings › AI Updates (ai/updates.js, a module loaded after this file) applies a
 // ChatGPT block through these: the same functions the UI uses, so ids, updatedAt,
