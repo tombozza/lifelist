@@ -85,7 +85,7 @@
         'On a computer, Ctrl-Z or Cmd-Z undoes your last change to a task.',
       ],
       done: 'The task is back on the list as it was.',
-      related: ['reopen'],
+      related: ['reopen', 'deleted'],
     },
     {
       id: 'work-home', group: 'today', title: 'Show only Work or only Home',
@@ -325,6 +325,19 @@
       steps: ['Open Settings and tap Archive.', 'Find the task and tap Reopen.'],
       done: 'It’s back in the column it was finished from (Live comes back as Ready).',
       related: ['undo'],
+    },
+    {
+      id: 'deleted', group: 'stuck', title: 'Bring back a deleted task',
+      words: 'deleted delete bin trash recently restore undo lost gone mistake',
+      where: 'Settings › Recently deleted', go: '#settings-bin',
+      steps: [
+        'Right after deleting, tap Undo on the message at the bottom.',
+        'Missed it? Open Settings and tap Recently deleted.',
+        'Find the task and tap Restore.',
+      ],
+      done: 'The task is back where it was, on every device. Deleted tasks are kept for 30 days.',
+      tip: 'Themes, tags and saved notes aren’t kept there, so the app asks before deleting one.',
+      related: ['undo', 'reopen'],
     },
     {
       id: 'backup', group: 'stuck', title: 'Back up, or restore from a backup',

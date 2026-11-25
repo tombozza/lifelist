@@ -223,6 +223,25 @@ tasks the change created are tombstoned, tasks it deleted get their tombstone
 lifted. Ctrl-Z is ignored while typing in a box or while a modal is open.
 Only tasks are covered, not themes or tags.
 
+## Recently deleted (the bin)
+
+Deleting a task (`binTask`) goes at once with an Undo toast and keeps a copy in
+`state.bin` for 30 days: entries shaped like the shared bin's (`{id, kind, label,
+deleted_at, data}`), listed by the shared `openBin` sheet (Settings › Your data ›
+Recently deleted). `deleteTask` without the bin is only for housekeeping (a dormant
+repeat). The pure part (`binDelete`, `binRestore`, `binForget`, `binList`, `mergeBin`)
+sits inside the archive-core markers and is tested by `tests/bin.test.mjs`.
+
+- The bin syncs as a **union per entry id**, so it has no `*UpdatedAt` to guard.
+- A plain `{id, ts}` tombstone always wins, so **a restore writes a newer
+  `{id, ts, restored:true}`** in its place; `mergeTombstones` keeps the newest mark and
+  `applyTombstones` keeps a task whose mark is `restored`. Undo of a delete does the same.
+  Delete for good writes `{id, ts, gone:true}`, still a delete everywhere. An entry
+  stops showing (and leaves the blob) once its task has a newer restored or gone mark.
+- Themes, tags, categories and saved notes aren't binned: they ask first (`uiConfirm`).
+- No browser `confirm()`/`alert()`: `uiConfirm`, `uiAsk` and `uiToast` from
+  `vendor/chassis/ui.js`; `showToast` is a thin wrapper over `uiToast`.
+
 ## Board columns
 
 `KANBAN_COLS` holds every column; `boardColumns()` is what gets drawn. Columns are

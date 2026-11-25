@@ -159,6 +159,7 @@ function defaultState() {
         completionLog: {},
         settings: { theme: 'light' },
         deletedIds: [],
+        bin: [],
         themesUpdatedAt: 0,
         tagCategories: DEFAULT_TAG_CATEGORIES.map(c => ({...c, tags: c.tags.map(t => ({...t}))})),
         tagsUpdatedAt: 0,
@@ -285,6 +286,7 @@ function loadState() {
             if (!p.settings.mutedThemes) p.settings.mutedThemes = [];
             if (!p.settings.reminderTime) p.settings.reminderTime = '09:00';
             if (!p.deletedIds) p.deletedIds = [];
+            if (!Array.isArray(p.bin)) p.bin = [];
             if (!p.themesUpdatedAt) p.themesUpdatedAt = 0;
             if (!Array.isArray(p.tagCategories)) {
                 p.tagCategories = DEFAULT_TAG_CATEGORIES.map(c => ({...c, tags: c.tags.map(t => ({...t}))}));
@@ -339,7 +341,11 @@ function undoLast() {
         return { ...t, updatedAt: now };
     });
     const removed = state.tasks.filter(t => !prevIds.has(t.id));
-    state.deletedIds = (state.deletedIds || []).filter(x => !(prevIds.has(x.id) && !cur.has(x.id)));
+    // A task the change deleted comes back with a newer "restored" mark, which
+    // beats its delete on every device (see RECENTLY DELETED).
+    const back = new Set(before.filter(t => !cur.has(t.id)).map(t => t.id));
+    state.deletedIds = (state.deletedIds || []).filter(x => !back.has(x.id));
+    back.forEach(id => state.deletedIds.push({ id, ts: now, restored: true }));
     removed.forEach(t => state.deletedIds.push({ id: t.id, ts: now }));
     state.tasks = restored;
     undoing = true;
@@ -350,39 +356,14 @@ function undoLast() {
 }
 
 // A small message at the bottom of the screen, optionally with an Undo
-// button — the phone's way to undo, where there's no Ctrl-Z. The shared
-// .ui-toast (vendor/chassis/components.css): "Deleted <button>Undo</button>",
-// .bad (role=alert) for something that failed. An open sheet sits in the top
-// layer and would cover a plain toast, so then the toast goes INSIDE the sheet
-// as a manual popover (the components.css note), where Undo can still be tapped.
-let toastTimer = null;
+// button (the phone's way to undo, where there's no Ctrl-Z). The shared
+// uiToast (vendor/chassis/ui.js, RULES K5); it goes inside an open sheet so
+// Undo can still be tapped. opts.undo: true undoes the last change (undoLast),
+// or a function to call instead; opts.bad: something failed.
 function showToast(msg, opts) {
     opts = opts || {};
-    const old = document.getElementById('toast');
-    if (old) old.remove();
-    const el = document.createElement('div');
-    el.id = 'toast';
-    el.className = 'ui-toast' + (opts.bad ? ' bad' : '');
-    el.setAttribute('role', opts.bad ? 'alert' : 'status');
-    el.appendChild(document.createTextNode(msg));
-    if (opts.undo) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = 'Undo';
-        b.addEventListener('click', () => { el.remove(); undoLast(); });
-        el.appendChild(b);
-    }
-    const sheets = [...document.querySelectorAll('dialog[open]')];
-    const sheet = sheets[sheets.length - 1];
-    if (sheet && el.showPopover) {
-        el.popover = 'manual';
-        sheet.appendChild(el);
-        el.showPopover();
-    } else {
-        document.body.appendChild(el);
-    }
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.remove(), opts.undo ? 6000 : 2500);
+    const undo = opts.undo === true ? undoLast : (typeof opts.undo === 'function' ? opts.undo : null);
+    return uiToast(msg, { bad: !!opts.bad, undo: undo || undefined });
 }
 
 // The colour picker in the theme and tag-category sheets: the shared
@@ -1753,8 +1734,8 @@ function renderNoteBuilder() {
         del.type = 'button';
         del.className = 'ui-btn danger quiet note-del';
         del.textContent = 'Delete note';
-        del.addEventListener('click', () => {
-            if (!confirm('Delete the note "' + d.name + '"? The tasks in it stay where they are.')) return;
+        del.addEventListener('click', async () => {
+            if (!await uiConfirm({ title: 'Delete the note "' + d.name + '"?', body: 'The tasks in it stay where they are.', ok: 'Delete note', cancel: 'Keep it' })) return;
             state.smartNotes = state.smartNotes.filter(x => x.id !== d.id);
             saveSmartNotes();
             noteDraft = null;
@@ -2013,7 +1994,7 @@ function createListItem(task, opts = {}) {
         del.title = 'Delete';
         del.setAttribute('aria-label', 'Delete');
         del.innerHTML = uiIcon('trash');
-        del.addEventListener('click', e => { e.stopPropagation(); deleteTask(task.id); });
+        del.addEventListener('click', e => { e.stopPropagation(); binTask(task.id); });
         right.appendChild(del);
     } else {
         const menu = document.createElement('button');
@@ -3073,10 +3054,10 @@ function recoveredTagFixer(cat, tags) {
                 o.value = t.id; o.textContent = t.name;
                 sel.appendChild(o);
             });
-            sel.addEventListener('change', () => {
+            sel.addEventListener('change', async () => {
                 if (!sel.value) return;
                 const to = targets.find(t => t.id === sel.value);
-                if (confirm(`Move ${titles.length} task(s) onto "${to.name}" and drop this one?`)) {
+                if (await uiConfirm({ title: `Merge into "${to.name}"?`, body: `${titles.length} task${titles.length === 1 ? '' : 's'} move onto "${to.name}", and this tag goes.`, ok: 'Merge', danger: false })) {
                     mergeTag(cat.id, tag.id, sel.value);
                 } else { sel.value = ''; }
             });
@@ -3100,12 +3081,12 @@ function addTag(catId, name) {
     renderAdmin();
 }
 
-function deleteTag(catId, tagId) {
+async function deleteTag(catId, tagId) {
     const cat = getTagCategory(catId);
     if (!cat) return;
     const tag = cat.tags.find(t => t.id === tagId);
     const used = state.tasks.filter(t => taskTagIds(t).includes(tagId)).length;
-    if (used && !confirm(`${used} task(s) are tagged "${tag ? tag.name : ''}". Delete the tag and take it off them?`)) return;
+    if (used && !await uiConfirm({ title: `Delete the tag "${tag ? tag.name : ''}"?`, body: `It comes off the ${used} task${used === 1 ? '' : 's'} that have it. Recently deleted can't bring a tag back.`, ok: 'Delete tag' })) return;
     cat.tags = cat.tags.filter(t => t.id !== tagId);
     // Strip it off the tasks too — a dangling tag id is invisible but would
     // linger in every export and sync payload
@@ -3197,13 +3178,13 @@ function saveTagCatModal() {
     render();
 }
 
-function deleteTagCategory() {
+async function deleteTagCategory() {
     if (!editingTagCatId) return;
     const cat = getTagCategory(editingTagCatId);
     if (!cat) return;
     const ids = (cat.tags || []).map(t => t.id);
     const used = state.tasks.filter(t => taskTagIds(t).some(x => ids.includes(x))).length;
-    if (!confirm(`Delete the "${cat.name}" category and its ${ids.length} tag(s)?` + (used ? ` ${used} task(s) will lose those tags.` : ''))) return;
+    if (!await uiConfirm({ title: `Delete the "${cat.name}" category?`, body: `Its ${ids.length} tag${ids.length === 1 ? '' : 's'} go too` + (used ? `, and come off ${used} task${used === 1 ? '' : 's'}` : '') + `. Recently deleted can't bring them back.`, ok: 'Delete category' })) return;
     stripTagsFromTasks(ids);
     state.tagCategories = state.tagCategories.filter(c => c.id !== editingTagCatId);
     state.tagsUpdatedAt = Date.now();
@@ -3336,7 +3317,7 @@ function trimArchiveCard() {
         const t = card.querySelector('.trim-ask-text');
         t.textContent = t.textContent.replace(' Download a backup first to keep a copy.', '');
     });
-    // Asked in the card, not a browser confirm(): the count, a backup first, then Remove.
+    // Asked in the card, not the browser's own question box: the count, a backup first, then Remove.
     const ask = card.querySelector('#trim-ask');
     const hideAsk = () => { trimAsking = false; ask.hidden = true; go.hidden = false; sel.disabled = false; };
     const showAsk = () => {
@@ -3379,9 +3360,18 @@ function archiveRowAction(id, kind) {
         msg = 'Reopened in ' + (col ? col.name : 'Backlog') + (t.recurring ? ', repeat back on' : '') + ': ' + t.title;
     } else {
         const copy = archivedCopy(state, id);
-        if (!copy || !confirm(`Delete "${copy.title}" for good? It goes from every device.`)) return;
+        if (!copy) return;
         deleteArchived(state, id, now);
-        msg = 'Deleted: ' + copy.title;
+        // into Recently deleted like any task; restoring files it in the archive again
+        if (!Array.isArray(state.bin)) state.bin = [];
+        const e = binTaskEntry(copy, now, genId());
+        state.bin.push(e);
+        undoing = true;
+        try { saveState(); } finally { undoing = false; }
+        render();
+        if (window.scrollY !== y) window.scrollTo(0, y);
+        showToast('Deleted ' + copy.title, { undo: () => restoreFromBin(e.id) });
+        return;
     }
     // Not an undo step: Undo only knows the board, so undoing a reopen would
     // tombstone the task and it would be gone from the archive and the board.
@@ -3498,11 +3488,49 @@ function updateTask(id, data) {
     render();
 }
 
+// Housekeeping only (a dormant repeat that's no longer needed): gone, no bin.
 function deleteTask(id) {
     state.tasks = state.tasks.filter(t => t.id !== id);
     state.deletedIds.push({ id, ts: Date.now() });
     saveState();
     render();
+}
+
+// Delete what Tom chose: at once, into Recently deleted, with Undo (RULES I5).
+function binTask(id) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    const e = binDelete(state, task, Date.now(), genId());
+    saveState();
+    render();
+    showToast('Deleted ' + task.title, { undo: () => restoreFromBin(e.id) });
+}
+
+function restoreFromBin(entryId) {
+    const y = window.scrollY;
+    const t = binRestore(state, entryId, Date.now());
+    if (!t) return null;
+    migrateColumns([t]);
+    autoArchive();   // a finished task from an earlier week goes back into the archive
+    saveState();
+    render();
+    if (window.scrollY !== y) window.scrollTo(0, y);
+    return t;
+}
+
+function openRecentlyDeleted() {
+    if (!window.lkOpenBin) { showToast("Couldn't open Recently deleted. Reload the app and try again.", { bad: true }); return; }
+    window.lkOpenBin({
+        load: async () => binList(state, Date.now()).map(({ id, kind, label, deleted_at }) => ({ id, kind, label, deleted_at })),
+        restore: async e => (restoreFromBin(e.id) ? { ok: true } : { error: 'That task is already back.' }),
+        forget: async e => {
+            if (!binForget(state, e.id, Date.now())) return { error: 'That task has gone already.' };
+            undoing = true;
+            try { saveState(); } finally { undoing = false; }
+            return { ok: true };
+        },
+        kinds: { task: 'Task' },
+    });
 }
 
 function completeTask(id) {
@@ -3782,7 +3810,8 @@ function addArchiveTombstone(s, id, now) {
     const old = s.deletedIds.find(x => x.id === id);
     // A task reopened and finished again: refresh the old archive tombstone, or
     // the newer edit would lift it on the other devices. A delete stays a delete.
-    if (old) { if (old.archived && (old.ts || 0) < now) old.ts = now; return; }
+    if (old && old.restored) s.deletedIds = s.deletedIds.filter(x => x !== old);
+    else if (old) { if (old.archived && (old.ts || 0) < now) old.ts = now; return; }
     s.deletedIds.push({ id, ts: now, archived: true });
 }
 
@@ -3902,9 +3931,96 @@ function applyTombstones(tasks, deletedIds) {
         const x = del.get(t.id);
         if (!x) return true;
         if (x.archived && (t.updatedAt || 0) > (x.ts || 0)) { lifted.add(t.id); return true; }
+        if (x.restored) return true;   // brought back from Recently deleted: the mark stays, to travel
         return false;
     });
     return { tasks: kept, deletedIds: (deletedIds || []).filter(x => !lifted.has(x.id)) };
+}
+
+// ---- RECENTLY DELETED (25 Nov 2026, RULES I5) ----
+// Deleting a task goes at once, with Undo, and keeps a copy in state.bin for
+// 30 days: entries shaped like the shared bin's ({id, kind, label, deleted_at,
+// data}, vendor/safety/bin.js), the sheet is the shared openBin. The bin syncs
+// as a union of entries (each device adds its own), so it needs no *UpdatedAt.
+// What makes a restore stick on every device is the tombstone, not the bin:
+// a plain {id, ts} delete always wins, so restoring replaces it with a newer
+// {id, ts, restored:true}. mergeTombstones keeps the newest mark per id, and
+// applyTombstones keeps a task whose mark is `restored`. Deleting it again
+// writes a newer plain tombstone, which wins again. Delete for good from the
+// bin writes {id, ts, gone:true} (still a delete to every version of the code).
+// An entry stops showing once its task has a newer restored/gone mark, and is
+// dropped from the blob then too.
+const BIN_KEEP_MS = 30 * 24 * 3600 * 1000;
+
+function binTaskEntry(t, now, entryId) {
+    return { id: entryId, kind: 'task', label: String(t.title || '').slice(0, 200), deleted_at: new Date(now).toISOString(), data: { ...t } };
+}
+
+// Take a task off the board (or out of the archive) into the bin. Returns its entry.
+function binDelete(s, task, now, entryId) {
+    if (!s.deletedIds) s.deletedIds = [];
+    if (!Array.isArray(s.bin)) s.bin = [];
+    s.tasks = (s.tasks || []).filter(x => x.id !== task.id);
+    s.deletedIds = s.deletedIds.filter(x => x.id !== task.id);
+    s.deletedIds.push({ id: task.id, ts: now });
+    const e = binTaskEntry(task, now, entryId);
+    s.bin.push(e);
+    return e;
+}
+
+function binEntryLive(e, deletedIds, now) {
+    if (!e || !e.data || !e.data.id) return false;
+    const at = Date.parse(e.deleted_at);
+    if (!(at >= now - BIN_KEEP_MS)) return false;
+    const x = (deletedIds || []).find(d => d && d.id === e.data.id);
+    return !(x && (x.restored || x.gone) && (x.ts || 0) >= at);
+}
+
+// Union two devices' bins (by entry id), drop what's past 30 days or already
+// restored / deleted for good.
+function mergeBin(a, b, deletedIds, now) {
+    const m = new Map();
+    [...(a || []), ...(b || [])].forEach(e => { if (e && e.id && !m.has(e.id)) m.set(e.id, e); });
+    return [...m.values()].filter(e => binEntryLive(e, deletedIds, now));
+}
+
+// What the Recently deleted sheet lists: one row per task (its latest delete),
+// newest first, and only while the task is still deleted.
+function binList(s, now) {
+    const here = new Set((s.tasks || []).map(t => t.id));
+    const best = new Map();
+    (s.bin || []).forEach(e => {
+        if (!binEntryLive(e, s.deletedIds, now) || here.has(e.data.id)) return;
+        const x = (s.deletedIds || []).find(d => d && d.id === e.data.id);
+        if (!x || x.archived) return;
+        const prev = best.get(e.data.id);
+        if (!prev || e.deleted_at > prev.deleted_at) best.set(e.data.id, e);
+    });
+    return [...best.values()].sort((p, q) => String(q.deleted_at).localeCompare(String(p.deleted_at)));
+}
+
+// Put a deleted task back, on every device. Returns the task, or null.
+function binRestore(s, entryId, now) {
+    const e = (s.bin || []).find(x => x.id === entryId);
+    if (!e || !e.data) return null;
+    const t = { ...e.data, updatedAt: now };
+    s.tasks = (s.tasks || []).filter(x => x.id !== t.id);
+    s.tasks.push(t);
+    s.deletedIds = (s.deletedIds || []).filter(x => x.id !== t.id);
+    s.deletedIds.push({ id: t.id, ts: now, restored: true });
+    s.bin = s.bin.filter(x => !(x.data && x.data.id === t.id));
+    return t;
+}
+
+// Delete for good: the bin entry goes everywhere, the task stays deleted.
+function binForget(s, entryId, now) {
+    const e = (s.bin || []).find(x => x.id === entryId);
+    if (!e || !e.data) return false;
+    const id = e.data.id;
+    s.deletedIds = (s.deletedIds || []).filter(x => x.id !== id);
+    s.deletedIds.push({ id, ts: now, gone: true });
+    s.bin = s.bin.filter(x => !(x.data && x.data.id === id));
+    return true;
 }
 
 // <<< archive-core
@@ -3959,7 +4075,7 @@ function restorePlan(s, backup, missing) {
 
 function applyRestore(s, plan, now, newId) {
     if (!s.deletedIds) s.deletedIds = [];
-    const gone = new Set(s.deletedIds.filter(x => x && !x.archived && !String(x.id).startsWith(ARCHIVE_OUT)).map(x => x.id));
+    const gone = new Set(s.deletedIds.filter(x => x && !x.archived && !x.restored && !String(x.id).startsWith(ARCHIVE_OUT)).map(x => x.id));
     const idMap = new Map();
     const fresh = id => {
         if (!gone.has(id)) return id;
@@ -5014,10 +5130,11 @@ function saveThemeModal() {
     render();
 }
 
-function deleteTheme() {
+async function deleteTheme() {
     if (!editingThemeId) return;
     const count = state.tasks.filter(t => taskThemeIds(t).includes(editingThemeId)).length;
-    if (count && !confirm(`${count} task(s) use this theme. Delete anyway? (Tasks keep their data.)`)) return;
+    const th = state.themes.find(t => t.id === editingThemeId);
+    if (count && !await uiConfirm({ title: `Delete the theme "${th ? th.name : ''}"?`, body: `${count} task${count === 1 ? '' : 's'} use it. They stay, with everything else on them. Recently deleted can't bring a theme back.`, ok: 'Delete theme' })) return;
     state.themes = state.themes.filter(t => t.id !== editingThemeId);
     state.themesUpdatedAt = Date.now();
     saveState();
@@ -5289,7 +5406,10 @@ function init() {
     document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
     document.getElementById('task-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeTaskModal(); });
     document.getElementById('task-modal-delete').addEventListener('click', () => {
-        if (editingTaskId && confirm('Delete this task?')) { deleteTask(editingTaskId); closeTaskModal(); }
+        if (!editingTaskId) return;
+        const id = editingTaskId;
+        closeTaskModal();
+        binTask(id);
     });
     document.getElementById('task-title').addEventListener('keydown', e => { if(e.key==='Enter') saveTaskModal(); });
 
@@ -5404,7 +5524,7 @@ function init() {
         else if (action === 'from-notes') moveOutOfNotes(id);
         else if (action === 'complete') completeTask(id);
         else if (action === 'wont-do') markWontDo(id);
-        else if (action === 'delete') { if(confirm('Delete this task?')) deleteTask(id); }
+        else if (action === 'delete') binTask(id);
     });
 
     // Filters
@@ -5488,12 +5608,12 @@ function init() {
             try {
                 await apiUpdateSettings(false);
                 refreshPasswordUI(false);
-            } catch(err) { alert('Could not disable the lock: ' + err.message); e.target.checked = true; }
+            } catch(err) { showToast("Couldn't turn the lock off: " + err.message, { bad: true }); e.target.checked = true; }
         }
     });
     document.getElementById('settings-password-save').addEventListener('click', async () => {
         const pw = document.getElementById('settings-password-input').value;
-        if (!pw || pw.length < 4) { alert('Choose a password of at least 4 characters.'); return; }
+        if (!pw || pw.length < 4) { showToast('Choose a password of at least 4 characters.', { bad: true }); return; }
         try {
             const res = await apiUpdateSettings(true, pw);
             // Sign this device in with the new password, or the next sync locks it out.
@@ -5503,11 +5623,11 @@ function init() {
             // Shown once: the only time the recovery code is ever on screen.
             if (res && res.recovery_code) await showRecovery(res.recovery_code);
             refreshPasswordUI(true, !!(res && res.recovery_code));
-        } catch(err) { alert('Could not enable the lock: ' + err.message); }
+        } catch(err) { showToast("Couldn't turn the lock on: " + err.message, { bad: true }); }
     });
     // A new recovery code for a lock that's already on (the old one stops working).
     document.getElementById('recovery-btn').addEventListener('click', async () => {
-        if (passwordHasCode && !confirm('Make a new recovery code? The old one will stop working.')) return;
+        if (passwordHasCode && !await uiConfirm({ title: 'Make a new recovery code?', body: 'The old one stops working.', ok: 'Make a new code', danger: false })) return;
         try {
             const res = await fetch('/api/settings', {
                 method:'PUT', headers:{'content-type':'application/json'}, body: JSON.stringify({ new_recovery_code: true }),
@@ -5516,8 +5636,9 @@ function init() {
             if (!res.ok || !b.recovery_code) throw new Error((b.error && b.error.message) || `HTTP ${res.status}`);
             await showRecovery(b.recovery_code);
             refreshPasswordUI(true, true);
-        } catch(err) { alert('Could not make a recovery code: ' + err.message); }
+        } catch(err) { showToast("Couldn't make a recovery code: " + err.message, { bad: true }); }
     });
+    document.getElementById('settings-bin').addEventListener('click', openRecentlyDeleted);
     document.getElementById('settings-password-logout').addEventListener('click', async () => {
         try { await fetch('/api/auth', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ action:'logout' }) }); } catch(_) {}
         location.reload();
@@ -5943,7 +6064,7 @@ saveState = function() {
 };
 
 function syncPayload() {
-    return { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt, tagCategories: state.tagCategories, tagsUpdatedAt: state.tagsUpdatedAt, smartNotes: state.smartNotes, smartNotesUpdatedAt: state.smartNotesUpdatedAt };
+    return { tasks: state.tasks, themes: state.themes, archive: state.archive, completionLog: state.completionLog, deletedIds: state.deletedIds, themesUpdatedAt: state.themesUpdatedAt, tagCategories: state.tagCategories, tagsUpdatedAt: state.tagsUpdatedAt, smartNotes: state.smartNotes, smartNotesUpdatedAt: state.smartNotesUpdatedAt, bin: state.bin || [] };
 }
 
 let conflictRetries = 0;
@@ -6079,7 +6200,7 @@ async function pullFromCloud() {
         // --- Merge deletions (union, pruned after two years: TOMBSTONE_KEEP_MS) ---
         // Archive tombstones ({archived:true}) are in here too; see "ARCHIVE".
         state.deletedIds = mergeTombstones(state.deletedIds, d.deletedIds, Date.now());
-        const delSet = new Set(state.deletedIds.map(x => x.id));
+        const delSet = new Set(state.deletedIds.filter(x => !x.restored).map(x => x.id));
 
         // --- Detect whether local has anything the cloud lacks (decides if we push back) ---
         const remoteTasks = new Map((d.tasks||[]).map(t => [t.id, t]));
@@ -6090,8 +6211,13 @@ async function pullFromCloud() {
             if (!rt || (t.updatedAt||0) > (rt.updatedAt||0)) localContrib = true;
         });
         (state.deletedIds||[]).forEach(x => {
-            if (!(d.deletedIds||[]).some(r => r.id === x.id)) localContrib = true;
+            const r = (d.deletedIds||[]).find(r => r.id === x.id);
+            if (!r || (x.ts||0) > (r.ts||0)) localContrib = true;
         });
+        // --- Recently deleted: a union of both bins ---
+        const cloudBin = new Set((d.bin||[]).map(e => e && e.id));
+        state.bin = mergeBin(state.bin, d.bin, state.deletedIds, Date.now());
+        if (state.bin.some(e => !cloudBin.has(e.id))) localContrib = true;
         if ((state.themesUpdatedAt||0) > (d.themesUpdatedAt||0)) localContrib = true;
         if ((state.tagsUpdatedAt||0) > (d.tagsUpdatedAt||0)) localContrib = true;
         if ((state.smartNotesUpdatedAt||0) > (d.smartNotesUpdatedAt||0)) localContrib = true;

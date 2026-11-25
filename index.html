@@ -548,6 +548,7 @@
         <section class="ui-stack">
             <h2 class="ui-label">Your data</h2>
             <div class="ui-card"><ul class="ui-list">
+                <li><button type="button" class="ui-row" id="settings-bin"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#trash"/></svg></span><span class="main"><span>Recently deleted</span></span></button></li>
                 <li><button type="button" class="ui-row" data-admin-open="data"><span class="lead"><svg class="ui-icon" aria-hidden="true"><use href="vendor/chassis/icons.svg#database"/></svg></span><span class="main"><span>Data</span></span></button></li>
             </ul></div>
         </section>
@@ -644,11 +645,13 @@
 </dialog>
 
 <script src="vendor/chassis/icons.js"></script>
+<script src="vendor/chassis/ui.js"></script>
 <script src="vendor/fuzzy.js"></script>
 <script src="app.js"></script>
 <script src="vendor/chassis/fuzzy.js"></script>
 <script src="vendor/chassis/help.js"></script>
 <script src="help/help.js"></script>
 <script type="module" src="ai/updates.js"></script>
+<script type="module">import { openBin } from './vendor/safety/bin-sheet.js'; window.lkOpenBin = openBin;</script>
 </body>
 </html>
