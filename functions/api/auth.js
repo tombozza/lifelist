@@ -35,6 +35,7 @@ export async function onRequestPost({ request, env }) {
     if (!recovered) return wrong('password');
   }
   await clearFails(env.DB, ip);
+  if (!env.AUTH_SECRET) return json({ error: { message: "The lock can't sign you in: the server's AUTH_SECRET isn't set. Set it and redeploy." } }, 503);
   const token = await sessionToken(env, row.password_hash);
   return json({ ok: true, recovered }, 200, {
     'Set-Cookie': `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`,

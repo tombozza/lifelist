@@ -16,8 +16,10 @@ export async function sha256Hex(text) {
 // Stateless session token = HMAC(AUTH_SECRET, "authenticated:" + password hash). Single-user site.
 // Tied to the hash so a new password (or turning the lock off and on) signs every other device out.
 export async function sessionToken(env, passwordHash) {
+  // No built-in fallback (27 Nov 2026): without AUTH_SECRET nothing can be signed, so a locked site stays locked.
+  if (!env.AUTH_SECRET) return null;
   const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(env.AUTH_SECRET || 'dev-insecure-secret'),
+    'raw', new TextEncoder().encode(env.AUTH_SECRET),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`authenticated:${passwordHash}`));
