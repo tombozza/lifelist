@@ -37,20 +37,20 @@ locally, use Settings › Data › Download JSON backup on the live site, then I
 ```
 
 Direct-upload Pages project, so a git push publishes nothing. `deploy.sh` pins Tom's
-Cloudflare account, copies only `index.html app.js styles.css sw.js manifest.json icons/
-vendor/ functions/` plus `ai/*.js` into a temp folder and deploys that. Not deployed: `CLAUDE.md`, `docs/`,
+Cloudflare account, copies only `index.html app.js styles.css sw.js manifest.json _routes.json icons/
+vendor/ help/ functions/` plus `ai/schema.js ai/logic.js ai/updates.js` into a temp folder and deploys that. Not deployed: `CLAUDE.md`, `docs/`,
 `.claude/`, `scripts/`, `migrations/`, `.backups/`. A new top-level asset must be added to the
-`cp` lines or it won't ship. Bump `CACHE_NAME` in `sw.js` on every asset change (v68 at the
-time of writing). Schema changes: add a file to `migrations/d1/`, then
+`cp` lines or it won't ship. Bump `CACHE_NAME` in `sw.js` on every asset change (v110 on 27 Nov 2026). Schema changes: add a file to `migrations/d1/`, then
 `npx wrangler d1 migrations apply life-kanban-db --remote`.
 
 ## How it's built
 
 - **AI Updates:** `ai/` holds the ChatGPT contract (`schema.js`, `guide.md`), the pure logic (`logic.js`: names → records, actions → app calls, the context) and the Settings sheet glue (`updates.js`, a module loaded after `app.js`). Tests: `node --test tests/*.test.mjs` (no package.json needed).
 - **Client:** plain JS. `app.js` (~5,000 lines, all logic), `index.html`, `styles.css`,
-  `sw.js` (network-first service worker), `vendor/` (shared chassis CSS from `_shared`, plus
-  `fuzzy.js` search and `clearx.js` clear buttons). It is registered in `_shared/apps.json`, so
-  `node _shared/sync.mjs` refreshes `vendor/chassis/`; don't edit those copies here.
+  `sw.js` (network-first service worker), `help/help.js` (the Help guides), `vendor/` (shared
+  copies from `_shared`: `chassis/` incl. icons and the pattern grid, `magic/`, `ai-protocol/`,
+  `safety/`, plus `fuzzy.js` search and `clearx.js` clear buttons). It is registered in
+  `_shared/apps.json`, so `node _shared/sync.mjs` refreshes those copies; don't edit them here.
 - **State:** the whole app state (tasks, themes, tags, smart notes, settings) is one JSON object
   in `localStorage`, and one blob in D1 under a fixed `SYNC_CODE` (a constant in `app.js`).
   The client polls every 20s, merges per task by `updatedAt` (tombstones for deletes) and
@@ -60,10 +60,13 @@ time of writing). Schema changes: add a file to `migrations/d1/`, then
   the app imports it and clears it.
 - **Quick capture:** opening `/?add=Some+task` adds a task (used by an iOS Shortcut).
 - **API (Pages Functions):** `functions/_middleware.js` (password gate on `/api/*`),
-  `api/auth.js`, `api/settings.js`, `api/sync/[code].js` (GET/PUT the blob). Auth is the shared
+  `api/auth.js`, `api/settings.js`, `api/_pattern.js` (drawn-pattern unlock), `api/sync/[code].js`
+  (GET/PUT the blob, with `x-base-version` conflict checks). `_routes.json` limits Functions to
+  `/api/*` so static files don't count against the free daily request limit. Auth is the shared
   gate copied from golf-tracker, see `../../CLAUDE.md`, "The shared password gate".
 - **External services:** Cloudflare only (Pages + D1, account in `../../CLAUDE.md`). No AI calls
-  (AI Updates is copy and paste with ChatGPT), no third-party APIs, no CDN scripts.
+  (AI Updates is copy and paste with ChatGPT), no third-party APIs, no CDN scripts. The one
+  outside call is to the App Hub (see What it depends on).
 
 ## Config and secrets
 
@@ -79,9 +82,11 @@ the sync code can read and write the blob.
 ## Data
 
 - **Real data:** D1 `life-kanban-db`, table `kanban_sync` (one row per sync code, plus the
-  inbox row), and `settings` (lock switch and hash). Each device also holds a full copy in
+  inbox row), `settings` (lock switch, password hash, and the `recovery_hash` and `pattern_hash`
+  columns added on first use) and `auth_throttle` (wrong-try counts, created on first use). Each device also holds a full copy in
   `localStorage`.
-- **Backup / export, three routes:**
+- **Backup / export, four routes:**
+  0. Estate-wide: `bash tools/backup-cloud.sh` from `sites/` exports every D1 database, this one included.
   1. In the app: Settings › Data › **Download JSON backup** (file `life-kanban-YYYY-MM-DD.json`);
      **Import JSON backup** restores it.
   2. Whole database: `npx wrangler d1 export life-kanban-db --remote --output life-kanban-backup.sql`
@@ -91,15 +96,37 @@ the sync code can read and write the blob.
 - `.backups/sync-blob-2026-10-30-pre-tag-repair.json` is the blob from before the tag repair,
   kept locally and ignored through `.git/info/exclude`, so it is not in the repo.
 
+## What it depends on
+
+- **Cloudflare:** Pages project `life-kanban` (direct upload) with Functions; D1 `life-kanban-db`
+  (binding `DB`), its own database, not shared with any other app. Secret `AUTH_SECRET`.
+- **Other apps:** the App Hub (`app-hub-865.pages.dev`). AI Updates takes the hub's
+  `#ai-hub-key=…` set-up link and sends the AI Updates context to the hub for its daily copy
+  (`vendor/ai-protocol/protocol.js`). If the hub is down, only that daily copy stops. Nothing
+  else calls this app except the iOS Shortcut that opens `/?add=…`.
+- **Third-party APIs:** none. The magic sheet only links out to ChatGPT; no Anthropic key.
+- **Assets:** everything vendored (`vendor/`), no CDN.
+- **Shared code** (`_shared/apps.json`): chassis (tokens, components, controls, icons, help, theme,
+  `pattern.js`), magic, ai-protocol, safety (bin sheet, restore, recovery sheet). Refresh with
+  `node _shared/sync.mjs`. The password gate is a file-for-file copy of Golf Tracker's.
+- **AI Updates:** listed in `ai-updates/registry.json`; contract in `ai/`.
+- **QA:** saved screens `_shared/qa/screens/life-kanban.json`; tests `node --test tests/*.test.mjs`.
+- **GitHub:** private `tombozza/lifelist` (needs the per-repo credential helper).
+
+**What depends on it:** the App Hub tile and its AI Updates daily copy read what this app shares;
+nothing else.
+
 ## Decisions
 
+Newest first. Most have a longer explanation in `CLAUDE.md`.
+
+- 2026-11-27: final handover pass — checked against the code; deploy file list, vendor copies, API files, tables and the App Hub link corrected, What it depends on added.
 - 2026-11-26: **Room for the iPhone's clock.** The viewport tag had no `viewport-fit=cover`, so on an iPhone with a cut-out the safe-area insets were 0 and the top bar (black-translucent status bar) could sit under the clock in the Home Screen app. Added `viewport-fit=cover`; the shared bar, sheets, FAB and toast already pad by the insets. Tests 50/50. Service worker v110. Deployed 26 Nov 2026 (after-deploy screen check passed); not yet seen on a real phone.
 - 2026-11-25: **Draw-a-pattern unlock on the password lock** (Tom, via Global Changes: "Any apps that you think needs password can you add the shoebox style swipe to unlock option"). Copied from House Book's People lock: Settings › Draw a pattern (shown once the lock is on) sets, changes or removes it; the lock screen shows the grid, and Forgot pattern? brings back the password box (password or recovery code). Server: `functions/api/_pattern.js` (PBKDF2 hash in `settings.pattern_hash`, added on first use; same `lk_session` cookie), and wrong passwords and patterns now share a count per IP in `auth_throttle` (5, then 15 minutes). Turning the lock off clears the pattern. The live lock stays off: Tom sets the password and draws his pattern himself. Golf Tracker's copy of the gate has the same server files, with no pattern option in its screens. Tested locally: set up, unlock, wrong tries to the wait, Forgot pattern; `tests/pattern.test.mjs`. Help: "Unlock by drawing a pattern". Service worker v109.
 - 2026-11-25: **Recently deleted, and no browser pop-ups** (RULES I5, K5; Tom's go on 23 Nov). Deleting a task (task window, card menu, Review's bin, an archive row) goes at once with Undo and keeps a copy for 30 days in Settings › Your data › Recently deleted (the shared `vendor/safety/bin-sheet.js` sheet), with Restore and Delete for good. The bin is `state.bin` in the synced blob (shared entry shape, a union per entry id, so no `*UpdatedAt`); a restore sticks on every device by a newer `{id, ts, restored:true}` tombstone, which `applyTombstones` keeps (Undo of a delete writes the same mark now, so it no longer comes back deleted after the next sync); Delete for good writes `{gone:true}`. Themes, tags, categories, saved notes and merging tags ask first with `uiConfirm`, saying what goes; the password settings' errors are `uiToast`s; `showToast` is now a wrapper over the shared `uiToast` (`vendor/chassis/ui.js` loaded). Browser pop-ups 14 → 0. `tests/bin.test.mjs` covers delete, restore and forget across two devices. Help: "Bring back a deleted task". Service worker v107.
 - 2026-11-25: **The task window is Sections (layout E) for good** (Tom: "Go, as recommended"). Layouts A, B and the old window, their CSS, and Settings › Testing › Task window layout (`lk-task-layout`, now removed from each device on load) are deleted. E still only rearranges the same modal DOM (`applyTaskLayout`), so saving and sync are unchanged. Service worker v106.
 - 2026-11-23: **GitHub Pages turned off.** It was still serving the whole repo publicly at tombozza.github.io/lifelist (handover and app code, including the sync code) while the board has no password. Cloudflare Pages is the only host. The stale status lines (settings fix, sync blob fix, AI Updates "not deployed") were corrected: all three are live. The unused `Recovered 1` People tag was deleted from the live data.
 - 2026-11-23: **No grey example text; ticks get their own tap square** (rules sweep, `_shared/RULES.md` W1, W2, C2). Every box lost its placeholder (the quick-add box's "Add to today" is now its aria-label, set in the same place); List search says only "Search". Trim archive's explaining line went (its own confirm still says what it removes). The Done ticks on list rows, Today rows and steps sit in `<label class="check zone">` via `tickZone()` in app.js (click doesn't open the task); the grid rule in styles.css follows the label. Service worker v105, live 23 Nov; after-deploy check passed, 36 views. Ticking wasn't tried on the live board (it would change real tasks).
-Newest first. Most have a longer explanation in `CLAUDE.md`.
 
 - 2026-11-22: **Settings rebuilt as groups of rows** (Tom on House Book's: "just a bunch of stuff thrown on a page with no thought"; House Book's `renderSettings` is the model). Order: Your board (Themes, Tags, Archive rows; Show hidden themes and Daily list review reminder switches; Remind from), Appearance, Password (Require a password, with Locked as its sub; the new-password field; Recovery code; Log out this device), AI (AI Updates), Your data (one Data row: the admin Data page), Help (How to…), then Testing. Each group is a `.ui-label` heading over a `.ui-card` list of `.ui-row`s; every ID and `data-admin-open` the JS and the Help guides use is unchanged, and so is every stored setting. The Task window layout select (`lk-task-layout`, the 11 Nov trial; code says fold in the winner and delete the rest) is kept as-is in a last Testing group, now `data-fixed`. Recovery code's sub line is a state now (Made / None yet), not an explanation; the password box has a label instead of placeholder text. `.settings-admin` CSS removed. design-check --changed clean; live-check of Settings and Help locally at 375/1000 light/dark shows only the Today page's three old issues behind the sheet (same on the live site). Service worker v103. Not deployed.
 - 2026-11-22: **Help (Settings › Help › How to…)**: the shared Help sheet (`vendor/chassis/help.js`, `uiHelp`) with 30 how-to guides in `help/help.js` (five groups: Today, Dates and repeats, Board and lists, Themes tags and notes, Get unstuck), written from this handover's Decisions and a read of `app.js`/`index.html` (plan: `../briefs/help-audit-2026-11-21.html`). `go` is a CSS selector Take me there clicks (a view tab, a `data-admin-open` button, `#settings-btn`, `#settings-ai-updates`); Settings closes first unless the target lives inside it. No Ask yet (Finance's runs a week first). `deploy.sh` copies `help/`; `index.html` loads `vendor/chassis/fuzzy.js`, `help.js`, then `help/help.js` after `app.js`. Two Help screens added to `_shared/qa/screens/life-kanban.json`. **Keep the guides true:** a change to a screen's words or steps changes its guide in the same edit. Checked locally at 375 dark and 1100 light: list, fuzzy search, a guide, Take me there to Archive, Notes, Settings and AI Updates; no console errors; tests 41/41. Service worker v102. Deployed 22 Nov.
